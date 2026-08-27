@@ -96,6 +96,8 @@ export default function ChatPage() {
   const [draft, setDraft] = useState('')
   const [streamText, setStreamText] = useState<string | null>(null)
   const [streamSources, setStreamSources] = useState<SourceRef[] | null>(null)
+  const [steps, setSteps] = useState<{ tool: string; summary: string }[]>([])
+  const [planMode, setPlanMode] = useState<string | null>(null)
   const [pdfTarget, setPdfTarget] = useState<PdfTarget | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const endRef = useRef<HTMLDivElement>(null)
@@ -132,6 +134,8 @@ export default function ChatPage() {
     setMessages((m) => [...m, { role: 'user', content: question, sources: null }])
     setStreamText('')
     setStreamSources(null)
+    setSteps([])
+    setPlanMode(null)
 
     const controller = new AbortController()
     abortRef.current = controller
@@ -159,6 +163,11 @@ export default function ChatPage() {
           toast.error(msg)
           if (acc) setMessages((m) => [...m, { role: 'assistant', content: acc, sources }])
           setStreamText(null)
+        },
+        onPlan: (mode) => setPlanMode(mode),
+        onStep: (tool, summary) => setSteps((s) => [...s, { tool, summary }]),
+        onVerify: (ok, issues) => {
+          if (!ok) toast.warning(`Overenie čísel: v podkladoch chýba ${issues.join(', ')}`)
         },
       },
       controller.signal,
@@ -230,11 +239,25 @@ export default function ChatPage() {
               ),
             )}
             {streamText !== null && (
-              <AssistantBody
-                content={streamText || '…'}
-                sources={streamSources}
-                onCite={citeFrom(streamSources)}
-              />
+              <div className="space-y-2">
+                {(planMode === 'filter' || planMode === 'compose') && (
+                  <div className="space-y-1 text-xs text-muted-foreground">
+                    <p>
+                      režim: <Badge variant="outline">{planMode === 'filter' ? 'presný filter' : 'agent'}</Badge>
+                    </p>
+                    {steps.map((s, i) => (
+                      <p key={i} className="truncate">
+                        → {s.tool}: {s.summary}
+                      </p>
+                    ))}
+                  </div>
+                )}
+                <AssistantBody
+                  content={streamText || '…'}
+                  sources={streamSources}
+                  onCite={citeFrom(streamSources)}
+                />
+              </div>
             )}
             <div ref={endRef} />
           </div>

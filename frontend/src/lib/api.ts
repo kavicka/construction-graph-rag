@@ -151,6 +151,9 @@ export const fetchChats = () => fetch('/api/chats').then((r) => json<ChatSummary
 export const fetchChatMessages = (chatId: string) =>
   fetch(`/api/chats/${chatId}`).then((r) => json<ChatMessage[]>(r))
 
+export const reindexDocument = (id: string) =>
+  fetch(`/api/documents/${id}/reindex`, { method: 'POST' }).then((r) => json<DocumentOut>(r))
+
 export function uploadDocuments(files: File[]): Promise<DocumentOut[]> {
   const form = new FormData()
   for (const f of files) form.append('files', f)

@@ -15,6 +15,7 @@ from app.index.chunker import build_table_chunks, chunk_text_items, load_documen
 from app.index.embedder import get_embedder
 from app.index.lancedb_store import replace_document_chunks
 from app.ingest.docling_parse import parse_pdf
+from app.ingest.records import extract_records
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ def _index_document(doc_id: str) -> int:
 
     db.set_document_status(doc_id, "tables", progress=0.6)
     chunks += build_table_chunks(doc_id)
+    extract_records(doc_id)
 
     db.set_document_status(doc_id, "embedding", progress=0.8)
     embedder = get_embedder()

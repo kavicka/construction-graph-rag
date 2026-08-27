@@ -308,6 +308,33 @@ Poradie zdôvodnenie: fáza 3 = použiteľný RAG čo najskôr; graf (4–5) sa 
 | Obrovská tabuľka > kontext | row-groups s opakovanou hlavičkou + štatistiky stĺpcov; presné čísla vždy z parquet |
 | SAME_AS false positives | dvojitý prah (fuzzy + embedding), hrany s confidence, UI umožní hranu zmazať |
 
-## 14. Eval
+## 14. v2 — analytická vrstva (fázy 8–11, dostavané po náleze s jedálničkom)
+
+Nález: single-shot RAG principiálne nezvláda katalógové filter/agregačné otázky
+(„všetky obedy do 870 kcal") — top-k retrieval nedáva úplné pokrytie a malý LLM
+nespoľahlivo porovnáva čísla. Riešenie: čísla LLM úplne zobrať.
+
+**Records store** (`app/ingest/records.py`): riadky tabuliek → SQLite záznamy
+(kategória, názov, číselné atribúty cez deterministický parser jednotiek — kcal,
+b/s/t makrá, g/ml/%…). Kategória tabuľky = najbližší nadpis nad ňou v reading
+order (`_headings_before_tables` — dizajnové PDF majú kategóriu mimo tabuľky).
+
+**Query router** (`app/retrieve/router.py`): heuristiky (op-slová do/pod/nad/aspoň
++ čísla + atribútové náznaky) + kategórie data-driven z DB + LLM fallback (JSON
+schema). Módy: `lookup` → klasický RAG; `filter` → SQL nad records
+(`records_query.py`), LLM výsledok len formuluje; `compose` → agent.
+
+**Agent slučka** (`app/retrieve/agent.py`): Ollama tool-calling, max 6 krokov,
+nástroje `query_records`, `pick_items` (exaktný kombinatorický výber do rozpočtu,
+`solver.py`), `search_docs`. Každé číslo v odpovedi pochádza z nástroja. Kroky sa
+streamujú do UI (`step` eventy).
+
+**Self-check** (`app/retrieve/selfcheck.py`): čísla ≥13 v odpovedi musia
+existovať v podkladoch (alebo byť súčtom dvojice) — SSE `verify` event, FE warning.
+
+Sumáre tabuliek generuje answer model (1.7b dával generické nerozlíšiteľné texty).
+Reindex tlačidlo na dokumente aplikuje v2 ingest na staré dokumenty.
+
+## 15. Eval
 
 `eval/golden.yaml`: ~20 otázok (SK aj EN, faktické + tabuľkové + relačné cross-doc). Skript meria: retrieval hit-rate@8 (je zdrojový chunk v kontexte?), citačná presnosť (správny dokument+strana?), latencia. Beh s `GRAPH_EXPANSION=on/off` → tvrdé číslo, čo graf pridáva.

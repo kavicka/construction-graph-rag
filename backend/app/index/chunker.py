@@ -18,14 +18,15 @@ from app.llm.ollama_client import OllamaError, generate_sync
 logger = logging.getLogger(__name__)
 
 SUMMARY_SYSTEM = (
-    "Si asistent na popis tabuliek z technických dokumentov. Odpovedáš výhradne zhrnutím, "
+    "Si asistent na popis tabuliek z dokumentov. Odpovedáš výhradne zhrnutím, "
     "bez úvodných fráz. Píš v jazyku, v akom je tabuľka."
 )
-SUMMARY_PROMPT = """Zhrň nasledujúcu tabuľku 2 až 4 vetami: čo obsahuje, aké má stĺpce
-(vrátane jednotiek), koľko riadkov a aký rozsah hodnôt pokrýva. Nevymýšľaj čísla,
-ktoré v tabuľke nie sú.
+SUMMARY_PROMPT = """Zhrň nasledujúcu tabuľku 2 až 5 vetami tak, aby sa dala nájsť
+vyhľadávaním: čo obsahuje, VYMENUJ názvy položiek/riadkov (do 12), aké má stĺpce
+s jednotkami a rozsah kľúčových hodnôt (min–max). Nevymýšľaj čísla, ktoré v tabuľke
+nie sú.
 
-{caption}
+Nadpis/kategória tabuľky: {caption}
 {table_md}"""
 
 MAX_TABLE_MD_CHARS = 4000
@@ -109,8 +110,10 @@ def summarize_table(caption: str | None, markdown: str, n_rows: int, n_cols: int
         caption=caption or "", table_md=markdown[:MAX_TABLE_MD_CHARS]
     )
     try:
+        # sumáre generuje answer model — 1.7b dával generické nerozlíšiteľné sumáre,
+        # kvalita embedovaného sumáru priamo určuje, či retrieval tabuľku nájde
         summary = generate_sync(
-            settings.extract_model, prompt, system=SUMMARY_SYSTEM, num_ctx=8192
+            settings.answer_model, prompt, system=SUMMARY_SYSTEM, num_ctx=8192
         )
         if summary:
             return summary

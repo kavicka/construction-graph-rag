@@ -15,6 +15,7 @@ class GoldenQuestion:
     question: str
     expected_docs: list[str]  # filenames
     expected_substrings: list[str] = field(default_factory=list)
+    forbidden_substrings: list[str] = field(default_factory=list)  # nesmie byť v odpovedi
     relational: bool = False
 
 
@@ -76,5 +77,36 @@ GOLDEN: list[GoldenQuestion] = [
         question="Aká je cena zariadenia XYZ-9000?",
         expected_docs=[],  # nie je v korpuse — odpoveď musí priznať absenciu
         expected_substrings=[],
+    ),
+    # --- filter/compose nad jedálničkom (records vetva) ---
+    GoldenQuestion(
+        id="q11-filter-obedy",
+        question="Ktoré obedy majú do 870 kcal?",
+        expected_docs=["jedalnicek-sk.pdf"],
+        expected_substrings=["829", "820"],
+        forbidden_substrings=["900"],  # Stir-fry limit prekračuje — nesmie byť ponúknutý
+    ),
+    GoldenQuestion(
+        id="q12-filter-multi",
+        question="Chcem jedlo do 820 kcal a nad 50 g bielkovín. Ktoré si môžem dať?",
+        expected_docs=["jedalnicek-sk.pdf"],
+        expected_substrings=["Těstoviny"],
+        forbidden_substrings=["Stir-fry"],
+    ),
+    GoldenQuestion(
+        id="q13-compose",
+        question=(
+            "Vyber mi obed a raňajky tak, aby som sa spolu zmestil do 1300 kcal "
+            "a mal čo najviac bielkovín."
+        ),
+        expected_docs=["jedalnicek-sk.pdf"],
+        expected_substrings=["rizoto", "kaše"],  # 829+447=1276, b=104 — jediné optimum
+    ),
+    GoldenQuestion(
+        id="q14-filter-nula",
+        question="Ktoré obedy majú do 100 kcal?",
+        expected_docs=["jedalnicek-sk.pdf"],
+        expected_substrings=[],  # musí priznať nulu, nie vymýšľať
+        forbidden_substrings=["môžeš si dať Stir", "môžeš si dať Kuřecí"],
     ),
 ]

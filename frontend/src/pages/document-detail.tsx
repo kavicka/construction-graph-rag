@@ -3,9 +3,9 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { fetchDocument } from '@/lib/api'
-import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, ExternalLink, Table2 } from 'lucide-react'
+import { fetchDocument, reindexDocument } from '@/lib/api'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ArrowLeft, ExternalLink, RefreshCw, Table2 } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { StatusBadge } from './documents'
@@ -13,6 +13,11 @@ import { StatusBadge } from './documents'
 export default function DocumentDetailPage() {
   const { id } = useParams<{ id: string }>()
   const [openTable, setOpenTable] = useState<string | null>(null)
+  const queryClient = useQueryClient()
+  const reindex = useMutation({
+    mutationFn: () => reindexDocument(id!),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['documents'] }),
+  })
   const { data: doc, isPending } = useQuery({
     queryKey: ['documents', id],
     queryFn: () => fetchDocument(id!),
@@ -36,6 +41,14 @@ export default function DocumentDetailPage() {
         </Button>
         <h1 className="min-w-0 flex-1 truncate text-lg font-semibold">{doc.filename}</h1>
         <StatusBadge doc={doc} />
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={reindex.isPending || (doc.status !== 'done' && doc.status !== 'error')}
+          onClick={() => reindex.mutate()}
+        >
+          <RefreshCw className="size-4" /> Reindex
+        </Button>
         <Button variant="outline" size="sm" asChild>
           <a href={`/api/documents/${doc.id}/pdf`} target="_blank" rel="noreferrer">
             <ExternalLink className="size-4" /> PDF

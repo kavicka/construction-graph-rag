@@ -63,13 +63,67 @@ def _page_text_lengths(document: Any) -> list[tuple[int, int]]:
     return sorted(lengths.items())
 
 
+MAX_HEADING_PAGE_DISTANCE = 2  # nadpis platí max 2 strany dopredu (kartové layouty)
+CARD_PAGE_MAX_CHARS = 60  # strana s jediným krátkym textom = kategóriová karta
+
+
+def _headings_before_tables(document: Any) -> dict[str, str]:
+    """Tabuľka bez captionu dostane najbližší nadpis pred ňou v reading order.
+
+    Dizajnové PDF (jedálničky, katalógy) majú kategóriu ako samostatný nadpis
+    nad tabuľkou — bez tohto tabuľka 'nevie', čo obsahuje. Nadpis je buď
+    SECTION_HEADER/TITLE, alebo solo krátky text na inak prázdnej strane
+    („kartová" strana s názvom kategórie). Platnosť nadpisu je obmedzená
+    vzdialenosťou strán — inak leakuje cez celý dokument.
+    """
+    from docling_core.types.doc import TableItem
+    from docling_core.types.doc.labels import DocItemLabel
+
+    heading_labels = {DocItemLabel.SECTION_HEADER, DocItemLabel.TITLE}
+
+    page_texts: dict[int, list[str]] = {}
+    for t in document.texts:
+        for prov in t.prov:
+            page_texts.setdefault(prov.page_no, []).append(t.text)
+    card_pages = {
+        p
+        for p, texts in page_texts.items()
+        if len(texts) <= 2 and sum(len(x) for x in texts) <= CARD_PAGE_MAX_CHARS
+    }
+
+    last: tuple[str, int] | None = None  # (nadpis, strana)
+    result: dict[str, str] = {}
+    for item, _level in document.iterate_items():
+        label = getattr(item, "label", None)
+        text = (getattr(item, "text", "") or "").strip()
+        prov = getattr(item, "prov", None)
+        page = prov[0].page_no if prov else None
+
+        is_heading = label in heading_labels and bool(text)
+        is_card_title = (
+            page in card_pages and bool(text) and len(text) <= 45
+            and not isinstance(item, TableItem)
+        )
+        if (is_heading or is_card_title) and page is not None:
+            last = (text, page)
+        elif (
+            isinstance(item, TableItem)
+            and last is not None
+            and page is not None
+            and 0 <= page - last[1] <= MAX_HEADING_PAGE_DISTANCE
+        ):
+            result[item.self_ref] = last[0]
+    return result
+
+
 def _extract_tables(doc_id: str, document: Any) -> int:
     settings = get_settings()
     count = 0
+    heading_map = _headings_before_tables(document)
     for item in document.tables:
         table_id = uuid.uuid4().hex
         page_no = item.prov[0].page_no if item.prov else None
-        caption = item.caption_text(doc=document) or None
+        caption = item.caption_text(doc=document) or heading_map.get(item.self_ref) or None
 
         md_path = settings.tables_dir / f"{table_id}.md"
         md_path.write_text(item.export_to_markdown(doc=document), encoding="utf-8")

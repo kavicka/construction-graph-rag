@@ -55,11 +55,13 @@ def test_chat_stream_and_persistence(client: TestClient) -> None:
         events = _parse_sse(resp.text)
 
         types = [e["type"] for e in events]
-        assert types[0] == "sources"
+        assert types[0] == "plan"
         assert types[-1] == "done"
+        assert "sources" in types
         assert "delta" in types
+        assert "verify" in types
 
-        chat_id = events[0]["chat_id"]
+        chat_id = next(e for e in events if e["type"] == "sources")["chat_id"]
         answer = "".join(e["text"] for e in events if e["type"] == "delta")
         assert answer == "Prietok je 12.4 l/min [1]"
 
@@ -76,7 +78,7 @@ def test_chat_stream_and_persistence(client: TestClient) -> None:
 def test_chat_continues_existing(client: TestClient) -> None:
     with client:
         first = _parse_sse(client.post("/api/chat", json={"message": "Prvá?"}).text)
-        chat_id = first[0]["chat_id"]
+        chat_id = next(e for e in first if e["type"] == "sources")["chat_id"]
         client.post("/api/chat", json={"message": "Druhá?", "chat_id": chat_id})
         msgs = client.get(f"/api/chats/{chat_id}").json()
         assert len(msgs) == 4

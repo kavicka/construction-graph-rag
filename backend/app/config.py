@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     embedding_model: str | None = None  # None → podľa profilu
     chunk_max_tokens: int = 450
     graph_expansion: bool = True  # A/B flag — merateľný prínos grafu (eval)
+    agent_mode: bool = True  # kompozičné otázky cez agent slučku s nástrojmi
 
     @property
     def effective_profile(self) -> Literal["low", "high"]:

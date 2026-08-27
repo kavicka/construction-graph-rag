@@ -77,7 +77,9 @@ def evaluate_question(q: GoldenQuestion) -> dict[str, Any]:
 
     source_files = {s["filename"] for s in sources}
     hit = all(doc in source_files for doc in q.expected_docs) if q.expected_docs else True
-    substrings_ok = all(sub in answer for sub in q.expected_substrings)
+    substrings_ok = all(sub in answer for sub in q.expected_substrings) and not any(
+        sub in answer for sub in q.forbidden_substrings
+    )
 
     cited_ns = {int(m) for m in CITATION.findall(answer)}
     valid_ns = {s["n"] for s in sources}

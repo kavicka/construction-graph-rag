@@ -10,9 +10,10 @@ def _clear_singletons() -> None:
     """Všetky lru_cache singletony viazané na settings/data_dir."""
     from app.index import embedder, lancedb_store
 
-    get_settings.cache_clear()
-    lancedb_store._connect.cache_clear()
-    embedder.get_embedder.cache_clear()
+    for fn in (get_settings, lancedb_store._connect, embedder.get_embedder):
+        cache_clear = getattr(fn, "cache_clear", None)
+        if cache_clear is not None:  # monkeypatchnutý fake cache nemá
+            cache_clear()
 
 
 @pytest.fixture

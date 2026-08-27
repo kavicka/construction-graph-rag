@@ -5,6 +5,9 @@ export interface StreamHandlers {
   onDelta: (text: string) => void
   onDone: (chatId: string, messageId: string) => void
   onError: (message: string) => void
+  onPlan?: (mode: 'lookup' | 'filter' | 'compose') => void
+  onStep?: (tool: string, summary: string) => void
+  onVerify?: (ok: boolean, issues: string[]) => void
 }
 
 type StreamEvent =
@@ -12,6 +15,9 @@ type StreamEvent =
   | { type: 'delta'; text: string }
   | { type: 'done'; chat_id: string; message_id: string }
   | { type: 'error'; message: string }
+  | { type: 'plan'; mode: 'lookup' | 'filter' | 'compose' }
+  | { type: 'step'; tool: string; summary: string }
+  | { type: 'verify'; ok: boolean; issues: string[] }
 
 export async function streamChat(
   body: { message: string; chat_id?: string },
@@ -46,6 +52,15 @@ export async function streamChat(
         break
       case 'error':
         handlers.onError(evt.message)
+        break
+      case 'plan':
+        handlers.onPlan?.(evt.mode)
+        break
+      case 'step':
+        handlers.onStep?.(evt.tool, evt.summary)
+        break
+      case 'verify':
+        handlers.onVerify?.(evt.ok, evt.issues)
         break
     }
   }

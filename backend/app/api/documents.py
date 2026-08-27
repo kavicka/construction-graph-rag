@@ -97,6 +97,21 @@ async def get_document_detail(doc_id: str) -> DocumentDetail:
     )
 
 
+@router.post("/documents/{doc_id}/reindex", status_code=202)
+async def reindex_document(doc_id: str) -> DocumentOut:
+    """Znovu spustí celú pipeline (parse → index → graf) — po upgrade ingestu."""
+    row = await run_in_threadpool(db.get_document, doc_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="dokument neexistuje")
+    if not (get_settings().pdf_dir / f"{doc_id}.pdf").exists():
+        raise HTTPException(status_code=404, detail="PDF súbor chýba na disku")
+    await run_in_threadpool(db.set_document_status, doc_id, "queued")
+    schedule_ingest(doc_id)
+    fresh = await run_in_threadpool(db.get_document, doc_id)
+    assert fresh is not None
+    return _to_out(fresh)
+
+
 @router.get("/documents/{doc_id}/pdf")
 async def get_document_pdf(doc_id: str) -> FileResponse:
     row = await run_in_threadpool(db.get_document, doc_id)

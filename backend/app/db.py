@@ -48,6 +48,18 @@ CREATE TABLE IF NOT EXISTS messages (
   sources_json TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE TABLE IF NOT EXISTS records (
+  id TEXT PRIMARY KEY,
+  doc_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  table_id TEXT NOT NULL,
+  page_no INTEGER,
+  category TEXT,
+  name TEXT NOT NULL,
+  attrs_json TEXT NOT NULL,
+  raw_text TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_records_doc ON records(doc_id);
+CREATE INDEX IF NOT EXISTS idx_records_category ON records(category);
 CREATE TABLE IF NOT EXISTS graph_nodes (
   id TEXT PRIMARY KEY,
   type TEXT NOT NULL,
@@ -196,6 +208,34 @@ def set_table_summary(table_id: str, summary: str) -> None:
 def delete_document_tables(doc_id: str) -> None:
     with get_conn() as conn:
         conn.execute("DELETE FROM tables_meta WHERE doc_id = ?", (doc_id,))
+
+
+def replace_document_records(doc_id: str, rows: list[dict[str, Any]]) -> int:
+    with get_conn() as conn:
+        conn.execute("DELETE FROM records WHERE doc_id = ?", (doc_id,))
+        conn.executemany(
+            """INSERT INTO records (id, doc_id, table_id, page_no, category, name,
+               attrs_json, raw_text) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            [
+                (
+                    r["id"], doc_id, r["table_id"], r["page_no"], r["category"],
+                    r["name"], r["attrs_json"], r["raw_text"],
+                )
+                for r in rows
+            ],
+        )
+    return len(rows)
+
+
+def list_records(doc_id: str | None = None) -> list[dict[str, Any]]:
+    query = "SELECT * FROM records"
+    params: list[Any] = []
+    if doc_id:
+        query += " WHERE doc_id = ?"
+        params.append(doc_id)
+    with get_conn() as conn:
+        rows = conn.execute(query, params).fetchall()
+    return [dict(r) for r in rows]
 
 
 def upsert_graph_node(
