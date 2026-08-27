@@ -1,0 +1,152 @@
+{
+ "summary": {
+  "hit_rate": 1.0,
+  "substring_rate": 1.0,
+  "citation_rate": 1.0,
+  "relational_cross_doc": 1.0,
+  "avg_latency_s": 3.0,
+  "graph_expansion": true
+ },
+ "results": [
+  {
+   "id": "q1-faktual-sk",
+   "hit": true,
+   "substrings": true,
+   "cited": true,
+   "cross_doc": null,
+   "latency_s": 4.6,
+   "sources": [
+    "calibration-en.pdf",
+    "meranie-sk.pdf",
+    "skladovanie-sk.pdf"
+   ],
+   "answer": "Vzorka A-02 mala prietok 13.1 l/min [1]."
+  },
+  {
+   "id": "q2-tabulka-max",
+   "hit": true,
+   "substrings": true,
+   "cited": true,
+   "cross_doc": null,
+   "latency_s": 1.9,
+   "sources": [
+    "calibration-en.pdf",
+    "meranie-sk.pdf",
+    "skladovanie-sk.pdf"
+   ],
+   "answer": "Teplota vzorky B-01 bola 20.9 °C [1]."
+  },
+  {
+   "id": "q3-faktual-en",
+   "hit": true,
+   "substrings": true,
+   "cited": true,
+   "cross_doc": null,
+   "latency_s": 2.2,
+   "sources": [
+    "calibration-en.pdf",
+    "meranie-sk.pdf",
+    "skladovanie-sk.pdf"
+   ],
+   "answer": "The FL-200 coolant flow sensor must be calibrated every 30 days [1]."
+  },
+  {
+   "id": "q4-en-tabulka",
+   "hit": true,
+   "substrings": true,
+   "cited": true,
+   "cross_doc": null,
+   "latency_s": 1.9,
+   "sources": [
+    "calibration-en.pdf",
+    "meranie-sk.pdf",
+    "skladovanie-sk.pdf"
+   ],
+   "answer": "The maximum permissible deviation for the FL-200 sensor is 0.5%. [1]"
+  },
+  {
+   "id": "q5-cross-sk",
+   "hit": true,
+   "substrings": true,
+   "cited": true,
+   "cross_doc": null,
+   "latency_s": 2.0,
+   "sources": [
+    "calibration-en.pdf",
+    "meranie-sk.pdf",
+    "skladovanie-sk.pdf"
+   ],
+   "answer": "Snímač, ktorý sa používa na meranie prietoku chladiaceho média, je FL-200 [1]."
+  },
+  {
+   "id": "q6-relacna",
+   "hit": true,
+   "substrings": true,
+   "cited": true,
+   "cross_doc": true,
+   "latency_s": 5.1,
+   "sources": [
+    "calibration-en.pdf",
+    "meranie-sk.pdf",
+    "skladovanie-sk.pdf"
+   ],
+   "answer": "Súvis medzi meraním prietoku a kalibráciou snímačov je, že snímač FL-200, ktorý je používaný na meranie prietoku chladiaceho média, vyžaduje pravidelnú kalibráciu [1]. Kalibrácia je potrebná, aby sa zabezpečila presnosť meraní prietoku [5]. Snímač FL-200 musí byť kalibrovaný každých 30 dní, aby zabe"
+  },
+  {
+   "id": "q7-relacna-en",
+   "hit": true,
+   "substrings": true,
+   "cited": true,
+   "cross_doc": true,
+   "latency_s": 2.8,
+   "sources": [
+    "calibration-en.pdf",
+    "meranie-sk.pdf",
+    "skladovanie-sk.pdf"
+   ],
+   "answer": "The flow measurements are dependent on the accuracy of the sensor, which requires regular calibration to ensure reliable readings across its operating range. The FL-200 sensor, used for measuring coolant flow, must be calibrated every 30 days to maintain accuracy [1]. After calibration, the maximum "
+  },
+  {
+   "id": "q8-nesuvisiaca",
+   "hit": true,
+   "substrings": true,
+   "cited": true,
+   "cross_doc": null,
+   "latency_s": 3.5,
+   "sources": [
+    "calibration-en.pdf",
+    "meranie-sk.pdf",
+    "skladovanie-sk.pdf"
+   ],
+   "answer": "Vzorky sa skladujú pri teplote 4 °C v uzavretých nádobách. Maximálna doba skladovania je 14 dní od odberu. Po uplynutí doby skladovania sa vzorky likvidujú pod n a smernice o odpadoch [1]."
+  },
+  {
+   "id": "q9-cislo-fts",
+   "hit": true,
+   "substrings": true,
+   "cited": true,
+   "cross_doc": null,
+   "latency_s": 3.0,
+   "sources": [
+    "calibration-en.pdf",
+    "meranie-sk.pdf",
+    "skladovanie-sk.pdf"
+   ],
+   "answer": "Hodnota 101.3 kPa sa spomína v zdroji [1]:  \n\"Meranie prietoku chladiaceho média... Prietok bol meraný sníma n om FL-200 pri atmosférickom tlaku 101.3 kPa.\" [1]"
+  },
+  {
+   "id": "q10-negativna",
+   "hit": true,
+   "substrings": true,
+   "cited": true,
+   "cross_doc": null,
+   "latency_s": 3.0,
+   "sources": [
+    "calibration-en.pdf",
+    "meranie-sk.pdf",
+    "skladovanie-sk.pdf"
+   ],
+   "answer": "Z daných zdrojov nie je žiadna informácia o zariadení XYZ-9000 alebo o jeho cene. [n]"
+  }
+ ]
+}

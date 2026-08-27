@@ -1,0 +1,52 @@
+[project]
+name = "rag-backend"
+version = "0.1.0"
+description = "Lokálny Graph-RAG backend — Docling + LanceDB + NetworkX + Ollama"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "docling>=2.123.0",
+    "fastapi>=0.141.1",
+    "fastembed>=0.8.0",
+    "httpx>=0.28.1",
+    "lancedb>=0.37.1",
+    "networkx>=3.6.1",
+    "ocrmac>=1.0.1",
+    "pyarrow>=25.0.1",
+    "pydantic-settings>=2.15.0",
+    "python-multipart>=0.0.32",
+    "rapidfuzz>=3.14.5",
+    "sentence-transformers>=6.0.0",
+    "uvicorn[standard]>=0.52.4",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+
+[[tool.mypy.overrides]]
+module = ["docling.*", "ocrmac.*", "Vision", "pyarrow.*", "pandas.*", "reportlab.*", "networkx.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["docling_core.*"]
+follow_imports = "skip"
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[dependency-groups]
+dev = [
+    "mypy>=2.3.1",
+    "pytest>=9.1.1",
+    "reportlab>=5.0.1",
+    "ruff>=0.16.4",
+]
