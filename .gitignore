@@ -1,4 +1,5 @@
 data/
+backend/eval/_runs/
 .venv/
 __pycache__/
 *.pyc

@@ -8,15 +8,31 @@ dependencies = [
     "fastapi>=0.141.1",
     "fastembed>=0.8.0",
     "httpx>=0.28.1",
+    "jinja2>=3.1.6",
     "lancedb>=0.37.1",
+    "markdown>=3.11",
+    "mcp[cli]>=2.3.0",
+    "mlx-whisper>=0.4.3",
     "networkx>=3.6.1",
-    "ocrmac>=1.0.1",
+    "ocrmac>=1.0.1; sys_platform == 'darwin'",
+    "opentelemetry-api>=1.45.1",
+    "opentelemetry-exporter-otlp-proto-http>=1.45.1",
+    "opentelemetry-sdk>=1.45.1",
+    "piper-tts>=1.8.0",
     "pyarrow>=25.0.1",
     "pydantic-settings>=2.15.0",
     "python-multipart>=0.0.32",
     "rapidfuzz>=3.14.5",
     "sentence-transformers>=6.0.0",
+    "torch>=2.6",
+    "torchvision>=0.21",
     "uvicorn[standard]>=0.52.4",
+    "weasyprint>=70.0",
+]
+
+[project.optional-dependencies]
+visual = [
+    "colpali-engine>=0.3.10",
 ]
 
 [tool.ruff]
@@ -31,7 +47,10 @@ python_version = "3.12"
 strict = true
 
 [[tool.mypy.overrides]]
-module = ["docling.*", "ocrmac.*", "Vision", "pyarrow.*", "pandas.*", "reportlab.*", "networkx.*"]
+module = [
+    "docling.*", "ocrmac.*", "Vision", "pyarrow.*", "pandas.*", "reportlab.*", "networkx.*",
+    "weasyprint.*", "cffi.*", "markdown.*", "colpali_engine.*", "pypdfium2.*",
+]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
@@ -50,3 +69,13 @@ dev = [
     "reportlab>=5.0.1",
     "ruff>=0.16.4",
 ]
+
+# Linux (Docker, CI): CPU build torchu — CUDA wheel by pridal ~3 GB, ktoré tu netreba
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+torchvision = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true

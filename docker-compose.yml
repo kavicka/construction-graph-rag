@@ -1,0 +1,62 @@
+# docker compose up -d   →  http://localhost:8080
+#
+# Prvý štart stiahne modely do volume (Ollama ~3,6 GB, embedding + reranker z Hugging Face).
+# Hostovaný LLM namiesto Ollamy: RAG_LLM_PROVIDER=openai RAG_OPENAI_API_KEY=… RAG_ANSWER_MODEL=…
+# (a služby ollama/ollama-pull môžeš vypnúť cez --scale ollama=0 --scale ollama-pull=0).
+services:
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      retries: 30
+
+  ollama-pull:
+    image: ollama/ollama:latest
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    volumes:
+      - ollama:/root/.ollama
+    entrypoint: ["sh", "-c", "ollama pull qwen3:4b-instruct && ollama pull qwen3:1.7b"]
+    restart: "no"
+
+  backend:
+    build: ./backend
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      RAG_OLLAMA_BASE_URL: http://ollama:11434
+      RAG_LLM_PROVIDER: ${RAG_LLM_PROVIDER:-ollama}
+      RAG_OPENAI_BASE_URL: ${RAG_OPENAI_BASE_URL:-https://api.openai.com/v1}
+      RAG_OPENAI_API_KEY: ${RAG_OPENAI_API_KEY:-}
+      RAG_ANSWER_MODEL: ${RAG_ANSWER_MODEL:-qwen3:4b-instruct}
+      RAG_EXTRACT_MODEL: ${RAG_EXTRACT_MODEL:-qwen3:1.7b}
+      # kontajner nevidí RAM hostiteľa spoľahlivo — profil explicitne (low = menšie modely)
+      RAG_RAM_PROFILE: ${RAG_RAM_PROFILE:-low}
+      RAG_AUTH_ENABLED: ${RAG_AUTH_ENABLED:-false}
+      RAG_ADMIN_EMAIL: ${RAG_ADMIN_EMAIL:-}
+      RAG_ADMIN_PASSWORD: ${RAG_ADMIN_PASSWORD:-}
+      RAG_MCP_ALLOWED_HOSTS: "localhost:*,backend:*"
+      RAG_OTLP_ENDPOINT: ${RAG_OTLP_ENDPOINT:-}
+    volumes:
+      - data:/data
+      - models:/models
+      - ./inbox:/data/inbox  # súbory sem nakopírované sa automaticky zaindexujú
+
+  frontend:
+    build: ./frontend
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+
+volumes:
+  ollama:
+  data:
+  models:
