@@ -32,6 +32,7 @@ import TasksBoardPage from './pages/tasks-board'
 import TeamPage from './pages/team'
 import TracesPage from './pages/traces'
 import UsersPage from './pages/users'
+import WorkerAskPage from './pages/worker-ask'
 
 /** skupina pracovníkov prihlásených PIN-om — vidia len dochádzku */
 const WORKER_GROUP = 'pracovnici'
@@ -138,9 +139,11 @@ function TopBar() {
   )
 }
 
-/** Pracovník na mobile: bez sidebaru — denný výpis a jeho nástenka úloh. */
+type WorkerTab = 'report' | 'tasks' | 'ask'
+
+/** Pracovník na mobile: bez sidebaru — denný výpis, nástenka úloh a otázky na vlastné údaje. */
 function WorkerShell({ name, onLogout }: { name: string; onLogout: () => void }) {
-  const [tab, setTab] = useState<'report' | 'tasks'>('report')
+  const [tab, setTab] = useState<WorkerTab>('report')
   return (
     <div className="min-h-svh bg-background">
       <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b bg-background/90 px-4 backdrop-blur-sm">
@@ -154,7 +157,7 @@ function WorkerShell({ name, onLogout }: { name: string; onLogout: () => void })
         </Button>
       </header>
       <main className="mx-auto max-w-xl space-y-4 px-4 py-4">
-        <Tabs value={tab} onValueChange={(v) => setTab(v as 'report' | 'tasks')}>
+        <Tabs value={tab} onValueChange={(v) => setTab(v as WorkerTab)}>
           <TabsList className="w-full">
             <TabsTrigger value="report" className="flex-1">
               Denný výpis
@@ -162,9 +165,14 @@ function WorkerShell({ name, onLogout }: { name: string; onLogout: () => void })
             <TabsTrigger value="tasks" className="flex-1">
               Moje úlohy
             </TabsTrigger>
+            <TabsTrigger value="ask" className="flex-1">
+              Opýtaj sa
+            </TabsTrigger>
           </TabsList>
         </Tabs>
-        {tab === 'report' ? <AttendancePage isAdmin={false} /> : <MyTasksPage />}
+        {tab === 'report' && <AttendancePage isAdmin={false} />}
+        {tab === 'tasks' && <MyTasksPage />}
+        {tab === 'ask' && <WorkerAskPage />}
       </main>
     </div>
   )

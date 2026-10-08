@@ -383,6 +383,28 @@ export const ownerEditReport = (id: string, data: ReportData) =>
   call<Report>(`/api/attendance/reports/${id}`, body('PUT', { data }))
 export const questionSpeechUrl = (qid: string) => `/api/attendance/questions/${qid}/speech`
 
+// --- otázky pracovníka na vlastné údaje (mobil, PLAN.md §17) -----------------------------
+
+export interface AskAnswer {
+  question: string
+  answer: string
+  speech_text: string
+  tts: boolean
+}
+
+export const askFirma = (question: string) =>
+  call<AskAnswer>('/api/attendance/ask', body('POST', { question }))
+export const askFirmaAudio = (blob: Blob) =>
+  call<AskAnswer>('/api/attendance/ask/audio', { method: 'POST', body: audioForm(blob) })
+
+/** Odpoveď nahlas (Piper) — wav ako blob, prehrá sa cez object URL. */
+export async function askSpeech(text: string): Promise<Blob> {
+  const res = await fetch('/api/attendance/ask/speech', body('POST', { text }))
+  if (res.status === 401) window.dispatchEvent(new Event('rag:unauthorized'))
+  if (!res.ok) throw new ApiError(res.status, 'odpoveď sa nedá prečítať nahlas', null)
+  return res.blob()
+}
+
 export interface DayRow {
   worker_id: string
   worker_name: string

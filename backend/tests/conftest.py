@@ -34,6 +34,8 @@ def isolated_data(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[P
     monkeypatch.setenv("RAG_RERANK", "false")
     monkeypatch.setenv("RAG_CONTEXTUAL_CHUNKS", "false")
     monkeypatch.setenv("RAG_INBOX_SYNC", "false")
+    # LLM klasifikátor rozsahu by v testoch volal Ollamu; testy brány ho zapnú s fake LLM
+    monkeypatch.setenv("RAG_SCOPE_CLASSIFIER", "false")
     # TestClient posiela Host „testserver“ — produkčný allowlist ho (správne) nepozná
     monkeypatch.setenv("RAG_MCP_ALLOWED_HOSTS", "testserver")
     _clear_singletons()

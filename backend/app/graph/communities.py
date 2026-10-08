@@ -29,6 +29,7 @@ from app.index.embedder import get_embedder
 from app.index.lancedb_store import get_chunks_by_ids
 from app.llm.ollama_client import OllamaError, generate_sync
 from app.retrieve.injection import guard_source_text
+from app.retrieve.secrets import redact_secrets
 
 logger = logging.getLogger(__name__)
 
@@ -241,7 +242,8 @@ def global_context(
                 n=len(sources) + 1, chunk_id=chunk_id, doc_id=row["doc_id"],
                 filename=names.get(row["doc_id"], row["doc_id"]), page_from=row["page_from"],
                 page_to=row["page_to"], type=row["type"], table_id=row["table_id"],
-                text=guard_source_text(row["raw_text"][:1200])[0], snippet=row["raw_text"][:200],
+                text=guard_source_text(redact_secrets(row["raw_text"])[:1200])[0],
+                snippet=redact_secrets(row["raw_text"])[:200],
                 boxes=boxes.get(chunk_id, []),
             ))
             refs.append(len(sources))

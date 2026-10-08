@@ -32,6 +32,7 @@ from app.retrieve.graph_expand import (
 )
 from app.retrieve.injection import guard_source_text
 from app.retrieve.rerank import rerank_rows
+from app.retrieve.secrets import redact_secrets
 
 MAX_CONTEXT_CHARS = 14_000  # ≈ 3,5k tokenov — disciplína KV cache
 TABLE_MD_CAP = 6_000
@@ -182,6 +183,8 @@ def retrieve_sources(
         else:
             text = row["text"]
 
+        # tajomstvá z dokumentu (heslo k WiFi, kód od brány…) sa do promptu nedostanú
+        text = redact_secrets(text)
         flagged = False
         if guard:
             text, flagged = guard_source_text(text)
@@ -203,7 +206,7 @@ def retrieve_sources(
                 type=row["type"],
                 table_id=row["table_id"],
                 text=text,
-                snippet=row["raw_text"][:200],
+                snippet=redact_secrets(row["raw_text"])[:200],
                 flagged=flagged,
             )
         )

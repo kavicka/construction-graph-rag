@@ -6,6 +6,8 @@ Spracovanie hlasu a LLM beží na pozadí — klient sa pýta na stav (status = 
 """
 
 import mimetypes
+import re
+import tempfile
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -16,9 +18,14 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from app.auth import current_scope
+from app.retrieve.scope_guard import check_question, reply_for
+from app.retrieve.secrets import redact_secrets
 from app.workforce import dialog, speech, store
 from app.workforce.config import get_workforce_settings
 from app.workforce.dialog import ChoiceAnswer, IncompleteReport, ReportLocked
+from app.workforce.qa import data as qa_data
+from app.workforce.qa.access import viewer_from_scope
+from app.workforce.qa.engine import HELP_WORKER, answer_firma
 from app.workforce.report_model import ReportData
 from app.workforce.reports_pdf import render_daily_summary, summary_context, summary_is_stale
 from app.workforce.runtime import is_worker, schedule
@@ -409,3 +416,98 @@ async def owner_edit(report_id: str, body: OwnerEdit) -> ReportOut:
     except ReportLocked as exc:
         raise _locked(exc) from exc
     return await _out(report_id)
+
+
+# --- otázky na vlastné údaje z mobilu (PLAN.md §17) -------------------------------------
+# Pracovník smie len /api/attendance/* (WorkerGuard) — toto je jeho jediná cesta k otázkam.
+# Rovnaká brána ako chat + firemné údaje s Viewer=worker (len on sám); dokumenty nie.
+
+
+class AskIn(BaseModel):
+    question: str = Field(min_length=1, max_length=500)
+
+
+class AskOut(BaseModel):
+    question: str
+    answer: str
+    speech_text: str  # bez markdownu — na prečítanie nahlas
+    tts: bool
+
+
+def speech_text(answer: str) -> str:
+    text = answer.replace("**", "").replace(" · ", ", ")
+    lines = [re.sub(r"^[-•]\s*", "", line).strip() for line in text.splitlines()]
+    sentences = [ln if ln.endswith((".", "?", "!", ":")) else f"{ln}." for ln in lines if ln]
+    return " ".join(sentences)[:1500]
+
+
+def _ask(question: str) -> AskOut:
+    decision = check_question(question)
+    if decision.blocked:
+        greeting = decision.reason in ("greeting", "thanks")
+        answer = reply_for(decision, question) if decision.verdict != "offtopic" or greeting \
+            else HELP_WORKER
+    else:
+        result = answer_firma(question, viewer_from_scope(), worker_context=True)
+        answer = result.answer if result else HELP_WORKER
+    answer = redact_secrets(answer)
+    return AskOut(question=question, answer=answer, speech_text=speech_text(answer),
+                  tts=speech.tts_available())
+
+
+@router.post("/ask")
+async def ask(body: AskIn) -> AskOut:
+    return await run_in_threadpool(_ask, body.question.strip())
+
+
+def _ask_vocabulary() -> str:
+    """Slovník pre Whisper: stavby a úlohy, ktoré pýtajúci vidí, a mená kolegov z nich."""
+    viewer = viewer_from_scope()
+    snap = qa_data.snapshot()
+    tasks = [t for t in snap.tasks if t.status in ("todo", "in_progress")
+             and (not viewer.own_only or viewer.user_id in t.assignees)]
+    people = {a for t in tasks for a in t.assignees} if viewer.own_only else {
+        w.id for w in snap.workers if w.active}
+    names = [w.name for w in snap.workers if w.id in people]
+    return speech.vocabulary_prompt([t.site_name for t in tasks][:12],
+                                    [t.title for t in tasks][:12], names[:12])
+
+
+@router.post("/ask/audio")
+async def ask_audio(file: UploadFile) -> AskOut:
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=422, detail="prázdna nahrávka")
+    if len(data) > MAX_AUDIO_BYTES:
+        raise HTTPException(status_code=413, detail="nahrávka je nad 50 MB")
+    ctype = (file.content_type or "").split(";")[0].strip()
+    ext = AUDIO_EXT.get(ctype) or Path(file.filename or "").suffix.lstrip(".") or "webm"
+    prompt = await run_in_threadpool(_ask_vocabulary)
+    # otázka sa neukladá — nahrávka žije len počas prepisu
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / f"otazka.{ext[:5]}"
+        path.write_bytes(data)
+        try:
+            text = await run_in_threadpool(speech.transcribe, path, prompt)
+        except speech.SpeechError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if not text.strip():
+        raise HTTPException(status_code=422,
+                            detail="nahrávke som nerozumel — skús to znova alebo otázku napíš")
+    return await run_in_threadpool(_ask, text.strip()[:500])
+
+
+class SpeechIn(BaseModel):
+    text: str = Field(min_length=1, max_length=1500)
+
+
+@router.post("/ask/speech")
+async def ask_speech(body: SpeechIn) -> FileResponse:
+    if await run_in_threadpool(lambda: viewer_from_scope().kind) == "member":
+        raise HTTPException(status_code=403, detail="len pre pracovníkov a majiteľa")
+    try:
+        path = await run_in_threadpool(speech.synthesize, redact_secrets(body.text))
+    except speech.SpeechError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return FileResponse(path, media_type="audio/wav",
+                        headers={"Cache-Control": "private, max-age=86400"})

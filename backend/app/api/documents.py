@@ -12,6 +12,7 @@ from app.index.lancedb_store import get_chunks_by_ids
 from app.ingest.formats import FORMATS, detect_format, media_type
 from app.ingest.service import schedule_ingest
 from app.ingest.store import delete_document, document_path, store_document
+from app.retrieve.secrets import redact_secrets
 
 router = APIRouter()
 
@@ -182,5 +183,5 @@ async def get_chunk(chunk_id: str) -> ChunkOut:
         filename=doc["filename"] if doc else row["doc_id"],
         format=doc["format"] if doc else "pdf",
         page_from=row["page_from"], page_to=row["page_to"],
-        section_path=row["section_path"], type=row["type"], text=row["raw_text"],
+        section_path=row["section_path"], type=row["type"], text=redact_secrets(row["raw_text"]),
     )

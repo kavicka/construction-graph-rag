@@ -10,6 +10,7 @@ from app.auth import allowed_doc_ids
 from app.index.embedder import get_embedder
 from app.index.lancedb_store import search_dense, search_fts
 from app.retrieve.fuse import rrf_fuse
+from app.retrieve.secrets import redact_secrets
 
 router = APIRouter()
 
@@ -48,4 +49,4 @@ async def search(
     mode: Literal["hybrid", "dense", "fts"] = "hybrid",
 ) -> list[SearchHit]:
     rows = await run_in_threadpool(_search_sync, q, k, mode)
-    return [SearchHit.model_validate(r) for r in rows]
+    return [SearchHit.model_validate({**r, "text": redact_secrets(r["text"])}) for r in rows]

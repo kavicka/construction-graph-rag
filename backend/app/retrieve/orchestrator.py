@@ -14,6 +14,7 @@ from opentelemetry.context import Context
 from opentelemetry.trace import Status, StatusCode
 
 from app import db
+from app.auth import allowed_doc_ids
 from app.company import load_company
 from app.config import get_settings
 from app.docgen.generate import (
@@ -47,9 +48,21 @@ from app.retrieve.research import (
     subquestion_event,
     synthesis_messages,
 )
-from app.retrieve.router import QueryPlan, route_query
+from app.retrieve.router import QueryPlan, mentions_library, route_query
+from app.retrieve.scope_guard import (
+    ScopeDecision,
+    check_question,
+    classify_scope,
+    not_found_reply,
+    reply_for,
+)
+from app.retrieve.secrets import SecretStreamFilter, redact_secrets
 from app.retrieve.selfcheck import check_numbers
-from app.retrieve.verify import is_refusal_answer, verify_sentences
+from app.retrieve.verify import is_refusal_answer, split_sentences, verify_sentences
+from app.workforce.qa import data as qa_data
+from app.workforce.qa.access import viewer_from_scope
+from app.workforce.qa.engine import answer_firma
+from app.workforce.qa.entities import match_sites, match_workers
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +115,32 @@ def _sources_event(sources: list[Source]) -> Event:
     return {"type": "sources", "sources": [s.to_json() for s in sources]}
 
 
+async def _fixed(mode: str, text: str, steps: list[dict[str, str]]) -> AsyncIterator[Event]:
+    """Odpoveď, ktorú poskladal kód (firemné údaje, odmietnutie) — bez LLM a bez zdrojov.
+    Prázdna udalosť `sources` je nutná: UI si z nej berie chat_id."""
+    yield {"type": "plan", "mode": mode}
+    for step in steps:
+        yield {"type": "step", **step}
+    yield _sources_event([])
+    yield {"type": "delta", "text": text}
+    yield {"type": "verify", "ok": True, "issues": [], "sentences": []}
+    yield {"type": "final", "mode": mode, "answer": text, "sources": [], "document": None,
+           "trace_id": None, "verification": {"issues": [], "sentences": []}}
+
+
+def _in_scope(question: str) -> bool:
+    """Lookup otázka bez signálu z knižnice ani firmy → rozhodne malý LLM klasifikátor."""
+    if mentions_library(question):
+        return True
+    snap = qa_data.snapshot()  # stavba či pracovník v otázke = určite firemná téma
+    if match_sites(question, snap.sites) or match_workers(question, snap.workers).workers:
+        return True
+    allowed = allowed_doc_ids()
+    titles = [d["filename"].rsplit(".", 1)[0] for d in db.list_documents()
+              if allowed is None or d["id"] in allowed]
+    return classify_scope(question, titles) == "ok"
+
+
 async def run_query(
     question: str,
     *,
@@ -113,7 +152,10 @@ async def run_query(
     `history` = predchádzajúce správy chatu (role, content) pre doplňujúce otázky."""
     root, ctx = start_root("rag.query", rag__question=question, rag__chat_id=chat_id)
     try:
-        if history and needs_rewrite(question, history):
+        # brána kontroluje pôvodnú otázku — prepis z histórie by žiadosť o heslo mohol
+        # preformulovať tak, že ju vzory nezachytia
+        blocked = get_settings().scope_guard and check_question(question).blocked
+        if history and not blocked and needs_rewrite(question, history):
             standalone = await _traced(
                 "rag.rewrite", ctx, rewrite_question, question, history,
                 rag__history=len(history),
@@ -122,8 +164,22 @@ async def run_query(
                 set_attrs(root, rag__standalone_question=standalone)
                 yield {"type": "rewrite", "question": standalone}
                 question = standalone
+        # tajomstvá sa redigujú už v streame — nesmú preblysnúť ani na zlomok sekundy
+        stream_filter = SecretStreamFilter()
+        streamed: list[str] = []
         async for event in _run(question, chat_id, ctx, mode):
+            if event["type"] == "delta":
+                if safe := stream_filter.feed(event["text"]):
+                    streamed.append(safe)
+                    yield {"type": "delta", "text": safe}
+                continue
+            if event["type"] in ("verify", "final") and (rest := stream_filter.flush()):
+                streamed.append(rest)
+                yield {"type": "delta", "text": rest}
             if event["type"] == "final":
+                if event["answer"] != "".join(streamed):
+                    # finálna odpoveď prešla redakciou / očistou → UI ju vymení celú
+                    yield {"type": "replace", "text": event["answer"]}
                 event["trace_id"] = trace_id_of(root)
                 set_attrs(root, rag__mode=event["mode"], rag__answer=event["answer"],
                           rag__sources=len(event["sources"]))
@@ -144,6 +200,21 @@ async def _run(
     question: str, chat_id: str | None, ctx: Context, mode: str | None
 ) -> AsyncIterator[Event]:
     settings = get_settings()
+    if settings.scope_guard:
+        decision = check_question(question)
+        if decision.blocked:
+            async for event in _fixed("refuse", reply_for(decision, question),
+                                      [{"tool": "guard", "summary": decision.verdict}]):
+                yield event
+            return
+    if mode != "research":
+        firma = await _traced("rag.firma", ctx,
+                              lambda: answer_firma(question, viewer_from_scope()))
+        if firma is not None:
+            async for event in _fixed("firma", firma.answer, firma.steps):
+                yield event
+            return
+
     if mode == "research":  # vynútené z UI (prepínač Deep research)
         plan = QueryPlan(mode="research")
     else:
@@ -170,12 +241,12 @@ async def _run(
         for i, heading in enumerate(outline.headings, start=1):
             yield {"type": "step", "tool": "section",
                    "summary": f"{i}/{len(outline.headings)} {heading}"}
-            bodies.append(
+            bodies.append(redact_secrets(
                 await _traced(
                     "docgen.section", ctx, write_section, question, heading, outline, doc_type,
                     lang, sources, company, rag__heading=heading,
                 )
-            )
+            ))
         yield {"type": "step", "tool": "render", "summary": "renderujem PDF…"}
         content = build_content(outline, doc_type, lang, bodies)
         generated = await _traced("docgen.render", ctx, save_document, content, company, sources,
@@ -268,6 +339,11 @@ async def _run(
         evidence = [*(s.text for s in sources), *(f for _, f in findings), question]
 
     else:
+        if settings.scope_guard and not await _traced("rag.scope", ctx, _in_scope, question):
+            async for event in _fixed("refuse", reply_for(ScopeDecision("offtopic"), question),
+                                      [{"tool": "guard", "summary": "mimo účelu"}]):
+                yield event
+            return
         if is_compound(question):
             # „Kto je stavbyvedúci a aká je pokuta?“ — jedno vyhľadávanie nájde len polovicu
             subquestions = await _traced("rag.decompose", ctx, decompose, question)
@@ -290,12 +366,15 @@ async def _run(
             yield {"type": "delta", "text": token}
         evidence = [*(s.text for s in sources), question]
 
-    answer = "".join(answer_parts)
+    answer = redact_secrets("".join(answer_parts))
     if settings.injection_guard:
         answer = sanitize_answer(answer)
     if plan.mode == "lookup" and is_refusal_answer(answer):
         # „podklady to neuvádzajú [1]“ — malý model citáciu pridá aj k odmietnutiu
         answer = CITE_RE.sub("", answer).strip()
+        if settings.scope_guard and len(split_sentences(answer)) <= 1:
+            # samotné odmietnutie → pevná veta, nič dopísané z vlastných vedomostí modelu
+            answer = not_found_reply(question)
     issues = check_numbers(verify_text if verify_text is not None else answer, evidence)
     sentences: list[dict[str, Any]] = []
     if plan.mode in ("lookup", "research") and answer.strip():

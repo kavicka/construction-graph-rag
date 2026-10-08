@@ -25,6 +25,7 @@ from app.config import get_settings
 from app.docgen.intent import detect_generate_intent
 from app.docgen.schema import DocType, Lang
 from app.graph.communities import is_global_query
+from app.graph.schema import CONCEPT
 from app.llm.ollama_client import OllamaError, generate_sync
 from app.retrieve.research import is_research_request
 
@@ -168,6 +169,20 @@ def _match_categories(qn: str) -> list[str]:
         if any(fuzz.partial_ratio(t, qn) >= 85 for t in tokens):
             matched.append(cat)
     return matched
+
+
+def mentions_library(question: str) -> bool:
+    """Spomína otázka niečo z knižnice — dokument, kategóriu záznamov, pojem z grafu?
+    Vtedy je určite v rozsahu a LLM klasifikátor rozsahu sa nevolá."""
+    qn = _norm(question)
+    if _match_documents(qn) or _match_categories(qn):
+        return True
+    for node in db.list_graph_nodes(types=[CONCEPT]):
+        label = _norm(node["label"])
+        # krátke štítky („C30“, „NP“) by sa našli v hocičom
+        if len(label) >= 5 and fuzz.partial_ratio(label, qn) >= 90:
+            return True
+    return False
 
 
 class _LlmPlan(BaseModel):

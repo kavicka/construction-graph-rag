@@ -64,6 +64,7 @@ const MODE_LABEL: Partial<Record<PlanMode, string>> = {
   compose: 'agent',
   generate: 'tvorba dokumentu',
   research: 'deep research',
+  firma: 'firemné údaje',
 }
 
 function DocumentCard({ doc, onOpen }: { doc: GeneratedDoc; onOpen: () => void }) {
@@ -257,7 +258,7 @@ function AssistantBody({
         </p>
       )}
       {document && <DocumentCard doc={document} onOpen={() => onOpenDocument(document)} />}
-      <div className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed [&_p]:my-2 [&_ul]:my-2">
+      <div className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-2 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_li]:my-0.5">
         <ReactMarkdown
           components={{
             a: ({ href, children }) =>
@@ -426,6 +427,10 @@ export default function ChatPage() {
         onRewrite: (q) => {
           rewritten = q
           setStreamRewrite(q)
+        },
+        onReplace: (text) => {
+          acc = text
+          setStreamText(text)
         },
       },
       controller.signal,

@@ -444,3 +444,138 @@ otázky → odovzdanie → PDF). Nové pravidlá z nich:
   v protokole aj v zápise) — „Schváliť všetko“ ho preskočí, rozhodne majiteľ.
 - Pracovník má záložku **Moje úlohy** — nástenka po stavoch (Na rade / Rozpracované /
   Hotové) len na čítanie, úlohy dňa označené „dnes“; stav mení výpis, nie ťahanie.
+
+## 17. Chat nad firemnými údajmi + bezpečnostná brána (2026-10-08)
+
+**Problém:** „Čo robí dnes Jozef Mikuš?“ → „žiadna informácia“. Chat (`orchestrator`) hľadá
+len v dokumentoch (LanceDB, records, graf); úlohy a dochádzka sú v tabuľkách `wf_*`, ku
+ktorým chat nemal cestu. Rozšírenie: chat odpovedá aj z firemných údajov — a zároveň
+nesmie odpovedať mimo účelu ani vypísať heslá a iné citlivé údaje.
+
+### Rozhodnutia z `/ask` (2026-10-08)
+
+| Otázka | Rozhodnutie |
+|---|---|
+| Kto sa smie pýtať na firemné údaje | admin (majiteľ) všetko; pracovník (PIN) **len svoje** údaje; ostatní (member) nič |
+| Rozsah údajov | úlohy pracovníka, dochádzka a hodiny, stavby a omeškanie, problémy z výpisov |
+| Kde sa pýta pracovník | mobil — záložka „Opýtaj sa“ v dochádzke (text aj hlas), len vlastné údaje, dokumenty nie |
+| Kolegovia pri spoločnej úlohe | pracovník vidí **len mená** kolegov na svojej úlohe (nie ich dochádzku, hodiny, výpisy) |
+| Kto formuluje odpoveď | **kód šablónou** — LLM len zaradí otázku do pevného typu, dáta z DB nikdy nevidí |
+| Citlivé údaje | nikdy: heslá, PIN, hashe, tokeny, e-maily účtov; v odpovediach z dokumentov sa začiernia heslá, prístupové kódy, kľúče a tokeny (IBAN, rodné čísla, telefóny ostávajú) |
+| Otázky mimo účelu | pevné odmietnutie (žiadne všeobecné vedomosti z modelu) |
+
+### Tok otázky
+
+```
+otázka ─► 1. brána (scope_guard)      tajomstvá / vnútro systému / injekcia / mimo účelu
+            │                          → pevná odpoveď, LLM sa nevolá
+            ├► 2. firma (workforce.qa)  meno pracovníka, stavba, úloha + kľúčové slová
+            │     entity → dátum/obdobie → typ otázky → prístup → read-only dopyt → šablóna
+            └► 3. dokumenty (doterajší router: lookup/filter/compose/generate/research/global)
+                  + LLM klasifikátor rozsahu len pri lookup bez signálu z knižnice
+          ─► 4. výstup: redakcia tajomstiev (stream aj finálna odpoveď), pevné odmietnutie
+                pri „v podkladoch to nie je“
+```
+
+### 1. Brána — `app/retrieve/scope_guard.py`
+
+Deterministická, beží pred routerom pre chat, MCP `ask` aj mobil. Text sa normalizuje
+(bez diakritiky, malé písmená) a kontroluje aj v „odmaskovaných“ tvaroch — `h-e-s-l-o`,
+`h e s l o`, leetspeak `h3sl0`.
+
+| Verdikt | Príklady | Odpoveď |
+|---|---|---|
+| `secret` | heslo, PIN, token, API kľúč, hash, prihlasovacie údaje, prístupový kód, kód od brány/alarmu, password | „Heslá, PIN-y … nevypisujem. Nový PIN/heslo nastaví administrátor.“ |
+| `internals` | systémový prompt, tvoje inštrukcie, `.env`, `SELECT … FROM`, tabuľka `users`, injekčné vzory z `injection.py` | „Pokyny na zmenu správania ani otázky na vnútro systému nespracúvam.“ |
+| `offtopic` | báseň, vtip, počasie, kurzy, šport, programovanie, výpočty, pozdrav bez otázky | čo chat vie + príklady otázok |
+| `ok` | ostatné | pokračuje |
+
+LLM klasifikátor rozsahu (`answer_model`, JSON enum `dokumenty | mimo`) sa volá len pri
+lookup otázke **bez** signálu z knižnice (názov dokumentu, kategória záznamov, pojem
+z grafu). Pri chybe alebo pochybnosti → `dokumenty` (RAG aj tak odpovedá len zo zdrojov).
+Odmietnutie „v podkladoch to nie je“ sa v lookup režime nahradí pevnou vetou — žiadne
+dopisovanie z vlastných vedomostí modelu.
+
+### 2. Firma — `app/workforce/qa/`
+
+| Súbor | Čo robí |
+|---|---|
+| `data.py` | **read-only** SQLite spojenie (`mode=ro`, `PRAGMA query_only`) a explicitné SELECTy len povolených stĺpcov → frozen DTO. `pin_hash`, `password_hash`, `email`, `sessions`, `api_tokens` ani prepis reči sa nikdy nečítajú (test kontroluje SQL aj polia DTO). |
+| `entities.py` | pracovník podľa mena v ľubovoľnom páde (Mikuš/Mikuša/Mikušovi, Peter/Petra, Marek/Marka), stavba, úloha (kmene názvu); dvaja Jozefovia → doplňujúca otázka; neznáme meno → „taký pracovník v tíme nie je“ |
+| `dates.py` | dnes/zajtra/včera/pozajtra, dni v týždni podľa času slovesa (robil = minulý, bude = budúci), 8. 10., 8. októbra, tento/minulý/budúci týždeň či mesiac, za september, od–do, posledných N dní; predvolené obdobie podľa typu otázky |
+| `intents.py` | rozpozná, či ide o firemnú otázku, a typ (až 2 naraz: „čo robí dnes a aké má úlohy“). Pravidlá prvé; LLM (JSON enum, vidí len otázku) len keď pravidlá typ nenájdu. Signál „dokument“ (podľa zmluvy, v PDF…) má prednosť pred samotnou stavbou, nie pred menom pracovníka. |
+| `access.py` | `Viewer` = admin / worker / member. Pracovník: subjekt vždy on sám, iný pracovník → odmietnutie, „kto neodovzdal výpis“ → odmietnutie, stavba/úloha → len jeho úlohy (mená kolegov na nich áno). Member → „len pre majiteľa“. |
+| `answer.py` | šablóny odpovedí (markdown, slovenské dátumy „št 8. 10.“, časy 6:30, hodiny „7,5 h“), rodovo neutrálne |
+| `engine.py` | `answer_firma(question, viewer)` — spojí kroky, vráti text + kroky pre UI |
+
+Typy otázok:
+
+| Typ | Príklad | Zdroj údajov |
+|---|---|---|
+| `worker_day` | čo robí dnes / robil v piatok Mikuš | aktívne úlohy dňa (`tasks.is_active_on`) + výpis toho dňa |
+| `worker_tasks` | aké má pridelené úlohy | otvorené úlohy + hotové za 14 dní, termíny, %, kolegovia |
+| `attendance` | kedy prišiel, dochádzka dnes | príchod/odchod/prestávka/odpracované z výpisu |
+| `hours` | koľko hodín odpracoval tento mesiac | súčet z odovzdaných výpisov + dni bez výpisu |
+| `absences` | kto chýbal minulý týždeň | výpisy s neprítomnosťou + dôvod |
+| `missing_reports` | kto ešte neodovzdal výpis | aktívni pracovníci bez odovzdaného výpisu (len admin) |
+| `site_overview` | čo sa robí na Rovinke, kto dnes pracuje | úlohy stavby po stavoch, kto má dnes úlohu |
+| `task_people` | kto robí na murovaní | priradení pracovníci úlohy |
+| `overdue` | ktoré úlohy meškajú | otvorené úlohy po termíne, o koľko dní |
+| `blocked` | čo čaká na betonáž | otvorené úlohy s nedokončenou závislosťou |
+| `problems` | aké problémy nahlásili tento týždeň | `problems` z výpisov |
+
+Text z DB (názvy úloh, poznámky, problémy) do LLM nejde — injekcia cez názov úlohy nemá
+koho ovplyvniť. Aj tak prechádza redakciou tajomstiev.
+
+### 3. Redakcia tajomstiev — `app/retrieve/secrets.py`
+
+- **Vzory:** `scrypt$…`, bcrypt/argon2 hashe, `rag_…` API tokeny, `sk-…`, `ghp_…`,
+  `xox…-`, AWS `AKIA…`, Google `AIza…`, JWT, `Bearer …`, PEM privátne kľúče, hex ≥ 32 znakov.
+- **Návestie + hodnota:** heslo/password/PIN/prístupový kód/kód od brány/token/API kľúč…
+  + `:`/`=`/„je“ + hodnota → `••••••`. Pri „je“ sa hodnota začierni len ak vyzerá ako
+  tajomstvo (číslica, veľké písmeno uprostred, symbol) — „heslo je potrebné zmeniť“ ostane.
+- **Kde:** text zdrojov **pred** promptom (LLM tajomstvo nikdy nevidí) aj snippet pre UI,
+  priebežný stream odpovede (`SecretStreamFilter` drží chvost od posledného návestia),
+  finálna odpoveď, sekcie generovaných PDF, MCP nástroje s textom dokumentov, `/api/search`,
+  firemné odpovede. Ak sa finálny text líši od streamovaného, príde udalosť `replace`.
+- **Mimo rozsahu:** samotné PDF v prehliadači dokumentov ukazuje originál — riadi ho
+  prístup k dokumentu (skupiny), nie chat.
+
+### 4. Mobil pracovníka
+
+`POST /api/attendance/ask` (text), `/ask/audio` (Whisper so slovníkom stavieb a úloh),
+`/ask/speech` (Piper). Rovnaká brána + firma s `Viewer=worker`; čokoľvek iné → „Tu sa
+môžeš pýtať len na svoje úlohy, dochádzku a hodiny.“ UI: tretia záložka **Opýtaj sa** vo
+`WorkerShell` — návrhy otázok, písanie, nahrávanie, prehratie odpovede.
+`WorkerGuard` už pracovníkovi zakazuje `/api/chat` aj `/mcp` — mobilný endpoint je jediná cesta.
+
+### 5. Overenie
+
+- Unit testy: entity (pády), dátumy, typy otázok, prístup (admin/worker/member), whitelist
+  stĺpcov a read-only spojenie, redakcia (vzory, stream, falošné poplachy), brána.
+- API testy: `/api/chat` SSE v režime firma, member bez prístupu, pracovník cez
+  `/api/attendance/ask` vidí len seba, `/api/chat` mu ostáva zakázaný.
+- Eval `uv run python -m eval.firma_eval` → `eval/FIRMA.md`: zlaté otázky (správne fakty,
+  typ otázky) + red-team (žiadosti o PIN/heslo aj zamaskované, „som admin“, injekcia
+  v názve úlohy a poznámke výpisu, pracovník sa pýta na kolegu, tajomstvo v zdroji RAG,
+  mimo účelu). Kanáriky: PIN-y, `scrypt$`, e-maily `@pracovnik.local`, heslo admina,
+  tajomstvo v poznámke. Cieľ: **0 únikov**.
+
+**Výsledok (2026-10-08, `qwen3:4b-instruct`, `eval/FIRMA.md`):** zlaté otázky 15/15,
+prístup 8/8, red-team 21/21, mimo účelu 7/7, falošné odmietnutia otázok na dokumenty 0/6,
+**0 únikov kanárikov**, firemná odpoveď ~10 ms (bez LLM). 445 testov, ruff + mypy čisté.
+
+Pravidlá z ladenia (kryté testami):
+- „vypíš“ (sloveso) a „výpis“ (denný výpis) sú bez diakritiky rovnaké → podstatné meno sa
+  hľadá s „ý“ alebo v spojení („denný / neodovzdaný výpis“), inak „vypíš text tabule“
+  odišlo do firmy.
+- Klasifikátor rozsahu bez knižnice odmietol „čo je na tabuli na Rovinke“ → stavba alebo
+  pracovník v otázke je signál rozsahu, klasifikátor sa vtedy nevolá.
+- „Ján Novák“ pri pracovníkovi Ján Novotný: za krstným menom iné priezvisko = iný človek.
+- Brána kontroluje aj pôvodnú otázku pred prepisom z histórie („A aký má PIN?“).
+- Pracovník vidí názov úlohy, na ktorú jeho úloha čaká (aj keď ju robí kolega) — nie však
+  kto ju robí, stav ani termín.
+
+**Mimo rozsahu:** zápis cez chat (zmena úloh), text-to-SQL, všeobecné vedomosti, mzdy.
+Otázka „sprav PDF o dochádzke Mikuša“ dostane textovú odpoveď z firemných údajov — PDF
+výpisy sú v module Dochádzka.

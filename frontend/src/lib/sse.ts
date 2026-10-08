@@ -1,6 +1,6 @@
 import type { GeneratedDoc, SentenceCheck, SourceRef } from './api'
 
-export type PlanMode = 'lookup' | 'filter' | 'compose' | 'generate' | 'research'
+export type PlanMode = 'lookup' | 'filter' | 'compose' | 'generate' | 'research' | 'global' | 'firma' | 'refuse'
 
 export interface StreamHandlers {
   onSources: (chatId: string, sources: SourceRef[]) => void
@@ -12,6 +12,8 @@ export interface StreamHandlers {
   onVerify?: (ok: boolean, issues: string[], sentences: SentenceCheck[]) => void
   onDocument?: (doc: GeneratedDoc) => void
   onRewrite?: (question: string) => void
+  /** finálna odpoveď sa líši od streamu (redakcia tajomstiev, očista) — nahradí text */
+  onReplace?: (text: string) => void
 }
 
 type StreamEvent =
@@ -24,6 +26,7 @@ type StreamEvent =
   | { type: 'verify'; ok: boolean; issues: string[]; sentences?: SentenceCheck[] }
   | { type: 'document'; document: GeneratedDoc }
   | { type: 'rewrite'; question: string }
+  | { type: 'replace'; text: string }
 
 export async function streamChat(
   body: { message: string; chat_id?: string; mode?: 'auto' | 'research' },
@@ -73,6 +76,9 @@ export async function streamChat(
         break
       case 'rewrite':
         handlers.onRewrite?.(evt.question)
+        break
+      case 'replace':
+        handlers.onReplace?.(evt.text)
         break
     }
   }

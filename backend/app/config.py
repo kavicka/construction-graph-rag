@@ -66,6 +66,10 @@ class Settings(BaseSettings):
     admin_password: str | None = None
     cookie_secure: bool = False  # True za HTTPS proxy
     injection_guard: bool = True  # obrana proti pokynom schovaným v dokumentoch
+    # brána pred routerom: tajomstvá, vnútro systému a otázky mimo účelu → pevná odpoveď
+    scope_guard: bool = True
+    # LLM klasifikátor rozsahu pri lookup otázke bez signálu z knižnice
+    scope_classifier: bool = True
     inbox_sync: bool = True  # data/inbox ↔ knižnica (nové, zmenené, zmazané súbory)
     inbox_interval_s: float = 5.0
     mcp_allowed_hosts: str = ""  # ďalšie Host hlavičky pre /mcp, napr. "backend:*,rag.lan:*"

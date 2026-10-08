@@ -28,6 +28,7 @@ from app.retrieve.graph_expand import (
 )
 from app.retrieve.orchestrator import answer_question
 from app.retrieve.pipeline import Source, rank_chunks, retrieve_sources
+from app.retrieve.secrets import redact_secrets
 
 INSTRUCTIONS = """Local document library (PDF, DOCX, PPTX, HTML, Markdown: contracts,
 budgets, reports, manuals) with a knowledge graph across documents.
@@ -115,7 +116,7 @@ def _connections(topic: str, max_documents: int) -> dict[str, Any]:
         if len(doc["evidence"]) < 3:
             doc["evidence"].append(
                 {"page": r["page_from"], "section": r["section_path"],
-                 "snippet": r["raw_text"][:300]}
+                 "snippet": redact_secrets(r["raw_text"])[:300]}
             )
     # len pojmy doložené povoleným úsekom — inak by štítok prezradil obsah cudzieho dokumentu
     visible_chunks = {f"chunk:{r['chunk_id']}" for r in rows}
@@ -189,7 +190,7 @@ def _document(document: str, max_chars: int) -> dict[str, Any]:
         if chunk["type"] != "text":
             continue
         parts.append(f"[page {chunk['page_from']}] {chunk['raw_text']}")
-    text = "\n\n".join(parts)
+    text = redact_secrets("\n\n".join(parts))
     return {
         "id": doc["id"],
         "filename": doc["filename"],
