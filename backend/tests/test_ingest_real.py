@@ -64,9 +64,9 @@ def test_full_parse_with_table() -> None:
     _make_sample_pdf(str(settings.pdf_dir / f"{doc_id}.pdf"))
     db.insert_document(doc_id, "vzorka.pdf", "sha-integracny")
 
-    from app.ingest.docling_parse import parse_pdf
+    from app.ingest.docling_parse import parse_document
 
-    summary = parse_pdf(doc_id)
+    summary = parse_document(doc_id)
 
     assert summary["pages"] >= 1
     assert summary["tables"] >= 1

@@ -14,7 +14,7 @@ async def test_ingest_error_path(monkeypatch: pytest.MonkeyPatch) -> None:
     def boom(doc_id: str) -> dict[str, int]:
         raise RuntimeError("parse spadol")
 
-    monkeypatch.setattr("app.ingest.service.parse_pdf", boom)
+    monkeypatch.setattr("app.ingest.service.parse_document", boom)
     await _run_ingest("d1")
 
     doc = db.get_document("d1")
@@ -30,7 +30,7 @@ async def test_ingest_happy_path(monkeypatch: pytest.MonkeyPatch) -> None:
     db.insert_document("d1", "a.pdf", "sha-1")
 
     monkeypatch.setattr(
-        "app.ingest.service.parse_pdf", lambda doc_id: {"pages": 3, "tables": 1}
+        "app.ingest.service.parse_document", lambda doc_id: {"pages": 3, "tables": 1}
     )
     monkeypatch.setattr("app.ingest.service._index_document", lambda doc_id: 5)
     await _run_ingest("d1")
