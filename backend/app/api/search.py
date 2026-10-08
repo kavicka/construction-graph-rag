@@ -6,6 +6,7 @@ from fastapi import APIRouter, Query
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
+from app.auth import allowed_doc_ids
 from app.index.embedder import get_embedder
 from app.index.lancedb_store import search_dense, search_fts
 from app.retrieve.fuse import rrf_fuse
@@ -27,12 +28,13 @@ class SearchHit(BaseModel):
 
 
 def _search_sync(q: str, k: int, mode: str) -> list[dict[str, Any]]:
+    allowed = allowed_doc_ids()
     if mode in ("dense", "hybrid"):
         vector = get_embedder().embed_query(q)
-        dense = search_dense(vector, k=max(k * 3, 24))
+        dense = search_dense(vector, k=max(k * 3, 24), doc_ids=allowed)
     else:
         dense = []
-    fts = search_fts(q, k=max(k * 3, 24)) if mode in ("fts", "hybrid") else []
+    fts = search_fts(q, k=max(k * 3, 24), doc_ids=allowed) if mode in ("fts", "hybrid") else []
 
     if mode == "hybrid":
         return rrf_fuse([dense, fts], top_k=k)

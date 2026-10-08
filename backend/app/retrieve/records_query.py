@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from rapidfuzz import fuzz
 
 from app import db
+from app.auth import allowed_doc_ids
 from app.retrieve.pipeline import Source
 from app.retrieve.router import Constraint, QueryPlan
 
@@ -62,10 +63,15 @@ def _passes(attrs: dict[str, float], constraints: list[Constraint]) -> bool:
     return True
 
 
-def load_hits(categories: list[str]) -> list[RecordHit]:
+def load_hits(categories: list[str], doc_ids: list[str] | None = None) -> list[RecordHit]:
     hits = []
+    allowed = allowed_doc_ids()
     for r in db.list_records():
+        if allowed is not None and r["doc_id"] not in allowed:
+            continue
         if not _category_matches(r["category"], categories):
+            continue
+        if doc_ids and r["doc_id"] not in doc_ids:
             continue
         hits.append(
             RecordHit(
@@ -83,7 +89,12 @@ def load_hits(categories: list[str]) -> list[RecordHit]:
 
 def run_filter(plan: QueryPlan) -> tuple[list[RecordHit], list[RecordHit]]:
     """→ (vyhovujúce, najbližšie-nevyhovujúce pre poctivú odpoveď pri nule)."""
-    candidates = load_hits(plan.categories)
+    candidates = load_hits(plan.categories, plan.doc_ids)
+    if plan.doc_ids and not any(
+        c.attr in h.attrs for h in candidates for c in plan.constraints
+    ):
+        # dokument z otázky ten atribút nemá (napr. „Agátová" → zmluva) → celá knižnica
+        candidates = load_hits(plan.categories)
     matched = [h for h in candidates if _passes(h.attrs, plan.constraints)]
 
     sort_attr = plan.maximize or (plan.constraints[0].attr if plan.constraints else "kcal")
@@ -127,10 +138,28 @@ def hits_to_sources(hits: list[RecordHit]) -> list[Source]:
     return sources
 
 
-def format_hit(h: RecordHit, source_n: int) -> str:
+def attr_labels() -> dict[str, str]:
+    """kľúč → „Pevnosť [MPa]" z registra; makrá jedálnička majú pevné štítky."""
+    labels = dict(ATTR_LABELS)
+    for a in db.list_record_attrs():
+        labels.setdefault(a["key"], f"{a['label']} [{a['unit']}]" if a["unit"] else a["label"])
+    return labels
+
+
+def _fmt_value(v: float) -> str:
+    """12400.0 → „12 400", 36.4 → „36.4" — tisíce ako v slovenských dokumentoch."""
+    if v == int(v) and abs(v) >= 10_000:
+        return f"{int(v):,}".replace(",", " ")
+    return f"{v:g}"
+
+
+def format_hit(h: RecordHit, source_n: int, labels: dict[str, str] | None = None) -> str:
+    labels = labels or ATTR_LABELS
+    shown = {k: v for k, v in sorted(h.attrs.items()) if not k.startswith("val_")} or h.attrs
     attrs = ", ".join(
-        f"{k}={v:g}" for k, v in sorted(h.attrs.items()) if not k.startswith("val_")
-    ) or ", ".join(f"{k}={v:g}" for k, v in sorted(h.attrs.items()))
+        f"{k}={v:g}" if k in ("kcal", "b", "s", "t") else f"{labels.get(k, k)} {_fmt_value(v)}"
+        for k, v in shown.items()
+    )
     cat = f" ({h.category})" if h.category else ""
     return f"- {h.name}{cat}: {attrs} [{source_n}]"
 
@@ -144,14 +173,15 @@ def format_filter_answer(
     malému modelu nezverujeme.)
     """
     table_n = {s.table_id: s.n for s in sources}
+    labels = attr_labels()
     conds = "; ".join(
-        f"{ATTR_LABELS.get(c.attr, c.attr)} {c.op} {c.value:g}" for c in plan.constraints
+        f"{labels.get(c.attr, c.attr)} {c.op} {_fmt_value(c.value)}" for c in plan.constraints
     )
     cats = f" (kategória: {', '.join(plan.categories)})" if plan.categories else ""
 
     if matched:
         lines = [f"Podmienkam {conds}{cats} vyhovuje {len(matched)} položiek:", ""]
-        lines += [format_hit(h, table_n.get(h.table_id, 1)) for h in matched[:30]]
+        lines += [format_hit(h, table_n.get(h.table_id, 1), labels) for h in matched[:30]]
         if len(matched) > 30:
             lines.append(f"… a ďalších {len(matched) - 30}.")
         return "\n".join(lines)
@@ -159,7 +189,7 @@ def format_filter_answer(
     lines = [f"Podmienkam {conds}{cats} nevyhovuje žiadna položka."]
     if nearest:
         lines += ["", "Najbližšie hodnoty (limit NESPĹŇAJÚ):"]
-        lines += [format_hit(h, table_n.get(h.table_id, 1)) for h in nearest]
+        lines += [format_hit(h, table_n.get(h.table_id, 1), labels) for h in nearest]
     return "\n".join(lines)
 
 

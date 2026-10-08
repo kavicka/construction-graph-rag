@@ -6,6 +6,7 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 from app import db
+from app.auth import can_access_document
 
 router = APIRouter()
 
@@ -40,7 +41,7 @@ def _read_parquet(path: str) -> tuple[list[str], list[list[Any]], bool]:
 @router.get("/tables/{table_id}")
 async def get_table(table_id: str) -> TableData:
     meta = await run_in_threadpool(db.get_table, table_id)
-    if meta is None:
+    if meta is None or not await run_in_threadpool(can_access_document, meta["doc_id"]):
         raise HTTPException(status_code=404, detail="tabuľka neexistuje")
 
     markdown = ""

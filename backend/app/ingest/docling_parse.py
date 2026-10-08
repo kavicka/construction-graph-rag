@@ -51,7 +51,11 @@ def _get_converter() -> Any:
         logger.warning("Žiadny OCR engine — skenované PDF ostanú prázdne")
 
     return DocumentConverter(
-        format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=opts)}
+        allowed_formats=[
+            InputFormat.PDF, InputFormat.DOCX, InputFormat.PPTX, InputFormat.XLSX,
+            InputFormat.HTML, InputFormat.MD,
+        ],
+        format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=opts)},
     )
 
 
@@ -138,6 +142,8 @@ def _extract_tables(doc_id: str, document: Any) -> int:
             # markdown je zdroj pravdy pre LLM kontext; parquet je bonus pre presné čísla
             logger.exception("parquet export zlyhal pre tabuľku %s", table_id)
 
+        from app.index.chunker import item_boxes
+
         db.insert_table(
             table_id,
             doc_id,
@@ -147,17 +153,21 @@ def _extract_tables(doc_id: str, document: Any) -> int:
             item.data.num_cols,
             str(md_path),
             parquet_path,
+            boxes_json=json.dumps(item_boxes(document, [item])),
         )
         count += 1
     return count
 
 
-def parse_pdf(doc_id: str) -> dict[str, int]:
-    """Synchrónny celý parse jedného dokumentu. Volať cez asyncio.to_thread."""
+def parse_document(doc_id: str) -> dict[str, int]:
+    """Synchrónny celý parse jedného dokumentu (PDF, DOCX, PPTX, XLSX, HTML, MD).
+    Volať cez asyncio.to_thread."""
     settings = get_settings()
-    pdf_path = settings.pdf_dir / f"{doc_id}.pdf"
+    doc = db.get_document(doc_id)
+    fmt = (doc or {}).get("format") or "pdf"
+    path = settings.pdf_dir / f"{doc_id}.{fmt}"
 
-    result = _get_converter().convert(pdf_path)
+    result = _get_converter().convert(path)
     document = result.document
 
     parsed_path = settings.parsed_dir / f"{doc_id}.json"
@@ -165,7 +175,7 @@ def parse_pdf(doc_id: str) -> dict[str, int]:
         json.dumps(document.export_to_dict(), ensure_ascii=False), encoding="utf-8"
     )
 
-    pages = _page_text_lengths(document)
+    pages = _page_text_lengths(document) or [(1, sum(len(t.text) for t in document.texts))]
     db.set_pages(doc_id, pages)
 
     db.delete_document_tables(doc_id)

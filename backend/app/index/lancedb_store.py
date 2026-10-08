@@ -81,6 +81,15 @@ def replace_document_chunks(
     return len(chunks)
 
 
+def delete_document_chunks(doc_id: str) -> None:
+    tbl = _table_or_none()
+    if tbl is None:
+        return
+    tbl.delete(f"doc_id = '{doc_id}'")
+    if tbl.count_rows():
+        tbl.create_fts_index("text", replace=True)
+
+
 def _row_out(row: dict[str, Any], score_key: str) -> dict[str, Any]:
     return {
         "chunk_id": row["chunk_id"],
@@ -103,20 +112,35 @@ def _table_or_none() -> Any | None:
     return db.open_table(CHUNKS_TABLE)
 
 
-def search_dense(vector: list[float], k: int = 24) -> list[dict[str, Any]]:
+def _doc_filter(doc_ids: set[str]) -> str:
+    quoted = ",".join("'" + d.replace("'", "''") + "'" for d in sorted(doc_ids))
+    return f"doc_id IN ({quoted})"
+
+
+def search_dense(
+    vector: list[float], k: int = 24, doc_ids: set[str] | None = None
+) -> list[dict[str, Any]]:
+    """doc_ids = prístupové obmedzenie — filtruje sa vo vektorovom dotaze (prefilter),
+    takže top-k je vždy z povolených dokumentov, nie orezaný výsledok."""
     tbl = _table_or_none()
-    if tbl is None:
+    if tbl is None or doc_ids == set():
         return []
-    rows = tbl.search(vector).limit(k).to_list()
+    q = tbl.search(vector)
+    if doc_ids is not None:
+        q = q.where(_doc_filter(doc_ids), prefilter=True)
+    rows = q.limit(k).to_list()
     return [_row_out(r, "_distance") for r in rows]
 
 
-def search_fts(query: str, k: int = 24) -> list[dict[str, Any]]:
+def search_fts(query: str, k: int = 24, doc_ids: set[str] | None = None) -> list[dict[str, Any]]:
     tbl = _table_or_none()
-    if tbl is None:
+    if tbl is None or doc_ids == set():
         return []
     try:
-        rows = tbl.search(query, query_type="fts").limit(k).to_list()
+        q = tbl.search(query, query_type="fts")
+        if doc_ids is not None:
+            q = q.where(_doc_filter(doc_ids), prefilter=True)
+        rows = q.limit(k).to_list()
     except Exception:
         logger.exception("FTS vyhľadávanie zlyhalo (index ešte nemusí existovať)")
         return []
@@ -145,6 +169,24 @@ def document_chunks(doc_id: str) -> list[dict[str, Any]]:
         return (row["page_from"], num)
 
     return sorted((_row_out(r, "_distance") for r in rows), key=order)
+
+
+def chunks_on_pages(pages: list[tuple[str, int]], per_page: int = 2) -> list[dict[str, Any]]:
+    """Textové chunky, ktoré pokrývajú dané strany — v poradí strán (vizuálny retrieval)."""
+    tbl = _table_or_none()
+    if tbl is None or not pages:
+        return []
+    out: list[dict[str, Any]] = []
+    for doc_id, page in pages:
+        safe = doc_id.replace("'", "''")
+        rows = (
+            tbl.search()
+            .where(f"doc_id = '{safe}' AND page_from <= {int(page)} AND page_to >= {int(page)}")
+            .limit(per_page)
+            .to_list()
+        )
+        out += [_row_out(r, "_distance") for r in rows]
+    return out
 
 
 def count_chunks(doc_id: str | None = None) -> int:

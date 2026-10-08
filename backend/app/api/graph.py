@@ -9,6 +9,7 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 from app import db
+from app.auth import allowed_doc_ids, can_access_document
 
 router = APIRouter()
 
@@ -67,6 +68,17 @@ def _graph_payload(
     types: list[str] | None, doc_id: str | None, limit: int
 ) -> GraphOut:
     g = _build_nx()
+    allowed_docs = allowed_doc_ids()
+    if allowed_docs is not None:
+        # uzly cudzích dokumentov preč; zdieľané pojmy ostanú, len ak ich niečo povolené drží
+        hidden = {n for n, d in g.nodes(data=True)
+                  if d.get("doc_id") is not None and d["doc_id"] not in allowed_docs}
+        g.remove_nodes_from(hidden)
+        # zdieľané uzly ostanú, len ak na ne ukazuje povolený dokumentový uzol
+        anchored = {nbr for n, d in g.nodes(data=True) if d.get("doc_id") is not None
+                    for nbr in list(g.successors(n)) + list(g.predecessors(n))}
+        g.remove_nodes_from([n for n in list(g.nodes)
+                             if g.nodes[n].get("doc_id") is None and n not in anchored])
 
     if doc_id:
         doc_nodes = {n for n, d in g.nodes(data=True) if d.get("doc_id") == doc_id}
@@ -118,15 +130,24 @@ async def get_graph(
 
 def _node_detail(node_id: str) -> NodeDetail | None:
     node = db.get_graph_node(node_id)
-    if node is None:
+    if node is None or (node["doc_id"] and not can_access_document(node["doc_id"])):
         return None
+    allowed_docs = allowed_doc_ids()
+    if allowed_docs is not None and node["doc_id"] is None:
+        # zdieľaný pojem: existuje pre používateľa, len ak ho dokladá povolený úsek
+        linked = {
+            (db.get_graph_node(e["src"]) or {}).get("doc_id")
+            for e in db.node_edges(node_id) if e["src"].startswith(("chunk:", "doc:", "table:"))
+        }
+        if not linked & allowed_docs:
+            return None
 
     edges = db.node_edges(node_id)
     neighbor_ids = {e["dst"] if e["src"] == node_id else e["src"] for e in edges}
     neighbors = []
     for nid in sorted(neighbor_ids):
         n = db.get_graph_node(nid)
-        if n:
+        if n and (allowed_docs is None or n["doc_id"] is None or n["doc_id"] in allowed_docs):
             neighbors.append(
                 GraphNode(id=n["id"], type=n["type"], label=n["label"],
                           doc_id=n["doc_id"], degree=0)
@@ -140,6 +161,8 @@ def _node_detail(node_id: str) -> NodeDetail | None:
         has_props = chunk_node is not None and chunk_node["props_json"]
         props = json.loads(chunk_node["props_json"]) if has_props else {}  # type: ignore[index]
         chunk_doc_id = chunk_node["doc_id"] if chunk_node else None
+        if allowed_docs is not None and chunk_doc_id not in allowed_docs:
+            continue
         doc = db.get_document(chunk_doc_id) if chunk_doc_id else None
         evidence.append(
             EvidenceOut(
@@ -167,3 +190,34 @@ async def get_node(node_id: str) -> NodeDetail:
     if detail is None:
         raise HTTPException(status_code=404, detail="uzol neexistuje")
     return detail
+
+
+class CommunityOut(BaseModel):
+    key: str
+    title: str | None
+    summary: str | None
+    concepts: list[str]
+    size: int
+    documents: list[dict[str, Any]]
+
+
+def _communities(summaries: bool) -> list[CommunityOut]:
+    from app.graph.communities import detect_communities, summarize_community
+
+    names = {d["id"]: d["filename"] for d in db.list_documents()}
+    out = []
+    for c in detect_communities():  # už obmedzené na povolené dokumenty
+        if summaries:
+            summarize_community(c)
+        out.append(CommunityOut(
+            key=c.key, title=c.title, summary=c.summary, concepts=c.concepts, size=c.size,
+            documents=[{"doc_id": d, "filename": names.get(d, d), "chunks": n}
+                       for d, n in c.documents.items()],
+        ))
+    return out
+
+
+@router.get("/graph/communities")
+async def get_communities(summaries: bool = False) -> list[CommunityOut]:
+    """Témy knižnice (Louvain nad grafom pojmov); summaries=true dopočíta chýbajúce súhrny."""
+    return await run_in_threadpool(_communities, summaries)

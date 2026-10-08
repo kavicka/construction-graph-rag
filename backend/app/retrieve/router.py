@@ -3,6 +3,9 @@
 lookup  → klasický RAG (retrieve → generate)
 filter  → SQL nad records: číselné podmienky počíta kód, nie LLM
 compose → agent slučka (výber kombinácie položiek do rozpočtu)
+generate → branded PDF dokument z nájdených zdrojov (app.docgen)
+research → deep research: podotázky → retrieval → zistenia → štruktúrovaná správa
+global   → otázka na celú knižnicu: komunity pojmov v grafe + ich súhrny (LazyGraphRAG)
 
 Heuristiky first (deterministické, zadarmo), LLM fallback len keď je v otázke
 číslo, ale heuristika nevie určiť podmienku.
@@ -19,11 +22,15 @@ from rapidfuzz import fuzz
 
 from app import db
 from app.config import get_settings
+from app.docgen.intent import detect_generate_intent
+from app.docgen.schema import DocType, Lang
+from app.graph.communities import is_global_query
 from app.llm.ollama_client import OllamaError, generate_sync
+from app.retrieve.research import is_research_request
 
 logger = logging.getLogger(__name__)
 
-Mode = Literal["lookup", "filter", "compose"]
+Mode = Literal["lookup", "filter", "compose", "generate", "research", "global"]
 
 
 @dataclass
@@ -39,6 +46,9 @@ class QueryPlan:
     constraints: list[Constraint] = field(default_factory=list)
     categories: list[str] = field(default_factory=list)
     maximize: str | None = None  # atribút na maximalizáciu (napr. najviac bielkovín)
+    doc_ids: list[str] = field(default_factory=list)  # filter obmedzený na dokumenty z otázky
+    doc_type: DocType | None = None  # len pre mode="generate"
+    lang: Lang = "sk"
 
 
 def _norm(s: str) -> str:
@@ -46,9 +56,16 @@ def _norm(s: str) -> str:
     return "".join(c for c in nfkd if not unicodedata.combining(c))
 
 
-LE_RE = r"(?:do|pod|max|maximalne|najviac|nejvyse|under|below|less than|menej ako|mene nez)"
-GE_RE = r"(?:nad|aspon|alespon|min|minimalne|over|above|at least|viac ako|vice nez)"
-NUM = r"(\d+(?:[.,]\d+)?)"
+LE_RE = (
+    r"(?:menej ako|mene nez|nizs\w* ako|mensi\w* ako|lacnejs\w* ako|less than|lower than|"
+    r"cheaper than|maximalne|najviac|nejvyse|under|below|max|do|pod)"
+)
+GE_RE = (
+    r"(?:viac ako|vice nez|vyss\w* ako|vacs\w* ako|drahs\w* ako|more than|higher than|"
+    r"greater than|at least|minimalne|alespon|aspon|over|above|min|nad)"
+)
+# „400 000" (oddeľovač tisícov) aj „36,4"
+NUM = r"(\d{1,3}(?:[ \u00a0]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?)"
 
 ATTR_HINTS: dict[str, tuple[str, ...]] = {
     "kcal": ("kcal", "kalor", "calor", "energ"),
@@ -66,25 +83,76 @@ MAXIMIZE_HINTS: dict[str, tuple[str, ...]] = {
 }
 
 
-def _attr_near(text: str, pos: int, window: int = 40) -> str | None:
-    ctx = text[pos : pos + window]
-    for attr, hints in ATTR_HINTS.items():
-        if any(h in ctx for h in hints):
-            return attr
-    return None
+def _value(token: str) -> float:
+    return float(re.sub(r"[ \u00a0]", "", token).replace(",", "."))
+
+
+def _attr_vocab() -> dict[str, tuple[tuple[str, ...], tuple[str, ...]]]:
+    """atribút → (štítkové kmene, jednotky). Pevné makrá + register z tabuliek knižnice."""
+    vocab: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
+        k: (hints, ()) for k, hints in ATTR_HINTS.items()
+    }
+    for a in db.list_record_attrs():
+        if a["key"] in vocab:
+            continue
+        stems = tuple(
+            tok[: max(4, len(tok) - 2)] for tok in _norm(a["label"]).split() if len(tok) >= 4
+        )
+        units = (_norm(a["unit"]),) if a["unit"] else ()
+        vocab[a["key"]] = (stems, units)
+    return vocab
+
+
+def _attr_near(
+    text: str, start: int, end: int, vocab: dict[str, tuple[tuple[str, ...], tuple[str, ...]]]
+) -> str | None:
+    """Atribút podmienky: jednotka hneď za číslom (3), štítok za číslom (2), pred ním (1).
+    „do 820 kalórií a nad 50 g bielkovín": pri 50 vyhrajú bielkoviny za číslom nad
+    kalóriami pred ním."""
+    after = text[end : end + 30]
+    before = text[max(0, start - 45) : start]
+    best: tuple[int, str] | None = None
+    for attr, (stems, units) in vocab.items():
+        score = 0
+        if any(re.match(rf"\s*{re.escape(u)}(?![a-z])", after) for u in units):
+            score += 3
+        # kmeň len na začiatku slova — „hodno“ (Hodnotenie) nesmie trafiť „vyhodnotenia“
+        if any(re.search(rf"\b{re.escape(h)}", after) for h in stems):
+            score += 2
+        elif any(re.search(rf"\b{re.escape(h)}", before) for h in stems):
+            score += 1
+        if score and (best is None or score > best[0]):
+            best = (score, attr)
+    return best[1] if best else None
 
 
 def _heuristic_constraints(qn: str) -> list[Constraint]:
+    vocab = _attr_vocab()
     constraints: list[Constraint] = []
-    for m in re.finditer(rf"{LE_RE}\s+{NUM}", qn):
-        attr = _attr_near(qn, m.end()) or ("kcal" if "kcal" in qn else None)
-        if attr:
-            constraints.append(Constraint(attr, "<=", float(m.group(1).replace(",", "."))))
-    for m in re.finditer(rf"{GE_RE}\s+{NUM}", qn):
-        attr = _attr_near(qn, m.end())
-        if attr:
-            constraints.append(Constraint(attr, ">=", float(m.group(1).replace(",", "."))))
+    for pattern, op in ((LE_RE, "<="), (GE_RE, ">=")):
+        for m in re.finditer(rf"\b{pattern}\s+{NUM}", qn):
+            attr = _attr_near(qn, m.start(), m.end(), vocab)
+            if attr is None and op == "<=" and "kcal" in qn:
+                attr = "kcal"
+            if attr:
+                constraints.append(Constraint(attr, op, _value(m.group(1))))
     return constraints
+
+
+def _match_documents(qn: str) -> list[str]:
+    """Dokumenty, ktorých názov súboru otázka spomína („v rozpočte Agátová") — filter sa
+    obmedzí na ne. Zhoda na 5-znakovom kmeni kvôli skloňovaniu (Agátovej ↔ agatova)."""
+    q_stems = {t[:5] for t in re.findall(r"[a-z0-9]{4,}", qn)}
+    scored: list[tuple[int, str]] = []
+    for d in db.list_documents():
+        tokens = re.findall(r"[a-z0-9]{4,}", _norm(d["filename"].rsplit(".", 1)[0]))
+        score = sum(1 for t in set(tokens) if t[:5] in q_stems)
+        if score:
+            scored.append((score, d["id"]))
+    if not scored:
+        return []
+    top = max(sc for sc, _ in scored)
+    return [doc_id for sc, doc_id in scored if sc == top]
 
 
 def _known_categories() -> list[str]:
@@ -103,7 +171,7 @@ def _match_categories(qn: str) -> list[str]:
 
 
 class _LlmPlan(BaseModel):
-    mode: Literal["lookup", "filter", "compose"]
+    mode: Literal["lookup", "filter", "compose"]  # generate/research sa určujú deterministicky
     constraints: list[dict[str, str | float]] = Field(default_factory=list, max_length=4)
 
 
@@ -130,7 +198,7 @@ def _llm_fallback(question: str) -> QueryPlan | None:
     for c in parsed.constraints:
         try:
             attr, op, value = str(c["attr"]), str(c["op"]), float(c["value"])
-            if attr in ATTR_HINTS and op in ("<=", ">=", "<", ">"):
+            if attr in ATTR_HINTS and op in ("<=", ">=", "<", ">"):  # LLM fallback = makrá
                 constraints.append(Constraint(attr, op, value))
         except (KeyError, TypeError, ValueError):
             continue
@@ -140,6 +208,14 @@ def _llm_fallback(question: str) -> QueryPlan | None:
 
 
 def route_query(question: str) -> QueryPlan:
+    # príkaz na dokument má prednosť — „sprav ponuku do 500 kcal“ je stále dokument
+    if intent := detect_generate_intent(question):
+        return QueryPlan(mode="generate", doc_type=intent.doc_type, lang=intent.lang)
+    if is_research_request(question):
+        return QueryPlan(mode="research")
+    if is_global_query(question):
+        return QueryPlan(mode="global")
+
     qn = _norm(question)
     constraints = _heuristic_constraints(qn)
     categories = _match_categories(qn)
@@ -166,4 +242,5 @@ def route_query(question: str) -> QueryPlan:
         constraints=constraints,
         categories=categories,
         maximize=maximize,
+        doc_ids=[] if categories else _match_documents(qn),
     )

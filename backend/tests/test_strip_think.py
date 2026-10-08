@@ -2,7 +2,7 @@ from collections.abc import AsyncIterator
 
 import pytest
 
-from app.api.chat import strip_think
+from app.retrieve.orchestrator import strip_think
 
 
 async def _gen(parts: list[str]) -> AsyncIterator[str]:

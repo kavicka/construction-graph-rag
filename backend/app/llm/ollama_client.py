@@ -1,20 +1,72 @@
-"""Tenký klient na Ollama API.
+"""LLM klient — Ollama (default, lokálne) alebo ľubovoľné OpenAI-kompatibilné API.
 
-Sync varianta pre indexovacie thready (tabuľkové sumáre, extrakcia entít),
-async streaming chat pre odpovede.
+RAG_LLM_PROVIDER=openai + RAG_OPENAI_BASE_URL / RAG_OPENAI_API_KEY prepne generovanie
+na hostovaný model (OpenAI, Groq, Together, vLLM, LM Studio…); embeddingy a reranker
+ostávajú lokálne. Názvy modelov sa berú z RAG_ANSWER_MODEL / RAG_EXTRACT_MODEL.
+
+Sync `generate_sync` pre indexovacie thready, async `chat_stream` pre odpovede,
+`chat_with_tools` pre agenta. Každé volanie je OTel span s gen_ai.* atribútmi.
 """
 
 import json
+import uuid
 from collections.abc import AsyncIterator
+from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
+from opentelemetry.context import Context
 
 from app.config import get_settings
+from app.obs.tracing import (
+    GEN_AI_OPERATION,
+    GEN_AI_PROVIDER,
+    GEN_AI_REQUEST_MODEL,
+    GEN_AI_REQUEST_TEMPERATURE,
+    get_tracer,
+    record_llm_usage,
+    set_attrs,
+    span,
+)
 
 
 class OllamaError(RuntimeError):
-    pass
+    """Chyba LLM volania (názov historický — platí pre všetkých providerov)."""
+
+
+LLMError = OllamaError
+
+
+def _provider() -> str:
+    return get_settings().llm_provider
+
+
+def _openai_headers() -> dict[str, str]:
+    key = get_settings().openai_api_key
+    return {"Authorization": f"Bearer {key}"} if key else {}
+
+
+def _openai_url(path: str) -> str:
+    return get_settings().openai_base_url.rstrip("/") + path
+
+
+def _openai_usage(data: dict[str, Any]) -> dict[str, Any]:
+    usage = data.get("usage") or {}
+    choice = (data.get("choices") or [{}])[0]
+    return {
+        "prompt_eval_count": usage.get("prompt_tokens"),
+        "eval_count": usage.get("completion_tokens"),
+        "done_reason": choice.get("finish_reason"),
+    }
+
+
+def _llm_span_attrs(operation: str, model: str, temperature: float) -> dict[str, Any]:
+    return {
+        GEN_AI_OPERATION: operation,
+        GEN_AI_PROVIDER: _provider(),
+        GEN_AI_REQUEST_MODEL: model,
+        GEN_AI_REQUEST_TEMPERATURE: temperature,
+    }
 
 
 def generate_sync(
@@ -29,7 +81,24 @@ def generate_sync(
     think: bool = False,
 ) -> str:
     """Jeden non-stream generate. Qwen3: think=False vypína reasoning režim (rýchlosť)."""
-    settings = get_settings()
+    with span(f"generate {model}") as s:
+        set_attrs(s, **_llm_span_attrs("text_completion", model, temperature),
+                  rag__json_schema=json_schema is not None, rag__prompt_chars=len(prompt))
+        if _provider() == "openai":
+            text, usage = _openai_generate(model, prompt, system, json_schema, temperature,
+                                           timeout)
+        else:
+            text, usage = _ollama_generate(model, prompt, system, json_schema, temperature,
+                                           num_ctx, timeout, think)
+        record_llm_usage(s, usage)
+        set_attrs(s, rag__output_chars=len(text))
+        return text
+
+
+def _ollama_generate(
+    model: str, prompt: str, system: str | None, json_schema: dict[str, Any] | None,
+    temperature: float, num_ctx: int, timeout: float, think: bool,
+) -> tuple[str, dict[str, Any]]:
     payload: dict[str, Any] = {
         "model": model,
         "prompt": prompt,
@@ -42,20 +111,42 @@ def generate_sync(
         payload["system"] = system
     if json_schema is not None:
         payload["format"] = json_schema
-
     try:
         resp = httpx.post(
-            f"{settings.ollama_base_url}/api/generate", json=payload, timeout=timeout
+            f"{get_settings().ollama_base_url}/api/generate", json=payload, timeout=timeout
         )
         resp.raise_for_status()
         data = resp.json()
     except httpx.HTTPError as exc:
         raise OllamaError(f"ollama generate zlyhal ({model}): {exc}") from exc
-
     response = data.get("response")
     if not isinstance(response, str):
         raise OllamaError(f"ollama vrátil neočakávanú odpoveď: {data!r:.200}")
-    return response.strip()
+    return response.strip(), data
+
+
+def _openai_generate(
+    model: str, prompt: str, system: str | None, json_schema: dict[str, Any] | None,
+    temperature: float, timeout: float,
+) -> tuple[str, dict[str, Any]]:
+    messages = ([{"role": "system", "content": system}] if system else []) + [
+        {"role": "user", "content": prompt}
+    ]
+    payload: dict[str, Any] = {"model": model, "messages": messages, "temperature": temperature}
+    if json_schema is not None:
+        payload["response_format"] = {
+            "type": "json_schema",
+            "json_schema": {"name": "output", "schema": json_schema, "strict": False},
+        }
+    try:
+        resp = httpx.post(_openai_url("/chat/completions"), json=payload,
+                          headers=_openai_headers(), timeout=timeout)
+        resp.raise_for_status()
+        data = resp.json()
+        content = data["choices"][0]["message"]["content"] or ""
+    except (httpx.HTTPError, KeyError, IndexError, ValueError) as exc:
+        raise OllamaError(f"LLM API generate zlyhal ({model}): {exc}") from exc
+    return str(content).strip(), _openai_usage(data)
 
 
 async def chat_stream(
@@ -65,9 +156,37 @@ async def chat_stream(
     temperature: float = 0.3,
     num_ctx: int = 8192,
     think: bool = False,
+    parent: Context | None = None,
 ) -> AsyncIterator[str]:
-    """Streamuje tokeny odpovede. Qwen3: think=False — reasoning vypnutý pre latenciu."""
-    settings = get_settings()
+    """Streamuje tokeny odpovede. Span sa uzavrie po poslednom tokene (alebo chybe);
+    `parent` explicitne, lebo volajúci async generátor nemá span ako current."""
+    s = get_tracer().start_span(f"chat {model}", context=parent)
+    set_attrs(s, **_llm_span_attrs("chat", model, temperature),
+              rag__messages=len(messages))
+    chars = 0
+    try:
+        stream = (
+            _openai_chat_stream(model, messages, temperature)
+            if _provider() == "openai"
+            else _ollama_chat_stream(model, messages, temperature, num_ctx, think)
+        )
+        async for chunk in stream:
+            if isinstance(chunk, dict):
+                record_llm_usage(s, chunk)
+                continue
+            chars += len(chunk)
+            yield chunk
+    except Exception as exc:
+        s.record_exception(exc)
+        raise
+    finally:
+        set_attrs(s, rag__output_chars=chars)
+        s.end()
+
+
+async def _ollama_chat_stream(
+    model: str, messages: list[dict[str, str]], temperature: float, num_ctx: int, think: bool,
+) -> AsyncIterator[str | dict[str, Any]]:
     payload: dict[str, Any] = {
         "model": model,
         "messages": messages,
@@ -81,7 +200,7 @@ async def chat_stream(
         async with (
             httpx.AsyncClient(timeout=timeout) as client,
             client.stream(
-                "POST", f"{settings.ollama_base_url}/api/chat", json=payload
+                "POST", f"{get_settings().ollama_base_url}/api/chat", json=payload
             ) as resp,
         ):
             resp.raise_for_status()
@@ -95,6 +214,119 @@ async def chat_stream(
                 if chunk:
                     yield chunk
                 if data.get("done"):
+                    yield data  # usage (prompt_eval_count, eval_count)
                     return
     except httpx.HTTPError as exc:
         raise OllamaError(f"ollama chat zlyhal ({model}): {exc}") from exc
+
+
+async def _openai_chat_stream(
+    model: str, messages: list[dict[str, str]], temperature: float,
+) -> AsyncIterator[str | dict[str, Any]]:
+    payload = {
+        "model": model, "messages": messages, "temperature": temperature, "stream": True,
+        "stream_options": {"include_usage": True},
+    }
+    timeout = httpx.Timeout(300.0, connect=10.0)
+    try:
+        async with (
+            httpx.AsyncClient(timeout=timeout) as client,
+            client.stream("POST", _openai_url("/chat/completions"), json=payload,
+                          headers=_openai_headers()) as resp,
+        ):
+            resp.raise_for_status()
+            async for line in resp.aiter_lines():
+                if not line.startswith("data: "):
+                    continue
+                body = line[6:].strip()
+                if body == "[DONE]":
+                    return
+                data = json.loads(body)
+                if data.get("usage"):
+                    yield _openai_usage(data)
+                for choice in data.get("choices") or []:
+                    if text := (choice.get("delta") or {}).get("content"):
+                        yield text
+    except httpx.HTTPError as exc:
+        raise OllamaError(f"LLM API chat zlyhal ({model}): {exc}") from exc
+
+
+@dataclass
+class ToolCall:
+    id: str
+    name: str
+    arguments: dict[str, Any]
+
+
+@dataclass
+class ToolTurn:
+    """Jedno kolo agenta: text odpovede alebo volania nástrojov + správa na históriu."""
+
+    content: str
+    calls: list[ToolCall] = field(default_factory=list)
+    message: dict[str, Any] = field(default_factory=dict)  # natívny formát providera
+
+
+def tool_result_message(call: ToolCall, content: str) -> dict[str, Any]:
+    if _provider() == "openai":
+        return {"role": "tool", "tool_call_id": call.id, "content": content}
+    return {"role": "tool", "tool_name": call.name, "content": content}
+
+
+def _parse_args(raw: Any) -> dict[str, Any]:
+    if isinstance(raw, dict):
+        return raw
+    try:
+        parsed = json.loads(raw or "{}")
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+async def chat_with_tools(
+    model: str, messages: list[dict[str, Any]], tools: list[dict[str, Any]],
+    *, temperature: float = 0.1,
+) -> ToolTurn:
+    with span(f"chat {model}") as s:
+        set_attrs(s, **_llm_span_attrs("chat", model, temperature), rag__tools=len(tools))
+        timeout = httpx.Timeout(300.0, connect=5.0)
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                if _provider() == "openai":
+                    resp = await client.post(
+                        _openai_url("/chat/completions"),
+                        json={"model": model, "messages": messages, "tools": tools,
+                              "temperature": temperature},
+                        headers=_openai_headers(),
+                    )
+                else:
+                    resp = await client.post(
+                        f"{get_settings().ollama_base_url}/api/chat",
+                        json={"model": model, "messages": messages, "tools": tools,
+                              "stream": False, "think": False, "keep_alive": "10m",
+                              "options": {"temperature": temperature, "num_ctx": 8192}},
+                    )
+                resp.raise_for_status()
+                data: dict[str, Any] = resp.json()
+        except httpx.HTTPError as exc:
+            raise OllamaError(f"agent chat zlyhal: {exc}") from exc
+        if err := data.get("error"):
+            raise OllamaError(f"agent chat: {err}")
+
+        if _provider() == "openai":
+            record_llm_usage(s, _openai_usage(data))
+            message = data["choices"][0]["message"]
+        else:
+            record_llm_usage(s, data)
+            message = data.get("message", {})
+        calls = [
+            ToolCall(
+                id=str(c.get("id") or uuid.uuid4().hex),
+                name=str(c.get("function", {}).get("name", "")),
+                arguments=_parse_args(c.get("function", {}).get("arguments")),
+            )
+            for c in message.get("tool_calls") or []
+        ]
+        set_attrs(s, rag__tool_calls=[c.name for c in calls])
+        return ToolTurn(content=(message.get("content") or "").strip(), calls=calls,
+                        message=message)

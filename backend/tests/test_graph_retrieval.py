@@ -65,9 +65,19 @@ def test_pipeline_flag_controls_expansion(
     assert "d2" not in {s.doc_id for s in without}, "bez grafu sa d2 nemá ako nájsť"
 
     monkeypatch.setenv("RAG_GRAPH_EXPANSION", "true")
+    monkeypatch.setenv("RAG_GRAPH_RELATIONAL_ONLY", "false")
     get_settings.cache_clear()
     with_graph = retrieve_sources("prietok chladiaceho média", k=4)
     assert "d2" in {s.doc_id for s in with_graph}, "graf expanzia mala pridať cross-doc zdroj"
+
+
+def test_graph_gated_to_relational_queries(two_docs: None) -> None:
+    """Default: graf len pri otázkach na súvislosti — na faktografických otázkach
+    eval ukázal, že grafové kandidáty zhoršujú poradie (MRR 72 → 50 %)."""
+    factual = retrieve_sources("prietok chladiaceho média", k=4)
+    assert "d2" not in {s.doc_id for s in factual}
+    relational = retrieve_sources("Aký je súvis medzi dokumentmi o prietoku?", k=6)
+    assert "d2" in {s.doc_id for s in relational}
 
 
 def test_relational_query_detection() -> None:

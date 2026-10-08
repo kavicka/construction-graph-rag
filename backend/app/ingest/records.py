@@ -1,7 +1,13 @@
 """Records store — štruktúrované záznamy z riadkov tabuliek.
 
-Tretí index popri vektoroch a grafe. Filter/agregačné otázky („obed do 870 kcal")
-sa riešia SQL-kom nad týmito záznamami — LLM čísla nikdy neporovnáva.
+Tretí index popri vektoroch a grafe. Filter/agregačné otázky („obed do 870 kcal",
+„vzorky s pevnosťou pod 38 MPa", „položky rozpočtu nad 400 000 EUR") sa riešia kódom
+nad týmito záznamami — LLM čísla nikdy neporovnáva.
+
+Dva zdroje atribútov:
+- číselné stĺpce podľa hlavičky („Pevnosť (MPa)" → pevnost [MPa]) — ľubovoľná doména,
+- bunky s jednotkami („829 kcal 74b, 84s, 17t") — jedálničky a podobné voľné zápisy.
+Register atribútov (štítok + jednotka) používa router na rozpoznanie podmienok.
 
 Extrakcia je deterministická (regex + heuristiky nad hlavičkami), žiadny LLM:
 opakovateľná, testovateľná, nula halucinácií.
@@ -26,7 +32,17 @@ MACRO_SHORT_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*([bst])\b", re.IGNORECASE)
 UNIT_RE = re.compile(
     r"(\d+(?:[.,]\d+)?)\s*(g|kg|mg|ml|l|%|ks)\b", re.IGNORECASE
 )
-NAMEISH_HEADERS = ("nazev", "nazov", "name", "jidlo", "jedlo", "polozka", "item", "produkt")
+NAMEISH_HEADERS = (
+    "nazev", "nazov", "name", "jidlo", "jedlo", "polozka", "item", "produkt", "subdodavatel",
+    "vzorka", "sample", "objekt", "sensor", "claim",
+)
+# celá bunka je číslo: „1 742 300", „41.2", „0,5", „12 %"
+NUMERIC_CELL = re.compile(r"^\s*(-?\d{1,3}(?:[ \u00a0]\d{3})+|-?\d+)([.,]\d+)?\s*%?\s*$")
+HEADER_UNIT = re.compile(r"\(([^)]{1,15})\)\s*$")
+CODE_HEADERS = (
+    "ico", "dic", "ic_dph", "cislo", "por_c", "poradie", "id", "rok", "year", "no", "nr",
+    "number", "kod", "code",
+)
 NUMERIC_HINT_HEADERS = {"kcal": "kcal", "macra": None, "makra": None, "energie": "kcal"}
 
 
@@ -54,6 +70,26 @@ def parse_cell_attrs(text: str) -> dict[str, float]:
         key = f"val_{unit.lower()}"
         attrs.setdefault(key, _num(value))
     return attrs
+
+
+def parse_numeric_cell(text: str) -> float | None:
+    m = NUMERIC_CELL.match(text)
+    if not m:
+        return None
+    integer = re.sub(r"[ \u00a0]", "", m.group(1))
+    return float(integer + (m.group(2) or "").replace(",", "."))
+
+
+def header_attr(header: str) -> tuple[str, str, str | None] | None:
+    """„Pevnosť (MPa)" → ("pevnost", "Pevnosť", "MPa"); identifikátory (IČO, č.) → None."""
+    unit_m = HEADER_UNIT.search(header)
+    unit = unit_m.group(1).strip() if unit_m else None
+    label = HEADER_UNIT.sub("", header).strip(" :")
+    key = re.sub(r"[^a-z0-9]+", "_", _norm(label)).strip("_")
+    # jednopísmenové („Č.") a identifikátory nie sú merateľné atribúty
+    if len(key) < 2 or key in CODE_HEADERS or len(key) > 40:
+        return None
+    return key, label, unit
 
 
 def _read_table_rows(meta: dict[str, Any]) -> tuple[list[str], list[list[str]]]:
@@ -89,18 +125,42 @@ def _name_column(headers: list[str], rows: list[list[str]]) -> int | None:
     return None
 
 
+def _numeric_columns(
+    headers: list[str], rows: list[list[str]], name_col: int | None
+) -> dict[int, tuple[str, str, str | None]]:
+    """Stĺpce, kde je väčšina neprázdnych buniek čisté číslo a hlavička nie je kód."""
+    out: dict[int, tuple[str, str, str | None]] = {}
+    for i, header in enumerate(headers):
+        if i == name_col:
+            continue
+        cells = [r[i] for r in rows if i < len(r) and r[i].strip()]
+        numeric = [c for c in cells if parse_numeric_cell(c) is not None]
+        attr = header_attr(header)
+        if attr and cells and len(numeric) >= max(1, len(cells) * 0.6):
+            out[i] = attr
+    return out
+
+
 def extract_records(doc_id: str) -> int:
     """Rozloží tabuľky dokumentu na záznamy. Idempotentné (replace)."""
     out: list[dict[str, Any]] = []
+    registry: dict[str, tuple[str, str | None]] = {}
     for meta in db.list_tables(doc_id):
         headers, rows = _read_table_rows(meta)
         if not rows:
             continue
         name_col = _name_column(headers, rows)
         category = (meta["caption"] or "").strip() or None
+        numeric_cols = _numeric_columns(headers, rows, name_col)
+        for key, label, unit in numeric_cols.values():
+            registry.setdefault(key, (label, unit))
 
         for row in rows:
             attrs: dict[str, float] = {}
+            for i, (key, _label, _unit) in numeric_cols.items():
+                value = parse_numeric_cell(row[i]) if i < len(row) else None
+                if value is not None:
+                    attrs[key] = value
             for cell in row:
                 for k, v in parse_cell_attrs(cell).items():
                     attrs.setdefault(k, v)
@@ -129,11 +189,14 @@ def extract_records(doc_id: str) -> int:
     seen: set[tuple[str, str | None, str]] = set()
     unique: list[dict[str, Any]] = []
     for r in out:
-        key = (_norm(r["name"]), r["category"], r["attrs_json"])
-        if key in seen:
+        dedup_key = (_norm(r["name"]), r["category"], r["attrs_json"])
+        if dedup_key in seen:
             continue
-        seen.add(key)
+        seen.add(dedup_key)
         unique.append(r)
     stored = db.replace_document_records(doc_id, unique)
-    logger.info("records doc %s: %s záznamov", doc_id, stored)
+    db.replace_record_attrs(
+        doc_id, [(key, label, unit) for key, (label, unit) in registry.items()]
+    )
+    logger.info("records doc %s: %s záznamov, atribúty %s", doc_id, stored, sorted(registry))
     return stored

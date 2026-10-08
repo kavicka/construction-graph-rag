@@ -9,10 +9,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-import httpx
-
 from app.config import get_settings
-from app.llm.ollama_client import OllamaError
+from app.llm.ollama_client import chat_with_tools, tool_result_message
 from app.retrieve.pipeline import Source, retrieve_sources
 from app.retrieve.records_query import build_filter_context, hits_to_sources, run_filter
 from app.retrieve.router import Constraint, QueryPlan
@@ -28,8 +26,8 @@ TOOLS: list[dict[str, Any]] = [
         "function": {
             "name": "query_records",
             "description": (
-                "Presný filter položiek podľa číselných atribútov (kcal, b=bielkoviny, "
-                "s=sacharidy, t=tuky). Vracia VŠETKY vyhovujúce položky — výsledok je exaktný."
+                "Presný filter položiek tabuliek podľa číselných atribútov (zoznam atribútov je "
+                "v systémovej správe). Vracia VŠETKY vyhovujúce položky — výsledok je exaktný."
             ),
             "parameters": {
                 "type": "object",
@@ -39,7 +37,7 @@ TOOLS: list[dict[str, Any]] = [
                         "items": {
                             "type": "object",
                             "properties": {
-                                "attr": {"type": "string", "enum": ["kcal", "b", "s", "t"]},
+                                "attr": {"type": "string"},
                                 "op": {"type": "string", "enum": ["<=", ">=", "<", ">"]},
                                 "value": {"type": "number"},
                             },
@@ -204,58 +202,38 @@ class ToolRuntime:
         return result
 
 
-async def _chat_with_tools(messages: list[dict[str, Any]]) -> dict[str, Any]:
-    settings = get_settings()
-    payload = {
-        "model": settings.answer_model,
-        "messages": messages,
-        "tools": TOOLS,
-        "stream": False,
-        "think": False,
-        "keep_alive": "10m",
-        "options": {"temperature": 0.1, "num_ctx": 8192},
-    }
-    try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=5.0)) as client:
-            resp = await client.post(f"{settings.ollama_base_url}/api/chat", json=payload)
-            resp.raise_for_status()
-            data: dict[str, Any] = resp.json()
-    except httpx.HTTPError as exc:
-        raise OllamaError(f"agent chat zlyhal: {exc}") from exc
-    if err := data.get("error"):
-        raise OllamaError(f"agent chat: {err}")
-    message: dict[str, Any] = data.get("message", {})
-    return message
-
-
 async def run_agent(question: str) -> AgentResult:
     runtime = ToolRuntime()
     trace: list[dict[str, str]] = []
+    from app import db
+
+    attrs = ["kcal (energia)", "b (bielkoviny)", "s (sacharidy)", "t (tuky)"] + [
+        f"{a['key']} ({a['label']}{', ' + a['unit'] if a['unit'] else ''})"
+        for a in db.list_record_attrs()
+    ]
     messages: list[dict[str, Any]] = [
-        {"role": "system", "content": AGENT_SYSTEM},
+        {"role": "system",
+         "content": AGENT_SYSTEM + "\nDostupné atribúty: " + "; ".join(attrs)},
         {"role": "user", "content": question},
     ]
 
+    model = get_settings().answer_model
     for _step in range(AGENT_MAX_STEPS):
-        message = await _chat_with_tools(messages)
-        tool_calls = message.get("tool_calls") or []
-        if not tool_calls:
-            answer = (message.get("content") or "").strip()
+        turn = await chat_with_tools(model, messages, TOOLS)
+        if not turn.calls:
             return AgentResult(
-                answer=answer or "Nepodarilo sa zostaviť odpoveď.",
+                answer=turn.content or "Nepodarilo sa zostaviť odpoveď.",
                 sources=_renumber(runtime.sources),
                 trace=trace,
                 evidence=runtime.evidence,
             )
-        messages.append(message)
-        for call in tool_calls:
-            fn = call.get("function", {})
-            name = str(fn.get("name", ""))
-            raw_args = fn.get("arguments") or {}
-            args = raw_args if isinstance(raw_args, dict) else json.loads(raw_args)
-            result = runtime.execute(name, args)
-            trace.append({"tool": name, "args": json.dumps(args, ensure_ascii=False)[:200]})
-            messages.append({"role": "tool", "tool_name": name, "content": result})
+        messages.append(turn.message)
+        for call in turn.calls:
+            result = runtime.execute(call.name, call.arguments)
+            trace.append(
+                {"tool": call.name, "args": json.dumps(call.arguments, ensure_ascii=False)[:200]}
+            )
+            messages.append(tool_result_message(call, result))
 
     return AgentResult(
         answer="Prekročený limit krokov agenta — skús otázku rozdeliť.",

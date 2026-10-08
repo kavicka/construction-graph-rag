@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.config import detect_ram_gb, get_settings
+from app.docgen.pdf import pdf_engine_available
 from app.ocr import detect_ocr
 
 router = APIRouter()
@@ -27,6 +28,7 @@ class HealthResponse(BaseModel):
     embedding_model: str
     ollama: OllamaStatus
     ocr: OcrStatus
+    pdf_engine: bool  # WeasyPrint + pango — potrebné na generovanie dokumentov
 
 
 async def check_ollama(base_url: str, wanted: list[str]) -> OllamaStatus:
@@ -54,4 +56,5 @@ async def health() -> HealthResponse:
         embedding_model=s.effective_embedding_model,
         ollama=ollama,
         ocr=OcrStatus(engine=ocr.engine, languages=ocr.languages, slovak=ocr.slovak),
+        pdf_engine=pdf_engine_available(),
     )

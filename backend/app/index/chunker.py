@@ -7,7 +7,7 @@ Tabuľky sa z textových chunkov vyhadzujú — idú vlastnou vetvou ako LLM sum
 
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Any
 
@@ -43,6 +43,31 @@ class Chunk:
     section_path: str
     type: str  # "text" | "table_summary"
     table_id: str | None
+    # [strana, x0, y0, x1, y1] — 0..1 relatívne k strane, počiatok vľavo hore (zvýraznenie v PDF)
+    boxes: list[list[float]] = field(default_factory=list)
+
+
+MAX_BOXES_PER_CHUNK = 16
+
+
+def item_boxes(document: Any, items: list[Any]) -> list[list[float]]:
+    """Bounding boxy Docling položiek prepočítané na relatívne súradnice strany."""
+    boxes: list[list[float]] = []
+    for it in items:
+        for prov in getattr(it, "prov", []) or []:
+            page = document.pages.get(prov.page_no)
+            if page is None or not page.size.width or not page.size.height:
+                continue
+            w, h = page.size.width, page.size.height
+            bb = prov.bbox.to_top_left_origin(page_height=h)
+            boxes.append([
+                float(prov.page_no),
+                round(max(0.0, bb.l / w), 4), round(max(0.0, bb.t / h), 4),
+                round(min(1.0, bb.r / w), 4), round(min(1.0, bb.b / h), 4),
+            ])
+            if len(boxes) >= MAX_BOXES_PER_CHUNK:
+                return boxes
+    return boxes
 
 
 @lru_cache
@@ -93,9 +118,60 @@ def chunk_text_items(doc_id: str, document: Any) -> list[Chunk]:
                 section_path=" / ".join(headings),
                 type="text",
                 table_id=None,
+                boxes=item_boxes(document, items),
             )
         )
     return chunks
+
+
+CONTEXT_DOC_CHARS = 6000  # začiatok dokumentu ako kontext — malý model, malé okno
+
+CONTEXT_PROMPT = """<document>
+{document}
+</document>
+Tu je úsek, ktorý chceme zasadiť do kontextu celého dokumentu:
+<chunk>
+{chunk}
+</chunk>
+Napíš 1–2 krátke vety, ktoré zasadia úsek do kontextu dokumentu (o aký dokument ide,
+ktorého projektu/subjektu sa týka, ktorej časti), aby sa úsek dal lepšie nájsť
+vyhľadávaním. Píš v jazyku dokumentu. Odpovedz LEN tým kontextom."""
+
+
+def _context_key(document_head: str, chunk_text: str, model: str) -> str:
+    import hashlib
+
+    return hashlib.sha256(f"{model}\0{document_head}\0{chunk_text}".encode()).hexdigest()
+
+
+def contextualize_chunks(doc_id: str, document: Any, chunks: list[Chunk]) -> int:
+    """Anthropic Contextual Retrieval: pred embedding aj BM25 sa ku chunku pridá
+    LLM kontext („Zmluva o dielo Agátová, článok o zmluvnej pokute“). Rieši chunky,
+    ktoré samy osebe nehovoria, ku ktorému projektu/dokumentu patria.
+    Výsledky sa cachujú podľa hash(dokument, chunk, model) — reindex je zadarmo."""
+    settings = get_settings()
+    doc_row = db.get_document(doc_id)
+    title = doc_row["filename"] if doc_row else doc_id
+    head = f"Súbor: {title}\n" + document.export_to_markdown()[:CONTEXT_DOC_CHARS]
+    added = 0
+    for chunk in chunks:
+        key = _context_key(head, chunk.raw_text, settings.answer_model)
+        context = db.get_chunk_context(key)
+        if context is None:
+            try:
+                context = generate_sync(
+                    settings.answer_model,
+                    CONTEXT_PROMPT.format(document=head, chunk=chunk.raw_text[:2000]),
+                    temperature=0.0, num_ctx=8192,
+                ).strip()
+            except OllamaError:
+                logger.warning("kontext chunku %s zlyhal — chunk ostáva bez neho", chunk.chunk_id)
+                continue
+            db.set_chunk_context(key, context)
+        if context:
+            chunk.text = f"{context}\n\n{chunk.text}"
+            added += 1
+    return added
 
 
 def _fallback_summary(caption: str | None, markdown: str, n_rows: int, n_cols: int) -> str:
@@ -146,6 +222,7 @@ def build_table_chunks(doc_id: str) -> list[Chunk]:
                 section_path=t["caption"] or "",
                 type="table_summary",
                 table_id=t["id"],
+                boxes=json.loads(t["boxes_json"]) if t.get("boxes_json") else [],
             )
         )
     return chunks
