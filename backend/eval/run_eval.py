@@ -63,7 +63,9 @@ def ask(question: str) -> tuple[str, list[dict[str, Any]]]:
             if line.startswith("data: "):
                 events.append(json.loads(line[6:]))
     answer = "".join(e["text"] for e in events if e["type"] == "delta")
-    sources = next((e["sources"] for e in events if e["type"] == "sources"), [])
+    sources: list[dict[str, Any]] = next(
+        (e["sources"] for e in events if e["type"] == "sources"), []
+    )
     errors = [e for e in events if e["type"] == "error"]
     if errors:
         raise RuntimeError(errors[0]["message"])
