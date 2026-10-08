@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="sk">
+<head>
+<meta charset="utf-8">
+<title>{{ title }}</title>
+<style>
+{{ theme.font_face_css() | safe }}
+
+@page {
+  size: A4;
+  margin: 28mm 16mm 24mm 16mm;
+  @top-center { content: element(pageHeader); width: 100%; vertical-align: bottom; padding-bottom: 4mm; }
+  @bottom-left { content: element(pageFooter); width: 75%; vertical-align: top; padding-top: 3mm; }
+  @bottom-right {
+    content: "Strana " counter(page) " z " counter(pages);
+    font-family: {{ theme.mono | safe }};
+    font-size: 7pt; color: #64748b; vertical-align: top; padding-top: 3mm;
+  }
+}
+
+html { font-family: {{ theme.font_sans | safe }}; }
+body { margin: 0; font-size: 9.5pt; line-height: 1.5; color: #1e293b; }
+
+.page-header {
+  position: running(pageHeader);
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1.5pt solid {{ company.accent_color }}; padding-bottom: 3mm;
+}
+.page-header .brand { display: flex; align-items: center; gap: 4mm; }
+.page-header img { max-height: 12mm; max-width: 45mm; }
+.page-header .company { font-weight: 700; font-size: 11pt; color: {{ company.primary_color }}; white-space: nowrap; }
+.page-header .tagline { font-size: 8pt; color: #64748b; text-align: right; max-width: 80mm; }
+.page-footer {
+  position: running(pageFooter);
+  font-size: 7.5pt; color: #64748b; line-height: 1.4;
+  border-top: 0.5pt solid #cbd5e1; padding-top: 2mm;
+}
+
+.doc-type {
+  text-transform: uppercase; letter-spacing: 0.12em; font-size: 8pt; font-weight: 700;
+  color: {{ company.accent_color }}; margin: 0 0 2mm;
+}
+h1 { font-size: 20pt; line-height: 1.2; color: {{ company.primary_color }}; margin: 0 0 2mm; }
+.meta { font-size: 8.5pt; color: #64748b; margin: 0 0 6mm; }
+.meta span + span::before { content: "·"; margin: 0 2mm; }
+h2 {
+  font-size: 12pt; color: {{ company.primary_color }}; margin: 7mm 0 2.5mm;
+  padding-left: 3mm; border-left: 3pt solid {{ company.accent_color }}; page-break-after: avoid;
+}
+h3 { font-size: 10.5pt; color: {{ company.primary_color }}; margin: 5mm 0 1.5mm; page-break-after: avoid; }
+p { margin: 0 0 2mm; }
+ul { margin: 0 0 3mm; padding-left: 5mm; }
+li { margin-bottom: 1mm; }
+table { width: 100%; border-collapse: collapse; margin: 2mm 0 4mm; font-size: 8.8pt; }
+thead { display: table-header-group; }
+tr { page-break-inside: avoid; }
+th { background: {{ company.primary_color }}; color: #fff; text-align: left; font-weight: 700; }
+th, td { padding: 1.5mm 2.2mm; border-bottom: 0.5pt solid #e2e8f0; vertical-align: top; }
+tr:nth-child(even) td { background: #f8fafc; }
+td.num, th.num { text-align: right; white-space: nowrap; }
+.muted { color: #64748b; }
+.small { font-size: 8pt; }
+
+.kpis { display: flex; gap: 3mm; margin: 0 0 5mm; }
+.kpi { flex: 1; padding: 3mm 4mm; background: #f8fafc; border: 0.5pt solid #e2e8f0; }
+.kpi .label { font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.08em; color: #64748b; }
+.kpi .value { font-size: 14pt; font-weight: 700; color: {{ company.primary_color }}; }
+
+.badge { display: inline-block; padding: 0.3mm 1.8mm; font-size: 7.5pt; font-weight: 700; border-radius: 1mm; }
+.badge.done { background: #dcfce7; color: #166534; }
+.badge.in_progress { background: #fef3c7; color: #92400e; }
+.badge.not_started { background: #f1f5f9; color: #475569; }
+.badge.warn { background: #fee2e2; color: #991b1b; }
+.problem { padding: 2mm 3mm; margin: 0 0 2mm; border-left: 2pt solid #dc2626; background: #fef2f2; }
+.note { color: #475569; font-size: 8.3pt; }
+.signature { margin-top: 14mm; display: flex; gap: 20mm; font-size: 8.5pt; color: #475569; }
+.signature div { flex: 1; border-top: 0.5pt solid #94a3b8; padding-top: 1.5mm; }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <div class="brand">
+    <span class="mark" style="display:block;flex:none;width:3mm;height:3mm;background:{{ theme.primary }};border-radius:0.6mm"></span>
+    {% if company.name %}<span class="company">{{ company.name }}</span>{% endif %}
+  </div>
+  {% if company.header_text %}<div class="tagline">{{ company.header_text }}</div>{% endif %}
+</div>
+
+<div class="page-footer">
+  {% if company.footer_text %}<div>{{ company.footer_text }}</div>{% endif %}
+  <div>
+    {%- set parts = [company.name] + company.address_lines + [company.registry_line] -%}
+    {{ parts | select | join(" · ") }}
+  </div>
+</div>
+
+{% block content %}{% endblock %}
+
+</body>
+</html>

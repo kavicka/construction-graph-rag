@@ -1,0 +1,72 @@
+{% extends "base.html.j2" %}
+{% block content %}
+<p class="doc-type">Súhrnný denný výpis</p>
+<h1>{{ day_label }}</h1>
+<p class="meta"><span>vygenerované {{ generated_at }}</span>{% if company.name %}<span>{{ company.name }}</span>{% endif %}</p>
+
+<div class="kpis">
+  <div class="kpi"><div class="label">Odovzdané výpisy</div><div class="value">{{ submitted_count }} / {{ worker_count }}</div></div>
+  <div class="kpi"><div class="label">Odpracované spolu</div><div class="value">{{ hours(total_hours) }} h</div></div>
+  <div class="kpi"><div class="label">Dokončené úlohy</div><div class="value">{{ done_count }}</div></div>
+  <div class="kpi"><div class="label">Problémy</div><div class="value">{{ problems | length }}</div></div>
+</div>
+
+{% if missing %}
+<p><span class="badge warn">Neodovzdali výpis</span> {{ missing | join(", ") }}</p>
+{% endif %}
+
+<h2>Pracovníci</h2>
+<table>
+  <thead><tr><th>Pracovník</th><th>Začiatok</th><th>Koniec</th><th class="num">Prestávka</th><th class="num">Odpracované</th><th>Výpis</th></tr></thead>
+  <tbody>
+  {% for w in workers %}
+    <tr>
+      <td>{{ w.name }}</td>
+      <td>{{ w.arrival or "—" }}</td>
+      <td>{{ w.departure or "—" }}</td>
+      <td class="num">{{ (w.break_minutes ~ " min") if w.break_minutes is not none else "—" }}</td>
+      <td class="num">{{ (hours(w.worked) ~ " h") if w.worked is not none else "—" }}</td>
+      <td>{% if w.state == "submitted" %}<span class="badge done">odovzdaný</span>
+          {% elif w.state == "absent" %}<span class="badge not_started">{{ w.absence_reason }}</span>
+          {% elif w.state == "open" %}<span class="badge in_progress">rozpracovaný</span>
+          {% else %}<span class="badge warn">chýba</span>{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+{% for site in sites %}
+<h2>{{ site.name }}</h2>
+<table>
+  <thead><tr><th>Úloha</th><th>Pracovníci</th><th>Stav</th><th class="num">Hotovo</th><th class="num">Hodiny</th></tr></thead>
+  <tbody>
+  {% for t in site.tasks %}
+    <tr>
+      <td>{{ t.title }}{% for n in t.notes %}<div class="note">{{ n }}</div>{% endfor %}</td>
+      <td>{{ t.workers | join(", ") }}</td>
+      <td><span class="badge {{ t.status }}">{{ t.status_label }}</span></td>
+      <td class="num">{{ (t.progress ~ " %") if t.progress is not none else "—" }}</td>
+      <td class="num">{{ hours(t.hours) }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endfor %}
+
+{% if extra %}
+<h2>Práca mimo plánu</h2>
+<table>
+  <thead><tr><th>Pracovník</th><th>Popis</th><th class="num">Hodiny</th></tr></thead>
+  <tbody>
+  {% for x in extra %}<tr><td>{{ x.worker }}</td><td>{{ x.description }}</td><td class="num">{{ hours(x.hours) if x.hours is not none else "—" }}</td></tr>{% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<h2>Problémy a prekážky</h2>
+{% if problems %}
+  {% for p in problems %}<div class="problem"><strong>{{ p.worker }}:</strong> {{ p.text }}</div>{% endfor %}
+{% else %}
+<p class="muted">Nikto nehlásil problémy.</p>
+{% endif %}
+{% endblock %}
