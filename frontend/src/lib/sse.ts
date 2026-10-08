@@ -1,26 +1,32 @@
-import type { SourceRef } from './api'
+import type { GeneratedDoc, SentenceCheck, SourceRef } from './api'
+
+export type PlanMode = 'lookup' | 'filter' | 'compose' | 'generate' | 'research'
 
 export interface StreamHandlers {
   onSources: (chatId: string, sources: SourceRef[]) => void
   onDelta: (text: string) => void
-  onDone: (chatId: string, messageId: string) => void
+  onDone: (chatId: string, messageId: string, traceId: string | null) => void
   onError: (message: string) => void
-  onPlan?: (mode: 'lookup' | 'filter' | 'compose') => void
+  onPlan?: (mode: PlanMode) => void
   onStep?: (tool: string, summary: string) => void
-  onVerify?: (ok: boolean, issues: string[]) => void
+  onVerify?: (ok: boolean, issues: string[], sentences: SentenceCheck[]) => void
+  onDocument?: (doc: GeneratedDoc) => void
+  onRewrite?: (question: string) => void
 }
 
 type StreamEvent =
   | { type: 'sources'; chat_id: string; sources: SourceRef[] }
   | { type: 'delta'; text: string }
-  | { type: 'done'; chat_id: string; message_id: string }
+  | { type: 'done'; chat_id: string; message_id: string; trace_id: string | null }
   | { type: 'error'; message: string }
-  | { type: 'plan'; mode: 'lookup' | 'filter' | 'compose' }
+  | { type: 'plan'; mode: PlanMode }
   | { type: 'step'; tool: string; summary: string }
-  | { type: 'verify'; ok: boolean; issues: string[] }
+  | { type: 'verify'; ok: boolean; issues: string[]; sentences?: SentenceCheck[] }
+  | { type: 'document'; document: GeneratedDoc }
+  | { type: 'rewrite'; question: string }
 
 export async function streamChat(
-  body: { message: string; chat_id?: string },
+  body: { message: string; chat_id?: string; mode?: 'auto' | 'research' },
   handlers: StreamHandlers,
   signal?: AbortSignal,
 ): Promise<void> {
@@ -48,7 +54,7 @@ export async function streamChat(
         handlers.onDelta(evt.text)
         break
       case 'done':
-        handlers.onDone(evt.chat_id, evt.message_id)
+        handlers.onDone(evt.chat_id, evt.message_id, evt.trace_id ?? null)
         break
       case 'error':
         handlers.onError(evt.message)
@@ -60,7 +66,13 @@ export async function streamChat(
         handlers.onStep?.(evt.tool, evt.summary)
         break
       case 'verify':
-        handlers.onVerify?.(evt.ok, evt.issues)
+        handlers.onVerify?.(evt.ok, evt.issues, evt.sentences ?? [])
+        break
+      case 'document':
+        handlers.onDocument?.(evt.document)
+        break
+      case 'rewrite':
+        handlers.onRewrite?.(evt.question)
         break
     }
   }

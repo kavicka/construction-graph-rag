@@ -1,4 +1,5 @@
 import { PdfDialog, type PdfTarget } from '@/components/pdf-dialog'
+import { ThemesPanel } from '@/components/themes-panel'
 import { Badge } from '@/components/ui/badge'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -10,17 +11,42 @@ import {
 } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useQuery } from '@tanstack/react-query'
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import ForceGraph2D from 'react-force-graph-2d'
 
-const TYPE_COLORS: Record<GraphNode['type'], string> = {
-  document: '#3b82f6',
-  table: '#ef4444',
-  concept: '#10b981',
-  quantity: '#f59e0b',
-  reference: '#8b5cf6',
-  chunk: '#94a3b8',
-  page: '#cbd5e1',
+/** Farby uzlov = brand tokeny z index.css (menia sa so svetlou/tmavou témou). */
+const TYPE_VARS: Record<GraphNode['type'], string> = {
+  document: '--chart-1',
+  table: '--chart-4',
+  concept: '--chart-2',
+  quantity: '--chart-3',
+  reference: '--chart-5',
+  chunk: '--muted-foreground',
+  page: '--input',
+}
+
+const TYPE_COLORS = Object.fromEntries(
+  Object.entries(TYPE_VARS).map(([t, v]) => [t, `var(${v})`]),
+) as Record<GraphNode['type'], string>
+
+const FALLBACK_COLOR = 'var(--muted-foreground)'
+
+function readCanvasColors() {
+  const css = getComputedStyle(document.documentElement)
+  return Object.fromEntries(
+    Object.entries(TYPE_VARS).map(([t, v]) => [t, css.getPropertyValue(v).trim()]),
+  ) as Record<GraphNode['type'], string>
+}
+
+/** Canvas nepozná CSS premenné — hodnoty sa čítajú z <html> pri každej zmene triedy (téma). */
+function useCanvasColors() {
+  const [colors, setColors] = useState(readCanvasColors)
+  useEffect(() => {
+    const observer = new MutationObserver(() => setColors(readCanvasColors()))
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+    return () => observer.disconnect()
+  }, [])
+  return colors
 }
 
 const TYPE_LABELS: Record<GraphNode['type'], string> = {
@@ -47,6 +73,7 @@ export default function GraphPage() {
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
   const [pdfTarget, setPdfTarget] = useState<PdfTarget | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const canvasColors = useCanvasColors()
 
   const typesCsv = [...activeTypes].sort().join(',')
   const { data: graph, isPending } = useQuery({
@@ -124,7 +151,7 @@ export default function GraphPage() {
             height={containerRef.current?.clientHeight}
             nodeLabel={(n) => `${(n as GraphNode).label} (${(n as GraphNode).type})`}
             nodeVal={(n) => 1 + Math.sqrt((n as GraphNode).degree)}
-            nodeColor={(n) => TYPE_COLORS[(n as GraphNode).type] ?? '#94a3b8'}
+            nodeColor={(n) => canvasColors[(n as GraphNode).type] ?? canvasColors.chunk}
             linkColor={() => 'rgba(128,128,128,0.25)'}
             linkWidth={(l) => ((l as { type: string }).type === 'SAME_AS' ? 2 : 1)}
             onNodeClick={(n) => setSelectedNode((n as GraphNode).id)}
@@ -151,7 +178,7 @@ export default function GraphPage() {
 
                 {detail.evidence.length > 0 && (
                   <div className="space-y-2">
-                    <h3 className="text-xs font-semibold uppercase text-muted-foreground">
+                    <h3 className="label-mono text-muted-foreground">
                       Dôkazy ({detail.evidence.length})
                     </h3>
                     {detail.evidence.map((ev, i) => (
@@ -187,7 +214,7 @@ export default function GraphPage() {
 
                 {detail.neighbors.length > 0 && (
                   <div className="space-y-2">
-                    <h3 className="text-xs font-semibold uppercase text-muted-foreground">
+                    <h3 className="label-mono text-muted-foreground">
                       Susedia ({detail.neighbors.length})
                     </h3>
                     <div className="flex flex-wrap gap-1.5">
@@ -196,7 +223,7 @@ export default function GraphPage() {
                           <Badge variant="outline" className="gap-1 hover:bg-secondary">
                             <span
                               className="size-1.5 rounded-full"
-                              style={{ background: TYPE_COLORS[n.type] ?? '#94a3b8' }}
+                              style={{ background: TYPE_COLORS[n.type] ?? FALLBACK_COLOR }}
                             />
                             <span className="max-w-36 truncate">{n.label}</span>
                           </Badge>
@@ -210,6 +237,8 @@ export default function GraphPage() {
           )}
         </SheetContent>
       </Sheet>
+
+      <ThemesPanel />
 
       <PdfDialog target={pdfTarget} onClose={() => setPdfTarget(null)} />
     </div>

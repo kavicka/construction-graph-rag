@@ -3,7 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { fetchHealth } from '@/lib/api'
 import { useQuery } from '@tanstack/react-query'
-import { CheckCircle2, XCircle } from 'lucide-react'
+import { HugeiconsIcon } from '@hugeicons/react'
+import { CancelCircleIcon, CheckmarkCircle02Icon } from '@hugeicons/core-free-icons'
 
 function StatusRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -17,11 +18,11 @@ function StatusRow({ label, value }: { label: string; value: React.ReactNode }) 
 function BoolBadge({ ok, okText, failText }: { ok: boolean; okText: string; failText: string }) {
   return ok ? (
     <Badge variant="secondary" className="gap-1 text-emerald-600 dark:text-emerald-400">
-      <CheckCircle2 className="size-3.5" /> {okText}
+      <HugeiconsIcon icon={CheckmarkCircle02Icon} className="size-3.5" /> {okText}
     </Badge>
   ) : (
-    <Badge variant="secondary" className="gap-1 text-red-600 dark:text-red-400">
-      <XCircle className="size-3.5" /> {failText}
+    <Badge variant="secondary" className="gap-1 text-destructive">
+      <HugeiconsIcon icon={CancelCircleIcon} className="size-3.5" /> {failText}
     </Badge>
   )
 }
@@ -42,7 +43,7 @@ export default function StatusPage() {
         <CardContent className="divide-y">
           {isPending && <Skeleton className="h-40 w-full" />}
           {isError && (
-            <p className="text-sm text-red-600 dark:text-red-400">
+            <p className="text-sm text-destructive">
               Backend nedostupný — spusti <code>make backend</code>.
             </p>
           )}
@@ -70,6 +71,12 @@ export default function StatusPage() {
                     <code className="text-xs">{data.ocr.engine}</code>
                     <BoolBadge ok={data.ocr.slovak} okText="slovenčina" failText="bez SK" />
                   </span>
+                }
+              />
+              <StatusRow
+                label="Generovanie PDF"
+                value={
+                  <BoolBadge ok={data.pdf_engine} okText="WeasyPrint" failText="chýba pango" />
                 }
               />
             </>
