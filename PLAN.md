@@ -338,3 +338,109 @@ Reindex tlačidlo na dokumente aplikuje v2 ingest na staré dokumenty.
 ## 15. Eval
 
 `eval/golden.yaml`: ~20 otázok (SK aj EN, faktické + tabuľkové + relačné cross-doc). Skript meria: retrieval hit-rate@8 (je zdrojový chunk v kontexte?), citačná presnosť (správny dokument+strana?), latencia. Beh s `GRAPH_EXPANSION=on/off` → tvrdé číslo, čo graf pridáva.
+
+## 16. Firma — úlohy, import z dokumentov, hlasová dochádzka (2026-10-08)
+
+Pre stavebnú firmu: majiteľ prideľuje úlohy (aj z dokumentov od dodávateľov), pracovník
+na stavbe nahovorí denný výpis do mobilu, AI sa dopýta na všetko, čo chýba, a majiteľ
+dostane PDF. Rozhodnutia sú z `/ask` (2026-10-07): úlohy prideľuje majiteľ, mobil cez
+Tailscale, meno + PIN, nejasná odpoveď → 1× konkrétnejšie → tlačidlá, otázky aj nahlas.
+
+**Princíp:** rozhoduje kód, LLM len prevádza text na štruktúru. Každý čas, počet hodín,
+minúty a percentá od LLM sa overia voči tomu, čo človek naozaj povedal
+(`workforce/sk_numbers.py` — slovenské číslovky, „pol ôsmej“, „štvrť na päť“, „od 7 do 12“).
+Nepodložená hodnota sa zahodí a systém sa dopýta. Reálne behy ukázali, že qwen3 aj väčšie
+modely systematicky čítajú „pol siedmej“ ako 7:30 — validácia to zachytí.
+
+### Moduly (`backend/app/workforce/`)
+
+| Súbor | Čo robí |
+|---|---|
+| `store.py` | SQLite schéma `wf_*` (pracovníci, profesie, stavby, úlohy, priradenia, zdroje importu, návrhy, výpisy, vstupy, otázky, denné súhrny) |
+| `workers.py` | pracovník = `users` (rola member, skupina `pracovnici`) + PIN (scrypt), zámok po 5 pokusoch, session 90 dní |
+| `tasks.py` | aktívne úlohy dňa (začiatok, závislosť dokončená PRED dňom, po termíne ostáva aktívna, hotová dnes ostáva v dnešnom výpise) |
+| `sk_numbers.py`, `sk_dates.py` | deterministické čísla/časy z reči a termíny z dokumentov („do konca mesiaca“, „v 43. týždni“, „15.–18. 10.“) |
+| `extract.py` | prepis → `ReportData` (LLM s JSON schémou) + overenie čísel + `task_mentioned` (stav úlohy len ak v prepise zaznela) |
+| `report_model.py` | `find_gaps` — chýbajúce údaje: začiatok/koniec/prestávka, stav/hodiny/% pri každej aktívnej úlohe, dôvod pri „nerobilo sa“, hodiny práce mimo plánu, problémy, súčet hodín vs. pracovný čas (tolerancia 0,5 h) |
+| `questions.py` | šablóny otázok (rodovo neutrálne, 3 úrovne: otázka → konkrétnejšie → výber) |
+| `dialog.py` | stavový automat draft → processing → questioning ⇄ ready → submitted; odovzdanie odmietne server (409), kým `find_gaps` nie je prázdne |
+| `speech.py` | mlx-whisper (slovník stavby v `initial_prompt`, filter halucinácií na tichu) + Piper TTS s cache |
+| `importer.py`, `assign.py`, `pdf_locate.py` | dokument → návrhy úloh (citát overený fuzzy ≥90, duplicity, termíny, závislosti, návrh pracovníka podľa mena/profesie/stavby/vyťaženia, diff verzií), presné zvýraznenie citátu v PDF |
+| `reports_pdf.py` + `templates/` | PDF za pracovníka a súhrnný denný (WeasyPrint, branding firmy); čísla dosádza šablóna |
+| `runtime.py` | úlohy na pozadí, `WorkerGuard` (pracovník smie len `/api/attendance`, `/api/me`, `/api/auth`), plánovač súhrnu o 19:00 a mazanie nahrávok po 30 dňoch |
+
+### Modely
+
+| Úloha | high (≥32 GB) | low |
+|---|---|---|
+| Prepis reči | `mlx-community/whisper-large-v3-turbo` (eval: WER 5,3 % vs 10,8 % pri large-v3) | to isté |
+| Výpis + odpovede + import | `qwen3:30b-a3b-instruct-2507-q4_K_M` | `qwen3:4b-instruct` |
+| Čítanie otázok | Piper `sk_SK-lili-medium` (`data/voices`) | to isté |
+
+Prepínače: `RAG_STT_MODEL`, `RAG_WORKFORCE_MODEL`, `RAG_TTS_VOICE`, `RAG_DAILY_SUMMARY(_TIME)`,
+`RAG_AUDIO_RETENTION_DAYS`, `RAG_HOURS_TOLERANCE`, `RAG_PIN_MAX_ATTEMPTS`. Meranie:
+`uv run python -m eval.workforce_eval` → `eval/WORKFORCE.md`.
+Výsledky (`eval/WORKFORCE.md`): extrakcia výpisu po pravidloch nižšie 33/35 polí (94 %) pre
+qwen3:30b-a3b, qwen3:14b aj gemma3:12b a **0 nesprávnych hodnôt prešlo** (pred pravidlami
+86 % / 1 zlá); import 7/8 úloh aj termínov bez falošných úloh (qwen3:30b-a3b). Latencie
+v tabuľke sú skreslené súbežným behom iného evalu na tej istej Ollame — qwen3:14b je
+rovnocenná rýchlejšia alternatíva pre výpisy (`RAG_WORKFORCE_MODEL=qwen3:14b`).
+Eval je na syntetickej reči (macOS Laura, Piper) — po prvých reálnych nahrávkach zo stavby
+ho treba zopakovať s nimi (hluk, nárečie); Piper hlas má WER ~32 %, čo ukazuje, ako veľmi
+kvalita reči rozhoduje.
+
+Pravidlá z reálnych behov (všetky v `extract.py`, kryté testami):
+- LLM číta „pol siedmej“ ako 7:30 → čas, ktorý nie je v texte, sa zahodí; ak je o hodinu
+  vedľa a v texte je práve jeden čas s rovnakými minútami o hodinu skôr, použije sa ten.
+- LLM domýšľa stav nespomenutých úloh → stav sa prijme len ak slovo z názvu/popisu úlohy
+  v prepise zaznelo (v hocijakom páde: rámy ↔ rámov).
+- Neprítomnosť: deterministická záloha („nebol som v práci, dovolenka/PN/lekár“) a pri každej
+  otázke voľba „Dnes som nepracoval(a)“ — pracovník nikdy neuviazne v otázkach na časy.
+
+### Mobil zo stavby (Tailscale)
+
+```bash
+# backend s prihlasovaním za HTTPS proxy (Host = meno stroja v tailnete)
+RAG_AUTH_ENABLED=true RAG_COOKIE_SECURE=true \
+RAG_ADMIN_EMAIL=… RAG_ADMIN_PASSWORD=… \
+RAG_MCP_ALLOWED_HOSTS=your-machine.your-tailnet.ts.net \
+uv run --directory backend uvicorn app.main:app --port 8000
+pnpm --dir frontend dev                      # vite pustí *.ts.net (allowedHosts)
+tailscale serve --bg http://localhost:5173  # https://your-machine.your-tailnet.ts.net
+# (nie `--bg 5173` — to ide na 127.0.0.1, kým vite počúva na [::1] → 502)
+```
+
+Mikrofón v prehliadači funguje len cez HTTPS — `tailscale serve` dodá certifikát. Pracovníci
+majú v mobile Tailscale prihlásený na zdieľaný firemný účet (free plán má limit používateľov,
+nie zariadení), v appke sa prihlásia menom + PIN.
+
+### Overené end-to-end (2026-10-08, reálne modely)
+
+- Import zápisu z kontrolného dňa: 5 úloh za ~35 s, faktúry a termín ďalšieho KD ignorované,
+  „do konca mesiaca“ → 31. 10., „budúci týždeň“ → 12.–16. 10., murovanie čaká na betonáž,
+  elektroinštalácia priradená menovanému, obruba „čo najskôr“ → *treba doplniť termín*.
+- Nová verzia: betonáž *zmenená* (20. → 23. 10.), okná *nové*, obruba *zrušená*, 3 *bez zmeny*.
+- Hlasový výpis (say Laura → m4a → Whisper → LLM): zlý čas od LLM zahodený a dopytovaný,
+  „Opol 7“ → 6:30, nejasná odpoveď → konkrétnejšia otázka, nesúlad 8,5 h vs. 7 h vyriešený
+  hlasom (čakanie 1 h + upratovanie 0,5 h), odovzdanie, PDF; spolu ~70 s.
+
+### Reálne dáta (2026-10-08) a ďalšie pravidlá
+
+`backend/scripts/seed_firma.py` naplní bežiaci backend firmou Stavby Kráľ (7 pracovníkov,
+3 stavby) a skutočným AI importom úloh z protokolu kvality, zápisu z KD a harmonogramu
+(PIN-y do `data/workforce/piny-pracovnikov.txt`, prihlásenie majiteľa z `backend/.env`).
+Hlasové výpisy štyroch pracovníkov prešli celou cestou (PIN → nahrávka → Whisper → LLM →
+otázky → odovzdanie → PDF). Nové pravidlá z nich:
+
+- Whisper turbo píše „o pol siedmej“ ako „o 05.07“ — v `initial_prompt` je vzor časov
+  slovami (`speech.TIME_STYLE`), potom 5/5 viet s časmi správne.
+- Dva časy v texte a LLM jeden zle prečíta → skorší = začiatok, neskorší = koniec
+  (`extract._times_from_text`), inak otázka.
+- Zhrnutie od LLM: veta s časom/číslom, ktoré nezazneli, sa zahodí (`clean_summary`) —
+  model písal „začal som o 7:30“ pri „o pol siedmej“.
+- AI sa pýta len na otvorené úlohy dňa; hotové (uzavreté majiteľom/kolegom) môže
+  pracovník spomenúť, ale nemusí, a vo výpise sa bez zmienky nezobrazia.
+- Import označí návrh, ktorý už na stavbe existuje (`flag_existing`, napr. tá istá vada
+  v protokole aj v zápise) — „Schváliť všetko“ ho preskočí, rozhodne majiteľ.
+- Pracovník má záložku **Moje úlohy** — nástenka po stavoch (Na rade / Rozpracované /
+  Hotové) len na čítanie, úlohy dňa označené „dnes“; stav mení výpis, nie ťahanie.
