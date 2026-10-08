@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="{{ lang }}">
+<head>
+<meta charset="utf-8">
+<title>{{ title }}</title>
+<style>
+{{ theme.font_face_css() | safe }}
+
+@page {
+  size: A4;
+  margin: 28mm 18mm 24mm 18mm;
+  @top-center { content: element(pageHeader); width: 100%; vertical-align: bottom; padding-bottom: 4mm; }
+  @bottom-left { content: element(pageFooter); width: 78%; vertical-align: top; padding-top: 3mm; }
+  {% if company.show_page_numbers %}
+  @bottom-right {
+    content: {{ page_counter_css | safe }};
+    font-family: {{ theme.mono | safe }};
+    font-size: 7pt; color: {{ theme.muted_foreground }}; vertical-align: top; padding-top: 3mm;
+  }
+  {% endif %}
+}
+
+html { font-family: {{ theme.font_sans | safe }}; }
+body { margin: 0; font-size: 9.5pt; line-height: 1.55; color: {{ theme.foreground }}; background: {{ theme.background }}; }
+.mono { font-family: {{ theme.mono | safe }}; }
+
+.page-header {
+  position: running(pageHeader);
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 0.75pt solid {{ theme.input }}; padding-bottom: 2.5mm;
+}
+.page-header .brand { display: flex; align-items: center; gap: 2.5mm; }
+.page-header .mark { display: block; flex: none; width: 3mm; height: 3mm; background: {{ theme.primary }}; border-radius: 0.6mm; }
+.page-header .company { font-weight: 700; font-size: 10.5pt; white-space: nowrap; }
+.page-header .tagline { font-family: {{ theme.mono | safe }}; font-size: 7pt; color: {{ theme.muted_foreground }}; text-align: right; max-width: 85mm; }
+
+.page-footer {
+  position: running(pageFooter);
+  font-family: {{ theme.mono | safe }}; font-size: 6.5pt; color: {{ theme.muted_foreground }}; line-height: 1.5;
+  border-top: 0.5pt solid {{ theme.border }}; padding-top: 2mm;
+}
+
+.cover { margin-bottom: 9mm; }
+.doc-type {
+  font-family: {{ theme.mono | safe }}; text-transform: uppercase; letter-spacing: 0.12em;
+  font-size: 7.5pt; color: {{ theme.primary }}; margin: 0 0 3mm;
+}
+h1 { font-size: 25pt; font-weight: 400; letter-spacing: -0.025em; line-height: 1.12; margin: 0 0 3mm; }
+.subtitle { font-size: 11pt; color: {{ theme.muted_foreground }}; margin: 0 0 4mm; }
+.meta { font-family: {{ theme.mono | safe }}; font-size: 7.5pt; color: {{ theme.muted_foreground }}; }
+.meta span + span::before { content: "·"; margin: 0 2mm; }
+
+h2 {
+  font-size: 13pt; font-weight: 500; letter-spacing: -0.01em; margin: 8mm 0 2.5mm;
+  page-break-after: avoid;
+}
+h2::before {
+  content: ""; display: inline-block; width: 2.2mm; height: 2.2mm; margin-right: 2.5mm;
+  background: {{ theme.primary }}; border-radius: 0.4mm; vertical-align: 0.5mm;
+}
+h3 { font-size: 10.5pt; font-weight: 600; margin: 5mm 0 2mm; page-break-after: avoid; }
+p { margin: 0 0 2.5mm; orphans: 3; widows: 3; }
+ul, ol { margin: 0 0 3mm; padding-left: 5mm; }
+li { margin-bottom: 1mm; }
+strong { font-weight: 700; }
+table { width: 100%; border-collapse: collapse; margin: 3mm 0 4mm; font-size: 8.8pt; page-break-inside: avoid; }
+th {
+  background: {{ theme.muted }}; text-align: left; font-family: {{ theme.mono | safe }};
+  font-size: 7pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+  color: {{ theme.muted_foreground }}; border-bottom: 0.75pt solid {{ theme.input }};
+}
+th, td { padding: 1.8mm 2.4mm; }
+td { border-bottom: 0.5pt solid {{ theme.border }}; }
+blockquote { margin: 3mm 0; padding: 1mm 4mm; border-left: 1.5pt solid {{ theme.input }}; color: {{ theme.muted_foreground }}; }
+code { font-family: {{ theme.mono | safe }}; font-size: 8.5pt; background: {{ theme.muted }}; padding: 0 1mm; border-radius: 0.6mm; }
+
+sup.cite a { font-family: {{ theme.mono | safe }}; color: {{ theme.primary }}; text-decoration: none; font-size: 6.5pt; font-weight: 700; }
+
+.sources { margin-top: 10mm; }
+.sources h2 { font-size: 10.5pt; }
+.sources ol { font-size: 8.3pt; padding-left: 6mm; }
+.sources li { margin-bottom: 1.8mm; }
+.sources .file { font-family: {{ theme.mono | safe }}; font-size: 7.8pt; font-weight: 700; }
+.sources .snippet { display: block; color: {{ theme.muted_foreground }}; }
+
+.contact-block {
+  margin-top: 10mm; padding: 4mm 5mm; border: 0.5pt solid {{ theme.input }}; border-radius: 1mm;
+  font-size: 8.5pt; page-break-inside: avoid;
+}
+.contact-block .label { font-family: {{ theme.mono | safe }}; font-size: 7pt; text-transform: uppercase; letter-spacing: 0.08em; color: {{ theme.muted_foreground }}; margin-right: 2mm; }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <div class="brand">
+    <span class="mark"></span>
+    {% if company.name %}<span class="company">{{ company.name }}</span>{% endif %}
+  </div>
+  {% if company.header_text %}<div class="tagline">{{ company.header_text }}</div>{% endif %}
+</div>
+
+<div class="page-footer">
+  {% if company.footer_text %}<div>{{ company.footer_text }}</div>{% endif %}
+  <div>
+    {%- set parts = [company.name] + company.address_lines + [company.registry_line] -%}
+    {{ parts | select | join(" · ") }}
+  </div>
+</div>
+
+<section class="cover">
+  <p class="doc-type">{{ doc_type_label }}</p>
+  <h1>{{ title }}</h1>
+  {% if subtitle %}<p class="subtitle">{{ subtitle }}</p>{% endif %}
+  <p class="meta">
+    <span>{{ text.date }}: {{ date }}</span>
+    {% if company.name %}<span>{{ text.prepared_by }}: {{ company.name }}</span>{% endif %}
+  </p>
+</section>
+
+{% for section in sections %}
+<section>
+  <h2>{{ section.heading }}</h2>
+  {{ section.html | safe }}
+</section>
+{% endfor %}
+
+{% if doc_type == "offer" and (company.email or company.phone or company.iban) %}
+<div class="contact-block">
+  {% if company.email or company.phone or company.website %}
+  <div><span class="label">{{ text.contact }}</span>
+    {{ [company.email, company.phone, company.website] | select | join(" · ") }}</div>
+  {% endif %}
+  {% if company.iban %}
+  <div><span class="label">{{ text.bank }}</span> <span class="mono">{{ company.iban_display }}</span></div>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if sources %}
+<section class="sources">
+  <h2>{{ text.sources }}</h2>
+  <ol>
+  {% for s in sources %}
+    <li id="src-{{ s.n }}">
+      <span class="file">{{ s.filename }}</span>, {{ text.page }} {{ s.page_from }}{% if s.page_to != s.page_from %}–{{ s.page_to }}{% endif %}
+      {% if s.snippet %}<span class="snippet">„{{ s.snippet | truncate(160) }}“</span>{% endif %}
+    </li>
+  {% endfor %}
+  </ol>
+</section>
+{% endif %}
+
+</body>
+</html>
