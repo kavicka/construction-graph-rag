@@ -151,6 +151,8 @@
     }
   html {
     @apply font-sans;
+    /* nadpisy stránok začínajú na rovnakom mieste so scrollbarom aj bez neho */
+    scrollbar-gutter: stable;
     }
   ::selection {
     @apply bg-primary/25;

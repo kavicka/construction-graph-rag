@@ -93,7 +93,7 @@ export function useRecorder() {
       const name = e instanceof DOMException ? e.name : ''
       setError(
         name === 'NotAllowedError'
-          ? 'Prístup k mikrofónu je zakázaný — povoľ ho v nastaveniach prehliadača.'
+          ? 'Prístup k mikrofónu je zakázaný. Povoľ ho v nastaveniach prehliadača.'
           : name === 'NotFoundError'
             ? 'Nenašiel sa žiadny mikrofón.'
             : 'Mikrofón sa nepodarilo zapnúť.',

@@ -224,7 +224,7 @@ function TaskForm({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={NONE}>nič — môže začať hneď</SelectItem>
+                <SelectItem value={NONE}>nič, môže začať hneď</SelectItem>
                 {depOptions.map((t) => (
                   <SelectItem key={t.id} value={t.id}>
                     {t.title}

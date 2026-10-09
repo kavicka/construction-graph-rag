@@ -49,7 +49,7 @@ import { toast } from 'sonner'
 
 export default function TeamPage() {
   return (
-    <div className="mx-auto max-w-3xl space-y-5">
+    <div className="max-w-3xl space-y-6">
       <PageHeader title="Tím a stavby" description="Pracovníci sa prihlasujú z mobilu menom a PIN-om. Profesie slúžia na návrh, kto má robiť importovanú úlohu." />
       <Tabs defaultValue="workers">
         <TabsList>
@@ -142,7 +142,7 @@ function WorkersTab() {
                   label="Zmazať"
                   icon={Delete02Icon}
                   danger
-                  onClick={() => confirm(`Zmazať pracovníka ${w.name}? Jeho výpisy sa zmažú tiež — radšej ho deaktivuj.`) && remove.mutate(w.id)}
+                  onClick={() => confirm(`Zmazať pracovníka ${w.name}? Zmažú sa aj jeho výpisy. Ak ich chceš zachovať, pracovníka len deaktivuj.`) && remove.mutate(w.id)}
                 />
               </div>
             </li>
@@ -177,7 +177,7 @@ function WorkerForm({ worker, onClose }: { worker: Worker | 'new'; onClose: () =
     mutationFn: () =>
       isNew ? createWorker({ name, pin, professions: selected }) : updateWorker(worker.id, { name, professions: selected, active }),
     onSuccess: () => {
-      toast.success(isNew ? `Pracovník ${name} pridaný — PIN mu oznám osobne` : 'Uložené')
+      toast.success(isNew ? `Pracovník ${name} pridaný. PIN mu oznám osobne.` : 'Uložené')
       void queryClient.invalidateQueries({ queryKey: ['workers'] })
       onClose()
     },
@@ -252,7 +252,7 @@ function PinDialog({ worker, onClose }: { worker: Worker | null; onClose: () => 
   const save = useMutation({
     mutationFn: () => resetWorkerPin(worker!.id, pin),
     onSuccess: () => {
-      toast.success('PIN zmenený — zámok zrušený')
+      toast.success('PIN zmenený, zámok zrušený')
       void queryClient.invalidateQueries({ queryKey: ['workers'] })
       setPin('')
       onClose()
@@ -263,7 +263,7 @@ function PinDialog({ worker, onClose }: { worker: Worker | null; onClose: () => 
     <Dialog open={worker !== null} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Nový PIN — {worker?.name}</DialogTitle>
+          <DialogTitle>Nový PIN pre {worker?.name}</DialogTitle>
           <DialogDescription>Starý PIN prestane platiť, prípadný zámok po zlých pokusoch sa zruší.</DialogDescription>
         </DialogHeader>
         <Input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" className="label-mono w-32 tracking-[0.3em]" autoFocus />
@@ -312,9 +312,6 @@ function SitesTab() {
         <ul className="divide-y rounded-lg border">
           {sites.data?.map((s) => (
             <li key={s.id} className={cn('group flex items-center gap-3 px-3 py-2.5', !s.active && 'bg-muted/40 opacity-60')}>
-              <span className="flex size-7 items-center justify-center rounded-md bg-muted text-muted-foreground">
-                <HugeiconsIcon icon={Building03Icon} className="size-4" />
-              </span>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium">{s.name}</p>
                 {s.address && <p className="label-mono truncate text-[11px] text-muted-foreground">{s.address}</p>}
@@ -407,7 +404,7 @@ function ProfessionsTab() {
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-4">
         <p className="text-sm text-muted-foreground">
-          Tento zoznam dostane AI pri importe dokumentu — každú úlohu zaradí k jednej profesii.
+          Pri importe dokumentu AI zaradí každú úlohu k jednej profesii z tohto zoznamu.
         </p>
         <Button size="sm" onClick={() => setAdding(true)}>
           <HugeiconsIcon icon={Add01Icon} className="size-4" /> Pridať profesiu

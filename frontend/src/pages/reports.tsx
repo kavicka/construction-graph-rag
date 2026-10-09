@@ -27,7 +27,6 @@ import {
   Alert02Icon,
   ArrowLeft01Icon,
   ArrowRight01Icon,
-  Clock01Icon,
   Edit02Icon,
   Pdf01Icon,
   TaskDaily01Icon,
@@ -68,7 +67,7 @@ export default function ReportsPage() {
   const s = overview.data?.summary
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <PageHeader
         title="Denné výpisy"
         description="Kto čo robil, koľko hodín a čo brzdí prácu. Súhrnné PDF sa vytvára automaticky každý večer."
@@ -127,12 +126,7 @@ export default function ReportsPage() {
                   <th className="px-3 py-2 font-normal">Výpis</th>
                   <th className="px-3 py-2 font-normal">Začiatok</th>
                   <th className="px-3 py-2 font-normal">Koniec</th>
-                  <th className="px-3 py-2 text-right font-normal">
-                    <span className="inline-flex items-center gap-1">
-                      <HugeiconsIcon icon={Clock01Icon} className="size-3" />
-                      Hodiny
-                    </span>
-                  </th>
+                  <th className="px-3 py-2 text-right font-normal">Hodiny</th>
                   <th className="px-3 py-2 text-right font-normal">Problémy</th>
                   <th className="px-3 py-2" />
                 </tr>
@@ -308,7 +302,7 @@ function ReportEditor({
     onSuccess: (r) => {
       queryClient.setQueryData(['report', reportId], r)
       void queryClient.invalidateQueries({ queryKey: ['day', day] })
-      toast.success(r.status === 'submitted' ? 'Uložené — PDF pregenerované' : 'Uložené')
+      toast.success(r.status === 'submitted' ? 'Uložené, PDF pregenerované' : 'Uložené')
       onDone()
     },
     onError: (e) => toast.error(e.message),

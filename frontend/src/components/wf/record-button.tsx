@@ -72,7 +72,7 @@ export function RecordButton({
       </button>
       <p className="text-sm font-medium">
         {recording ? (
-          <span className="label-mono text-primary">● {formatSeconds(rec.seconds)} — ťukni a odošli</span>
+          <span className="label-mono text-primary">● {formatSeconds(rec.seconds)} · ťukni a odošli</span>
         ) : (
           idleLabel
         )}

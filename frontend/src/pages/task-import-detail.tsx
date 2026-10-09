@@ -112,7 +112,7 @@ export default function TaskImportDetailPage() {
   const editable = source.status === 'review'
 
   return (
-    <div className="mx-auto max-w-3xl space-y-5">
+    <div className="max-w-3xl space-y-6">
       <Link to="/tasks/import" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-primary">
         <HugeiconsIcon icon={ArrowLeft01Icon} className="size-4" /> Import úloh
       </Link>
@@ -161,7 +161,7 @@ export default function TaskImportDetailPage() {
               }
             />
           ) : (
-            <div className="sticky top-14 z-10 -mx-4 flex flex-wrap items-center gap-2 border-b bg-background/95 px-4 py-3 backdrop-blur-sm">
+            <div className="sticky top-14 z-10 -mx-4 flex flex-wrap items-center gap-2 border-b bg-background/95 px-4 py-3 backdrop-blur-sm md:top-0 md:-mx-8 md:px-8">
               <span className="label-mono mr-auto text-xs text-muted-foreground">
                 {visible.length} návrhov · {pending} nerozhodnutých · {approved} schválených
               </span>
@@ -440,7 +440,7 @@ function DraftCard({
         </blockquote>
       )}
       {decided && dirty && editable && (
-        <p className="text-xs text-amber-600">Máš neuložené zmeny — klikni znova na Schváliť.</p>
+        <p className="text-xs text-amber-600">Máš neuložené zmeny. Klikni znova na Schváliť.</p>
       )}
     </article>
   )

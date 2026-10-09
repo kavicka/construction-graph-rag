@@ -68,35 +68,38 @@ export default function AttendancePage({ isAdmin }: { isAdmin: boolean }) {
 
   const enabled = !isAdmin || !!workerId
   return (
-    <div className="mx-auto max-w-xl space-y-6">
-      <PageHeader
-        title="Denný výpis"
-        description={isAdmin ? 'Vyplnenie za pracovníka alebo kontrola jeho výpisu.' : 'Povedz, čo sa dnes robilo — AI sa dopýta, čo chýba.'}
-        actions={
-          isAdmin && activeWorkers.length > 0 ? (
-            <>
-              <Select value={workerId} onValueChange={setWorkerId}>
-                <SelectTrigger className="w-44">
-                  <SelectValue placeholder="Pracovník" />
-                </SelectTrigger>
-                <SelectContent>
-                  {activeWorkers.map((w) => (
-                    <SelectItem key={w.id} value={w.id}>
-                      {w.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Input type="date" value={day} max={isoToday()} onChange={(e) => setDay(e.target.value || isoToday())} className="w-40" />
-            </>
-          ) : undefined
-        }
-      />
+    <div className="max-w-2xl space-y-6">
+      {/* pracovník má nadpis v tabe „Denný výpis“, druhý by ho len zopakoval */}
+      {isAdmin && (
+        <PageHeader
+          title="Dochádzka"
+          description="Vyplň alebo skontroluj denný výpis pracovníka."
+          actions={
+            activeWorkers.length > 0 ? (
+              <>
+                <Select value={workerId} onValueChange={setWorkerId}>
+                  <SelectTrigger className="w-44">
+                    <SelectValue placeholder="Pracovník" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {activeWorkers.map((w) => (
+                      <SelectItem key={w.id} value={w.id}>
+                        {w.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Input type="date" value={day} max={isoToday()} onChange={(e) => setDay(e.target.value || isoToday())} className="w-40" />
+              </>
+            ) : undefined
+          }
+        />
+      )}
       {isAdmin && workers.isSuccess && activeWorkers.length === 0 ? (
         <EmptyState
           icon={UserGroupIcon}
           title="Zatiaľ žiadni pracovníci"
-          description="Pridaj pracovníkov v sekcii Tím a stavby — dostanú PIN na prihlásenie z mobilu."
+          description="Pridaj pracovníkov v sekcii Tím a stavby. Každý dostane PIN na prihlásenie z mobilu."
         />
       ) : enabled ? (
         <ReportView workerId={isAdmin ? workerId : undefined} day={isAdmin ? day : undefined} />
@@ -132,7 +135,7 @@ function ReportView({ workerId, day }: { workerId?: string; day?: string }) {
     mutationFn: () => submitReport(report!.id),
     onSuccess: (r) => {
       setReport(r)
-      toast.success('Výpis odovzdaný — majiteľ dostal PDF')
+      toast.success('Výpis odovzdaný, majiteľ dostal PDF')
     },
     onError,
   })
@@ -165,7 +168,7 @@ function ReportView({ workerId, day }: { workerId?: string; day?: string }) {
         <div className="flex flex-col items-center gap-3 rounded-lg border px-4 py-10 text-center">
           <HugeiconsIcon icon={Loading03Icon} className="size-8 animate-spin text-primary" />
           <p className="text-sm font-medium">{report.step === 'prepis' ? 'Prepisujem reč…' : 'Spracúvam výpis…'}</p>
-          <p className="max-w-xs text-xs text-muted-foreground">Lokálny model na tvojom serveri — nič neodchádza von.</p>
+          <p className="max-w-xs text-xs text-muted-foreground">Spracúva ho lokálny model na tvojom serveri. Nič neodchádza von.</p>
         </div>
       )}
 
@@ -246,7 +249,7 @@ function ReportView({ workerId, day }: { workerId?: string; day?: string }) {
 
 function TodayTasks({ report, own }: { report: Report; own: boolean }) {
   if (!report.tasks.length) {
-    return <p className="text-sm text-muted-foreground">Na tento deň nie sú priradené žiadne úlohy — stačí povedať, čo sa robilo.</p>
+    return <p className="text-sm text-muted-foreground">Na tento deň nie sú priradené žiadne úlohy. Stačí povedať, čo sa robilo.</p>
   }
   return (
     <div className="space-y-2">
@@ -403,7 +406,7 @@ function QuestionCard({
       <audio ref={audio} preload="none" />
       <p className="text-lg leading-snug">{question.text}</p>
       {question.attempts === 1 && question.mode === 'open' && (
-        <p className="text-xs text-muted-foreground">Odpoveď nebola jasná — skús to konkrétnejšie.</p>
+        <p className="text-xs text-muted-foreground">Odpoveď nebola jasná. Skús to konkrétnejšie.</p>
       )}
 
       {absence ? (
@@ -439,7 +442,7 @@ function QuestionCard({
           onClick={() => setAbsence(true)}
           className="text-xs text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
         >
-          Dnes som nepracoval(a) — dovolenka, PN, lekár
+          Dnes som nepracoval(a): dovolenka, PN, lekár
         </button>
       )}
     </div>

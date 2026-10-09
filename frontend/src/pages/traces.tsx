@@ -165,7 +165,7 @@ export default function TracesPage() {
   const selected = params.get('id') ?? traces?.[0]?.trace_id ?? null
 
   return (
-    <div className="grid h-[calc(100svh-8.5rem)] grid-cols-1 gap-6 md:grid-cols-[280px_1fr]">
+    <div className="grid h-[calc(100svh-6.5rem)] grid-cols-1 gap-6 md:h-[calc(100svh-4rem)] md:grid-cols-[280px_1fr]">
       <aside className="flex min-h-0 flex-col gap-2">
         <h1 className="text-sm font-semibold">Traces</h1>
         <ScrollArea className="min-h-0 flex-1 rounded-md border">
@@ -173,7 +173,7 @@ export default function TracesPage() {
             {isPending && <Skeleton className="h-40" />}
             {traces?.length === 0 && (
               <p className="p-4 text-xs text-muted-foreground">
-                Zatiaľ žiadne — každá otázka v chate vytvorí trace.
+                Zatiaľ žiadne. Každá otázka v chate vytvorí trace.
               </p>
             )}
             {traces?.map((t) => (

@@ -75,10 +75,10 @@ export default function App() {
           />
           {/* min-w-0: široká nástenka sa posúva vo vnútri, stránka nepretečie */}
           <SidebarInset className="min-w-0">
-            <TopBar />
+            <MobileBar />
             <main
               className={cn(
-                'mx-auto w-full min-w-0 flex-1 px-4 py-6 md:px-6',
+                'mx-auto w-full min-w-0 flex-1 px-4 py-6 md:px-8 md:py-8',
                 !fullWidth && 'max-w-6xl',
               )}
             >
@@ -113,28 +113,14 @@ export default function App() {
   )
 }
 
-const TITLES: [string, string][] = [
-  ['/reports', 'Denné výpisy'],
-  ['/tasks/import', 'Import úloh'],
-  ['/tasks', 'Úlohy'],
-  ['/attendance', 'Dochádzka'],
-  ['/team', 'Tím a stavby'],
-  ['/status', 'Stav'],
-  ['/chat', 'Chat'],
-  ['/documents', 'Dokumenty'],
-  ['/graph', 'Graf'],
-  ['/traces', 'Traces'],
-  ['/settings', 'Nastavenia'],
-]
-
-function TopBar() {
-  const { pathname } = useLocation()
-  const title = TITLES.find(([p]) => pathname === p || pathname.startsWith(`${p}/`))?.[1] ?? ''
+/** Lišta len na mobile, kde je sidebar schovaný. Názov stránky nesie nadpis stránky, nie lišta. */
+function MobileBar() {
   return (
-    <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-2 border-b bg-background/90 px-4 backdrop-blur-sm">
+    <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-2 border-b bg-background/90 px-4 backdrop-blur-sm md:hidden">
       <SidebarTrigger className="-ml-1" />
       <Separator orientation="vertical" className="mr-1 data-[orientation=vertical]:h-4" />
-      <span className="text-sm font-medium text-foreground/80">{title}</span>
+      <span className="size-3 rounded-[3px] bg-primary" />
+      <span className="font-display text-base font-medium">rag</span>
     </header>
   )
 }

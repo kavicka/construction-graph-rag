@@ -2,10 +2,11 @@ import { FormDialog } from '@/components/form-dialog'
 import { GroupInput } from '@/components/group-input'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { PageHeader, WorkerAvatar } from '@/components/wf/bits'
 import {
   createApiToken,
   createUser,
@@ -76,7 +77,7 @@ function TokenForm({ open, onClose }: { open: boolean; onClose: () => void }) {
             </Button>
           </div>
           <p className="text-xs text-amber-600 dark:text-amber-400">
-            Token sa zobrazí len teraz — ulož si ho.
+            Token sa zobrazí len teraz. Ulož si ho.
           </p>
         </div>
       )}
@@ -247,8 +248,8 @@ function UserForm({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="member">member — len dokumenty svojich skupín</SelectItem>
-              <SelectItem value="admin">admin — všetko</SelectItem>
+              <SelectItem value="member">member: len dokumenty svojich skupín</SelectItem>
+              <SelectItem value="admin">admin: všetko</SelectItem>
             </SelectContent>
           </Select>
           {isSelf && <p className="text-xs text-muted-foreground">Sám sebe admin práva neodoberieš.</p>}
@@ -298,25 +299,23 @@ export function UsersManager() {
   const groups = [...new Set((users ?? []).flatMap((u) => u.groups))].sort()
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
-        <div className="space-y-1">
-          <CardTitle>Účty a skupiny</CardTitle>
-          <CardDescription>
-            Skupiny určujú, ktoré dokumenty kto vidí — filter je priamo vo vyhľadávaní, takže odpovede ani citácie
-            nikdy nepoužijú cudzí dokument.
-          </CardDescription>
-        </div>
-        <Button size="sm" onClick={() => setEditing('new')}>
-          <HugeiconsIcon icon={UserAdd01Icon} className="size-4" /> Pridať používateľa
-        </Button>
-      </CardHeader>
-      <CardContent className="space-y-2">
+    <>
+      <PageHeader
+        title="Používatelia"
+        description="Skupiny určujú, ktoré dokumenty kto vidí. Filter beží priamo vo vyhľadávaní, takže odpovede ani citácie nikdy nepoužijú cudzí dokument."
+        actions={
+          <Button className="gap-2" onClick={() => setEditing('new')}>
+            <HugeiconsIcon icon={UserAdd01Icon} className="size-4" /> Pridať používateľa
+          </Button>
+        }
+      />
+      <ul className="divide-y rounded-lg border">
         {users?.map((u) => (
-          <div key={u.id} className="flex items-center gap-3 rounded-md border px-3 py-2">
+          <li key={u.id} className="flex items-center gap-3 px-3 py-2.5">
+            <WorkerAvatar name={u.name} />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{u.name}</p>
-              <p className="truncate text-xs text-muted-foreground">{u.email}</p>
+              <p className="label-mono truncate text-[11px] text-muted-foreground">{u.email}</p>
             </div>
             <Badge variant={u.role === 'admin' ? 'default' : 'outline'}>{u.role}</Badge>
             <div className="hidden flex-wrap justify-end gap-1 sm:flex">
@@ -329,15 +328,15 @@ export function UsersManager() {
             <Button variant="ghost" size="icon" aria-label={`Upraviť ${u.email}`} onClick={() => setEditing(u)}>
               <HugeiconsIcon icon={Edit02Icon} className="size-4" />
             </Button>
-          </div>
+          </li>
         ))}
-      </CardContent>
+      </ul>
       <UserDialog
         user={editing}
         groupSuggestions={groups}
         selfId={me.user?.id}
         onClose={() => setEditing(null)}
       />
-    </Card>
+    </>
   )
 }

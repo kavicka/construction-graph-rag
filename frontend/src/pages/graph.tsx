@@ -106,6 +106,7 @@ export default function GraphPage() {
 
   return (
     <div className="space-y-3">
+      <h1 className="sr-only">Graf</h1>
       <div className="flex flex-wrap items-center gap-2">
         {(Object.keys(TYPE_LABELS) as GraphNode['type'][]).map((t) => (
           <button key={t} onClick={() => toggleType(t)}>
@@ -137,11 +138,11 @@ export default function GraphPage() {
         )}
       </div>
 
-      <div ref={containerRef} className="h-[calc(100svh-14rem)] overflow-hidden rounded-md border">
+      <div ref={containerRef} className="h-[calc(100svh-14rem)] overflow-hidden rounded-md border md:h-[calc(100svh-11.5rem)]">
         {isPending && <Skeleton className="h-full w-full" />}
         {graph && graph.nodes.length === 0 && (
           <p className="py-24 text-center text-sm text-muted-foreground">
-            Graf je prázdny — nahraj a zaindexuj dokumenty.
+            Graf je prázdny. Nahraj a zaindexuj dokumenty.
           </p>
         )}
         {graph && graph.nodes.length > 0 && (

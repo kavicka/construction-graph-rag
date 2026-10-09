@@ -40,10 +40,10 @@ export default function TaskImportPage() {
   })
 
   return (
-    <div className="mx-auto max-w-3xl space-y-5">
+    <div className="max-w-3xl space-y-6">
       <PageHeader
         title="Import úloh"
-        description="Nahraj zadanie od dodávateľa (PDF, Word, Excel, sken). Lokálny model z neho navrhne úlohy — nič nevznikne bez tvojho schválenia."
+        description="Nahraj zadanie od dodávateľa (PDF, Word, Excel, sken). Lokálny model z neho navrhne úlohy. Úloha vznikne, až keď ju schváliš."
         actions={
           <Button className="gap-2" onClick={() => setOpen(true)}>
             <HugeiconsIcon icon={Upload04Icon} className="size-4" />
@@ -56,13 +56,15 @@ export default function TaskImportPage() {
         <EmptyState
           icon={FileImportIcon}
           title="Zatiaľ žiadny import"
-          description="Dokument nemusí byť presný — e-mail, zápis z porady aj harmonogram v tabuľke. Každá navrhnutá úloha má citát zo zdroja."
+          description="Stačí aj e-mail, zápis z porady alebo harmonogram v tabuľke. Pri každej navrhnutej úlohe uvidíš citát zo zdroja."
           action={<Button onClick={() => setOpen(true)}>Nahrať prvý dokument</Button>}
         />
       )}
-      <ul className="space-y-2">
-        {imports.data?.map((i) => <ImportRow key={i.id} item={i} />)}
-      </ul>
+      {!!imports.data?.length && (
+        <ul className="divide-y rounded-lg border">
+          {imports.data.map((i) => <ImportRow key={i.id} item={i} />)}
+        </ul>
+      )}
       <UploadDialog open={open} onClose={() => setOpen(false)} />
     </div>
   )
@@ -73,9 +75,8 @@ function ImportRow({ item }: { item: ImportSource }) {
   const busy = item.status === 'waiting' || item.status === 'extracting'
   return (
     <li>
-      <Link to={`/tasks/import/${item.id}`} className="group block rounded-lg border px-4 py-3 transition-colors hover:bg-muted/50">
+      <Link to={`/tasks/import/${item.id}`} className="group block px-4 py-3 transition-colors hover:bg-muted/50">
         <div className="flex flex-wrap items-center gap-2">
-          <HugeiconsIcon icon={FileImportIcon} className="size-4 text-muted-foreground" />
           <span className="min-w-0 flex-1 truncate text-sm font-medium transition-colors group-hover:text-primary">
             {item.filename}
           </span>
@@ -120,7 +121,7 @@ function UploadDialog({ open, onClose }: { open: boolean; onClose: () => void })
     mutationFn: () => uploadTaskDocument(file!, siteId, previous && asVersion ? previous.id : null),
     onSuccess: (src) => {
       void queryClient.invalidateQueries({ queryKey: ['task-imports'] })
-      toast.success('Dokument nahratý — AI ho číta')
+      toast.success('Dokument nahratý, AI v ňom hľadá úlohy')
       reset()
       onClose()
       navigate(`/tasks/import/${src.id}`)

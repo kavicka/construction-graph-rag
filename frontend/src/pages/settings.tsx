@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { ApiTokenCard } from '@/components/users-panel'
+import { PageHeader } from '@/components/wf/bits'
 import {
   fetchCompany,
   fetchMe,
@@ -229,7 +230,7 @@ export default function SettingsPage() {
   }
 
   if (isError) {
-    return <p className="text-sm text-destructive">Nastavenia sa nepodarilo načítať — beží backend?</p>
+    return <p className="text-sm text-destructive">Nastavenia sa nepodarilo načítať. Beží backend?</p>
   }
   if (isPending || !form) {
     return (
@@ -250,48 +251,50 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="font-display-lg text-2xl">Nastavenia firmy</h1>
-          <p className="text-sm text-muted-foreground">
-            Údaje a hlavička, ktoré dostane každý dokument vygenerovaný z chatu. Vzhľad dokumentov (farby, písmo)
-            preberá z témy aplikácie.
-          </p>
-          {!canEdit && (
-            <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
-              Len na čítanie — nastavenia mení administrátor.
-            </p>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {dirty && <Badge variant="outline">Neuložené zmeny</Badge>}
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={!dirty}
-            onClick={() => {
-              setDraft(null)
-              setErrors({})
-            }}
-          >
-            <HugeiconsIcon icon={RotateLeft01Icon} className="size-4" /> Zahodiť
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => preview.mutate(form)} disabled={preview.isPending}>
-            <HugeiconsIcon
-              icon={preview.isPending ? Loading03Icon : File02Icon}
-              className={cn('size-4', preview.isPending && 'animate-spin')}
-            />
-            Náhľad PDF
-          </Button>
-          <Button size="sm" onClick={() => save.mutate(form)} disabled={!canEdit || !dirty || save.isPending}>
-            <HugeiconsIcon
-              icon={save.isPending ? Loading03Icon : FloppyDiskIcon}
-              className={cn('size-4', save.isPending && 'animate-spin')}
-            />
-            Uložiť
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Nastavenia"
+        description={
+          <>
+            Údaje a hlavička, ktoré dostane každý dokument vygenerovaný z chatu. Farby a písmo preberá z témy
+            aplikácie.
+            {!canEdit && (
+              <span className="mt-1 block text-xs text-amber-600 dark:text-amber-400">
+                Len na čítanie. Nastavenia mení administrátor.
+              </span>
+            )}
+          </>
+        }
+        actions={
+          <>
+            {dirty && <Badge variant="outline">Neuložené zmeny</Badge>}
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={!dirty}
+              onClick={() => {
+                setDraft(null)
+                setErrors({})
+              }}
+            >
+              <HugeiconsIcon icon={RotateLeft01Icon} className="size-4" /> Zahodiť
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => preview.mutate(form)} disabled={preview.isPending}>
+              <HugeiconsIcon
+                icon={preview.isPending ? Loading03Icon : File02Icon}
+                className={cn('size-4', preview.isPending && 'animate-spin')}
+              />
+              Náhľad PDF
+            </Button>
+            <Button size="sm" onClick={() => save.mutate(form)} disabled={!canEdit || !dirty || save.isPending}>
+              <HugeiconsIcon
+                icon={save.isPending ? Loading03Icon : FloppyDiskIcon}
+                className={cn('size-4', save.isPending && 'animate-spin')}
+              />
+              Uložiť
+            </Button>
+          </>
+        }
+      />
 
       <div className="grid items-start gap-6 lg:grid-cols-[1fr_320px]">
         <div className="space-y-6">
@@ -392,8 +395,7 @@ export default function SettingsPage() {
           <p className="text-sm font-medium">Živý náhľad</p>
           <DocumentPreview form={form} />
           <p className="text-xs text-muted-foreground">
-            Presný výstup ukáže <span className="font-medium">Náhľad PDF</span> — renderuje sa rovnako ako dokumenty
-            z chatu.
+            Presný výstup ukáže tlačidlo Náhľad PDF. Renderuje sa rovnako ako dokumenty z chatu.
           </p>
         </aside>
       </div>

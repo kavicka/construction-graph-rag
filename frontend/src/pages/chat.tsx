@@ -452,8 +452,9 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="mx-auto grid h-[calc(100svh-8.5rem)] max-w-5xl grid-cols-[200px_1fr] gap-6">
-      <aside className="flex min-h-0 flex-col gap-2">
+    <div className="grid h-[calc(100svh-6.5rem)] max-w-5xl grid-cols-1 gap-6 md:h-[calc(100svh-4rem)] md:grid-cols-[200px_1fr]">
+      <h1 className="sr-only">Chat</h1>
+      <aside className="hidden min-h-0 flex-col gap-2 md:flex">
         <Button variant="outline" size="sm" onClick={newChat} className="justify-start gap-2">
           <HugeiconsIcon icon={Add01Icon} className="size-4" /> Nový chat
         </Button>
@@ -482,10 +483,10 @@ export default function ChatPage() {
           <div className="space-y-4 p-4">
             {messages.length === 0 && streamText === null && (
               <div className="space-y-1 py-16 text-center text-sm text-muted-foreground">
-                <p>Opýtaj sa na čokoľvek z nahratých PDF — odpoveď príde s citáciami na strany.</p>
+                <p>Opýtaj sa na čokoľvek z nahratých PDF. Odpoveď cituje konkrétne strany.</p>
                 <p className="text-xs">
-                  Alebo si nechaj vytvoriť dokument: „Priprav report o…“, „Vytvor cenovú
-                  ponuku…“ — PDF dostane branding z Nastavení.
+                  Chat vie vytvoriť aj dokument, napr. „Priprav report o…“ alebo „Vytvor cenovú
+                  ponuku…“. PDF dostane hlavičku firmy z Nastavení.
                 </p>
               </div>
             )}
@@ -563,7 +564,7 @@ export default function ChatPage() {
             size="icon"
             aria-pressed={research}
             aria-label="Deep research"
-            title="Deep research — podotázky, viac zdrojov, štruktúrovaná správa (~1 min)"
+            title="Deep research: podotázky, viac zdrojov, štruktúrovaná správa (~1 min)"
             onClick={() => setResearch((r) => !r)}
           >
             <HugeiconsIcon icon={Microscope} className="size-4" />

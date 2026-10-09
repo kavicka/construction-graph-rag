@@ -11,6 +11,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
+  SidebarTrigger,
   useSidebar,
 } from '@/components/ui/sidebar'
 import { WorkerAvatar } from '@/components/wf/bits'
@@ -40,7 +41,7 @@ export function AppSidebar({
     <Sidebar collapsible="icon">
       <SidebarHeader>
         <SidebarMenu>
-          <SidebarMenuItem>
+          <SidebarMenuItem className="flex items-center gap-1 group-data-[collapsible=icon]:flex-col">
             <SidebarMenuButton size="lg" asChild tooltip="rag">
               <NavLink to="/" onClick={() => isMobile && setOpenMobile(false)}>
                 <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10">
@@ -49,6 +50,8 @@ export function AppSidebar({
                 <span className="font-display text-lg font-medium">rag</span>
               </NavLink>
             </SidebarMenuButton>
+            {/* na mobile sidebar zatvára sheet, prepínač je v lište */}
+            {!isMobile && <SidebarTrigger className="shrink-0 text-muted-foreground" />}
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>

@@ -160,7 +160,7 @@ export default function TasksBoardPage() {
     period.kind === 'week' ? `${formatShort(period.start)} – ${formatShort(addDays(period.start, 6))}` : 'Všetky termíny'
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <PageHeader
         title="Úlohy"
         description="Ťahaj karty medzi pracovníkmi. S podržaným ⌥ / Alt pracovníka pridáš, nie presunieš."
@@ -250,7 +250,7 @@ export default function TasksBoardPage() {
       ) : (
         <DndContext sensors={sensors} collisionDetection={collision} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setDragging(null)}>
           {/* stĺpce sa rozdelia na celú šírku (min 9,5 rem); až keď sa nezmestia, nástenka sa posúva */}
-          <div className="-mx-4 overflow-x-auto px-4 pb-4 md:-mx-6 md:px-6">
+          <div className="-mx-4 overflow-x-auto px-4 pb-4 md:-mx-8 md:px-8">
             <div className="flex min-w-full items-stretch gap-2">
               <Column
                 id={UNASSIGNED}
@@ -282,7 +282,7 @@ export default function TasksBoardPage() {
 
       {columnWorkers.length === 0 && !loading && !noSites && (
         <p className="text-sm text-muted-foreground">
-          Pridaj pracovníkov v sekcii <Link to="/team" className="text-primary hover:underline">Tím a stavby</Link> — každý dostane vlastný stĺpec.
+          Pridaj pracovníkov v sekcii <Link to="/team" className="text-primary hover:underline">Tím a stavby</Link>. Každý dostane vlastný stĺpec.
         </p>
       )}
 
@@ -342,7 +342,7 @@ function Column({
         <span className="label-mono text-xs tabular-nums text-muted-foreground">{tasks.length}</span>
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" className="size-7" onClick={onAdd} aria-label={`Nová úloha — ${title}`}>
+            <Button variant="ghost" size="icon" className="size-7" onClick={onAdd} aria-label={`Nová úloha: ${title}`}>
               <HugeiconsIcon icon={Add01Icon} className="size-3.5" />
             </Button>
           </TooltipTrigger>

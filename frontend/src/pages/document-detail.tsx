@@ -13,17 +13,15 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { deleteDocument, fetchDocument, reindexDocument } from '@/lib/api'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
-  ArrowLeft02Icon,
+  ArrowLeft01Icon,
   Delete02Icon,
   LinkSquare02Icon,
   RefreshIcon,
-  Table01Icon,
 } from '@hugeicons/core-free-icons'
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
@@ -58,17 +56,15 @@ export default function DocumentDetailPage() {
     },
   })
 
-  if (isPending) return <Skeleton className="mx-auto h-64 max-w-2xl" />
-  if (!doc) return <p className="text-center text-sm text-muted-foreground">Dokument neexistuje.</p>
+  if (isPending) return <Skeleton className="h-64 max-w-3xl" />
+  if (!doc) return <p className="text-sm text-muted-foreground">Dokument neexistuje.</p>
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" asChild>
-          <Link to="/documents">
-            <HugeiconsIcon icon={ArrowLeft02Icon} className="size-4" />
-          </Link>
-        </Button>
+    <div className="max-w-3xl space-y-6">
+      <Link to="/documents" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-primary">
+        <HugeiconsIcon icon={ArrowLeft01Icon} className="size-4" /> Dokumenty
+      </Link>
+      <div className="flex flex-wrap items-center gap-3">
         <h1 className="min-w-0 flex-1 truncate font-display-lg text-2xl">{doc.filename}</h1>
         <StatusBadge doc={doc} />
         <Button
@@ -101,7 +97,7 @@ export default function DocumentDetailPage() {
               <AlertDialogDescription>
                 Dokument zmizne z vyhľadávania, grafu aj tabuliek. Staré odpovede v chate si
                 citácie ponechajú, ale PDF sa už neotvorí.
-                {doc.source_path && ' Súbor ostáva v inboxe — zmaž ho aj tam, inak sa vráti.'}
+                {doc.source_path && ' Súbor ostáva v inboxe. Zmaž ho aj tam, inak sa vráti.'}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -114,52 +110,39 @@ export default function DocumentDetailPage() {
         </AlertDialog>
       </div>
 
-      <Card>
-        <CardContent className="flex gap-6 py-3 text-sm">
-          <span>
-            <span className="text-muted-foreground">Strany:</span> {doc.pages_count ?? '—'}
-          </span>
-          <span>
-            <span className="text-muted-foreground">Tabuľky:</span> {doc.tables.length}
-          </span>
-          {doc.error && (
-            <span className="text-destructive">{doc.error}</span>
-          )}
-        </CardContent>
-        <CardContent className="pb-3">
-          <AccessEditor docId={doc.id} access={doc.access} />
-        </CardContent>
-      </Card>
+      <div className="space-y-3">
+        <p className="label-mono text-xs text-muted-foreground">
+          strany: {doc.pages_count ?? '?'} · tabuľky: {doc.tables.length}
+          {doc.error && <span className="text-destructive"> · {doc.error}</span>}
+        </p>
+        <AccessEditor docId={doc.id} access={doc.access} />
+      </div>
 
       {doc.tables.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <HugeiconsIcon icon={Table01Icon} className="size-4" /> Extrahované tabuľky
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="divide-y">
+        <section className="space-y-2">
+          <h2 className="label-mono text-[11px] text-muted-foreground uppercase">Tabuľky z dokumentu</h2>
+          <ul className="divide-y rounded-lg border">
             {doc.tables.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setOpenTable(t.id)}
-                className="flex w-full items-center justify-between py-2 text-left text-sm hover:bg-secondary/40"
-              >
-                <div className="min-w-0">
-                  <p className="truncate font-medium">
-                    {t.caption ?? `Tabuľka (${t.n_rows}×${t.n_cols})`}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {t.n_rows}×{t.n_cols}
-                    {t.page_no != null && ` · strana ${t.page_no}`}
-                    {t.summary && ` · ${t.summary.slice(0, 80)}…`}
-                  </p>
-                </div>
-                <Badge variant="outline">str. {t.page_no ?? '?'}</Badge>
-              </button>
+              <li key={t.id}>
+                <button
+                  onClick={() => setOpenTable(t.id)}
+                  className="group flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-sm transition-colors hover:bg-muted/50"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate font-medium transition-colors group-hover:text-primary">
+                      {t.caption ?? `Tabuľka ${t.n_rows}×${t.n_cols}`}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {t.n_rows}×{t.n_cols}
+                      {t.summary && ` · ${t.summary.slice(0, 80)}…`}
+                    </p>
+                  </div>
+                  <Badge variant="outline">str. {t.page_no ?? '?'}</Badge>
+                </button>
+              </li>
             ))}
-          </CardContent>
-        </Card>
+          </ul>
+        </section>
       )}
       <TableDialog tableId={openTable} onClose={() => setOpenTable(null)} />
     </div>
