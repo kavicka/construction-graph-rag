@@ -263,7 +263,7 @@ function PinDialog({ worker, onClose }: { worker: Worker | null; onClose: () => 
     <Dialog open={worker !== null} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Nový PIN pre {worker?.name}</DialogTitle>
+          <DialogTitle>Nový PIN: {worker?.name}</DialogTitle>
           <DialogDescription>Starý PIN prestane platiť, prípadný zámok po zlých pokusoch sa zruší.</DialogDescription>
         </DialogHeader>
         <Input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" className="label-mono w-32 tracking-[0.3em]" autoFocus />
