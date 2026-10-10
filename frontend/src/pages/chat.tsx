@@ -213,7 +213,11 @@ function VerificationNote({ verification }: { verification: Verification }) {
       >
         <HugeiconsIcon icon={allOk ? CheckmarkCircle02Icon : Alert02Icon} className="size-3.5" />
         {allOk
-          ? `všetkých ${checked.length} tvrdení má oporu v citovanom zdroji`
+          ? checked.length === 1
+            ? 'tvrdenie má oporu v citovanom zdroji'
+            : checked.length <= 4
+              ? `všetky ${checked.length} tvrdenia majú oporu v citovanom zdroji`
+              : `všetkých ${checked.length} tvrdení má oporu v citovanom zdroji`
           : `${flagged.length} z ${checked.length} tvrdení bez jasnej opory v citovanom zdroji`}
       </button>
       {open && !allOk && (
