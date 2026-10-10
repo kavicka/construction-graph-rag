@@ -30,7 +30,7 @@ body { margin: 0; font-size: 9.5pt; line-height: 1.55; color: {{ theme.foregroun
   border-bottom: 0.75pt solid {{ theme.input }}; padding-bottom: 2.5mm;
 }
 .page-header .brand { display: flex; align-items: center; gap: 2.5mm; }
-.page-header .mark { display: block; flex: none; width: 3mm; height: 3mm; background: {{ theme.primary }}; border-radius: 0.6mm; }
+.page-header .mark { display: block; flex: none; }
 .page-header .company { font-weight: 700; font-size: 10.5pt; white-space: nowrap; }
 .page-header .tagline { font-family: {{ theme.mono | safe }}; font-size: 7pt; color: {{ theme.muted_foreground }}; text-align: right; max-width: 85mm; }
 
@@ -94,7 +94,7 @@ sup.cite a { font-family: {{ theme.mono | safe }}; color: {{ theme.primary }}; t
 
 <div class="page-header">
   <div class="brand">
-    <span class="mark"></span>
+    <svg class="mark" viewBox="0 0 26 16" width="4.6mm" height="2.83mm" aria-hidden="true"><rect width="12" height="7" rx="1.5" fill="{{ theme.foreground }}"/><rect x="14" width="12" height="7" rx="1.5" fill="{{ theme.foreground }}"/><rect y="9" width="5" height="7" rx="1.5" fill="{{ theme.foreground }}"/><rect x="7" y="9" width="12" height="7" rx="1.5" fill="{{ theme.primary }}"/><rect x="21" y="9" width="5" height="7" rx="1.5" fill="{{ theme.foreground }}"/></svg>
     {% if company.name %}<span class="company">{{ company.name }}</span>{% endif %}
   </div>
   {% if company.header_text %}<div class="tagline">{{ company.header_text }}</div>{% endif %}

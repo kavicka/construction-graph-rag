@@ -1,4 +1,5 @@
 import { AppSidebar } from '@/components/app-sidebar'
+import { LogoMark } from '@/components/logo'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -119,7 +120,7 @@ function MobileBar() {
     <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-2 border-b bg-background/90 px-4 backdrop-blur-sm md:hidden">
       <SidebarTrigger className="-ml-1" />
       <Separator orientation="vertical" className="mr-1 data-[orientation=vertical]:h-4" />
-      <span className="size-3 rounded-[3px] bg-primary" />
+      <LogoMark />
       <span className="font-display text-base font-medium">rag</span>
     </header>
   )
@@ -133,7 +134,7 @@ function WorkerShell({ name, onLogout }: { name: string; onLogout: () => void })
   return (
     <div className="min-h-svh bg-background">
       <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b bg-background/90 px-4 backdrop-blur-sm">
-        <span className="size-3 rounded-[3px] bg-primary" />
+        <LogoMark />
         <WorkerAvatar name={name} />
         <span className="min-w-0 flex-1 truncate text-sm font-medium">{name}</span>
         <ThemeToggle />

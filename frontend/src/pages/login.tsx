@@ -1,3 +1,4 @@
+import { LogoMark } from '@/components/logo'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -20,7 +21,7 @@ export default function LoginPage() {
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <span className="size-3 rounded-[3px] bg-primary" /> rag
+            <LogoMark /> rag
           </CardTitle>
           <CardDescription>
             {hasWorkers ? 'Pracovník sa prihlási PIN-om, majiteľ e-mailom.' : 'Prihlás sa do knižnice dokumentov.'}

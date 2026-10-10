@@ -1,3 +1,4 @@
+import { LogoMark } from '@/components/logo'
 import { PdfDialog, type PdfTarget } from '@/components/pdf-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -95,7 +96,7 @@ function DocumentPreview({ form }: { form: CompanySettings }) {
     >
       <div className="flex items-center justify-between gap-2 border-b pb-2" style={{ borderColor: PAPER.rule }}>
         <div className="flex min-w-0 items-center gap-1.5">
-          <span className="size-[7px] shrink-0 rounded-[1.5px]" style={{ background: PAPER.primary }} />
+          <LogoMark className="h-[7px]" />
           <span className="truncate text-[10px] font-bold">{form.name || 'Názov firmy'}</span>
         </div>
         {form.header_text && (

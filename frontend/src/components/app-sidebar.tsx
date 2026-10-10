@@ -1,3 +1,4 @@
+import { LogoMark } from '@/components/logo'
 import { ThemeToggle } from '@/components/theme-toggle'
 import {
   Sidebar,
@@ -44,8 +45,9 @@ export function AppSidebar({
           <SidebarMenuItem className="flex items-center gap-1 group-data-[collapsible=icon]:flex-col">
             <SidebarMenuButton size="lg" asChild tooltip="rag">
               <NavLink to="/" onClick={() => isMobile && setOpenMobile(false)}>
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10">
-                  <span className="size-3 rounded-[3px] bg-primary" />
+                <span className="flex size-8 shrink-0 items-center justify-center">
+                  {/* SidebarMenuButton vynucuje [&_svg]:size-4, logo má iný pomer strán */}
+                  <LogoMark className="h-[18px]! w-auto!" />
                 </span>
                 <span className="font-display text-lg font-medium">rag</span>
               </NavLink>

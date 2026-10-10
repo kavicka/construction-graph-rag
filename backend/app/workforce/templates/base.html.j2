@@ -81,7 +81,7 @@ td.num, th.num { text-align: right; white-space: nowrap; }
 
 <div class="page-header">
   <div class="brand">
-    <span class="mark" style="display:block;flex:none;width:3mm;height:3mm;background:{{ theme.primary }};border-radius:0.6mm"></span>
+    <svg style="display:block;flex:none" viewBox="0 0 26 16" width="4.6mm" height="2.83mm" aria-hidden="true"><rect width="12" height="7" rx="1.5" fill="{{ theme.foreground }}"/><rect x="14" width="12" height="7" rx="1.5" fill="{{ theme.foreground }}"/><rect y="9" width="5" height="7" rx="1.5" fill="{{ theme.foreground }}"/><rect x="7" y="9" width="12" height="7" rx="1.5" fill="{{ theme.primary }}"/><rect x="21" y="9" width="5" height="7" rx="1.5" fill="{{ theme.foreground }}"/></svg>
     {% if company.name %}<span class="company">{{ company.name }}</span>{% endif %}
   </div>
   {% if company.header_text %}<div class="tagline">{{ company.header_text }}</div>{% endif %}
