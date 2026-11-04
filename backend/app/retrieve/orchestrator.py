@@ -78,26 +78,26 @@ async def strip_think(stream: AsyncIterator[str]) -> AsyncIterator[str]:
     async for tok in stream:
         if skipping:
             head += tok
-            if "</think>" in head:
-                rest = head.split("</think>", 1)[1].lstrip("\n")
-                skipping = False
-                checking = False
-                head = ""
-                if rest:
-                    yield rest
-            continue
-        if checking:
+        elif checking:
             head += tok
             stripped = head.lstrip()
-            if stripped.startswith("<think>"):
-                skipping = True
+            if not stripped.startswith("<think>"):
+                if len(stripped) >= 7 or not "<think>".startswith(stripped):
+                    checking = False
+                    buffered, head = head, ""
+                    yield buffered
                 continue
-            if len(stripped) >= 7 or not "<think>".startswith(stripped):
-                checking = False
-                buffered, head = head, ""
-                yield buffered
+            # the opening tag may arrive in the same token as the closing one
+            skipping = True
+        else:
+            yield tok
             continue
-        yield tok
+        if "</think>" in head:
+            rest = head.split("</think>", 1)[1].lstrip("\n")
+            skipping = checking = False
+            head = ""
+            if rest:
+                yield rest
     if head and not skipping:
         yield head
 

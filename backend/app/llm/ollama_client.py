@@ -127,8 +127,11 @@ def _ollama_generate(
         )
         resp.raise_for_status()
         data = resp.json()
-    except httpx.HTTPError as exc:
+    except (httpx.HTTPError, ValueError) as exc:
+        # ValueError: a 200 with a non-JSON body (e.g. an HTML page from a proxy)
         raise OllamaError(f"ollama generate zlyhal ({model}): {exc}") from exc
+    if not isinstance(data, dict):
+        raise OllamaError(f"ollama vrátil neočakávanú odpoveď: {data!r:.200}")
     response = data.get("response")
     if not isinstance(response, str):
         raise OllamaError(f"ollama vrátil neočakávanú odpoveď: {data!r:.200}")

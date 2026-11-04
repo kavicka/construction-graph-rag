@@ -470,14 +470,6 @@ async def _stripped(*parts: str) -> str:
     return "".join([t async for t in strip_think(_tokens(*parts))])
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "BUG: strip_think sets skipping=True and `continue`s without looking for </think> in the "
-        "same token, so a whole '<think>…</think>answer' arriving in ONE chunk is swallowed "
-        "and the answer is lost (orchestrator.py strip_think, checking branch)."
-    ),
-)
 @pytest.mark.anyio
 async def test_strip_think_removes_block_in_one_token() -> None:
     assert await _stripped("<think>úvaha</think>\nOdpoveď") == "Odpoveď"

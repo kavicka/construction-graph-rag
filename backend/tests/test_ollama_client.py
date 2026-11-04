@@ -228,14 +228,6 @@ def test_generate_ollama_unexpected_body_is_error(
         generate_sync("m", "p")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "BUG: a 200 response with a non-JSON body (e.g. an HTML page from a reverse proxy) "
-        "raises json.JSONDecodeError instead of OllamaError, so callers that only catch "
-        "OllamaError (chunker, router, memory) crash. _openai_generate already catches ValueError."
-    ),
-)
 def test_generate_ollama_non_json_body_is_ollama_error(
     http: Callable[[Handler], Recorder],
 ) -> None:
