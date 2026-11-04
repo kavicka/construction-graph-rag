@@ -505,7 +505,7 @@ async def owner_edit(report_id: str, body: OwnerEdit) -> ReportOut:
     return await _out(report_id)
 
 
-# --- questions about own data from mobile (PLAN.md §17) -------------------------------------
+# --- questions about own data from mobile (docs/sk/design-log.md §17) ---------------------
 # A worker may only use /api/attendance/* (WorkerGuard) — this is their only route to questions.
 # Same gate as chat + company data with Viewer=worker (only themselves); no documents.
 

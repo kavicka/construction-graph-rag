@@ -47,7 +47,7 @@ def summary(results: dict[str, Any]) -> str:
     if not parts:
         return ""
     return (
-        "> Measured on a 128-question golden set with a local 4B model: "
+        "> Measured on a 128-question golden set over a synthetic corpus, with a local 4B model: "
         + "; ".join(parts)
         + ". See [Evaluation](#evaluation)."
     )

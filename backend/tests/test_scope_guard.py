@@ -1,4 +1,4 @@
-"""Gate in front of the router — secrets, system internals, off-purpose questions (PLAN.md §17)."""
+"""Gate in front of the router — secrets, system internals, off-purpose questions (§17)."""
 
 import pytest
 

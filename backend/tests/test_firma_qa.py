@@ -1,4 +1,4 @@
-"""Company data in chat: names in cases, dates, question types, templates, access (PLAN.md §17)."""
+"""Company data in chat: names in cases, dates, question types, templates, access (§17)."""
 
 import json
 import sqlite3

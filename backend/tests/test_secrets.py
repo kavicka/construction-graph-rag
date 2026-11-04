@@ -1,4 +1,4 @@
-"""Secret redaction — patterns, labels, false alarms and the streaming case (PLAN.md §17)."""
+"""Secret redaction — patterns, labels, false alarms and the streaming case (design log §17)."""
 
 import itertools
 

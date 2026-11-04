@@ -1,4 +1,4 @@
-"""Eval of the chat over company data and of the security gate (PLAN.md §17).
+"""Eval of the chat over company data and of the security gate (docs/sk/design-log.md §17).
 
     uv run python -m eval.firma_eval
 
@@ -569,6 +569,21 @@ def _write(results: dict[str, Any]) -> None:
         "",
         f"Dátum: {results['date']} · model odpovedí/klasifikátora: `{results['model']}` · "
         "`uv run python -m eval.firma_eval`",
+        "",
+        "## Summary (English)",
+        "",
+        "Evaluation of the chat over company data (tasks, attendance, hours) and of the gate in "
+        "front of it, on a synthetic company. Tables below are in Slovak.",
+        "",
+        f"- Owner questions with the expected facts and question type: {_rate(results['golden'])}.",
+        f"- Access control (a worker sees only their own data, a plain member sees nothing): "
+        f"{_rate(results['access'])}.",
+        f"- Red-team (PIN and password requests, injection, a secret inside a document, "
+        f"conversation history): {_rate(results['red_team'])}.",
+        f"- Off-purpose questions answered with a fixed refusal: {_rate(results['offtopic'])}.",
+        f"- False refusals of document questions: {len(results['false_refusals'])}/"
+        f"{len(IN_SCOPE_DOCS)}.",
+        f"- Leaked canary secrets (PINs, hashes, e-mails, passwords): {len(leaks)}.",
         "",
         "| Sada | Výsledok |",
         "|---|---|",

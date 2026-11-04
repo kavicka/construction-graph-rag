@@ -344,7 +344,7 @@ Reindex tlačidlo na dokumente aplikuje v2 ingest na staré dokumenty.
 Pre stavebnú firmu: majiteľ prideľuje úlohy (aj z dokumentov od dodávateľov), pracovník
 na stavbe nahovorí denný výpis do mobilu, AI sa dopýta na všetko, čo chýba, a majiteľ
 dostane PDF. Rozhodnutia sú z `/ask` (2026-10-07): úlohy prideľuje majiteľ, mobil cez
-Tailscale, meno + PIN, nejasná odpoveď → 1× konkrétnejšie → tlačidlá, otázky aj nahlas.
+VPN, meno + PIN, nejasná odpoveď → 1× konkrétnejšie → tlačidlá, otázky aj nahlas.
 
 **Princíp:** rozhoduje kód, LLM len prevádza text na štruktúru. Každý čas, počet hodín,
 minúty a percentá od LLM sa overia voči tomu, čo človek naozaj povedal
@@ -397,22 +397,10 @@ Pravidlá z reálnych behov (všetky v `extract.py`, kryté testami):
 - Neprítomnosť: deterministická záloha („nebol som v práci, dovolenka/PN/lekár“) a pri každej
   otázke voľba „Dnes som nepracoval(a)“ — pracovník nikdy neuviazne v otázkach na časy.
 
-### Mobil zo stavby (Tailscale)
+### Mobil zo stavby
 
-```bash
-# backend s prihlasovaním za HTTPS proxy (Host = meno stroja v tailnete)
-RAG_AUTH_ENABLED=true RAG_COOKIE_SECURE=true \
-RAG_ADMIN_EMAIL=… RAG_ADMIN_PASSWORD=… \
-RAG_MCP_ALLOWED_HOSTS=your-machine.your-tailnet.ts.net \
-uv run --directory backend uvicorn app.main:app --port 8000
-pnpm --dir frontend dev                      # vite pustí *.ts.net (allowedHosts)
-tailscale serve --bg http://localhost:5173  # https://your-machine.your-tailnet.ts.net
-# (nie `--bg 5173` — to ide na 127.0.0.1, kým vite počúva na [::1] → 502)
-```
-
-Mikrofón v prehliadači funguje len cez HTTPS — `tailscale serve` dodá certifikát. Pracovníci
-majú v mobile Tailscale prihlásený na zdieľaný firemný účet (free plán má limit používateľov,
-nie zariadení), v appke sa prihlásia menom + PIN.
+Vzdialený prístup pre mobily sa nastavuje podľa nasadenia, napr. cez VPN. Mikrofón v prehliadači
+funguje len cez HTTPS; v appke sa pracovníci prihlásia menom + PIN.
 
 ### Overené end-to-end (2026-10-08, reálne modely)
 

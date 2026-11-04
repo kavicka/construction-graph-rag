@@ -1,44 +1,48 @@
-# rag — lokálna knižnica dokumentov so znalostným grafom
+# rag: súkromná knižnica dokumentov a pomocník pre stavebnú firmu
 
-Súkromný RAG nad firemnými dokumentmi: hľadá **súvislosti medzi dokumentmi**, odpovedá
-s citáciami, ktoré otvoria presné miesto v PDF, a na požiadanie vytvorí **branded dokument**
-(report, cenovú ponuku, memo) z tých istých zdrojov. Všetko beží lokálne.
+Slovenský prehľad pre majiteľov malých firiem. Technické detaily a merania sú v anglickom
+[README.md](README.md). Všetky firmy a osoby v projekte aj v ukážkových dátach sú vymyslené.
 
-Podrobný popis, architektúra a výsledky evalu: [README.md](README.md) (anglicky).
-Plán a odôvodnenie rozhodnutí: [PLAN.md](PLAN.md). Roadmapa: [ROADMAP.md](ROADMAP.md).
+## Čo to robí pre stavebnú alebo remeselnú firmu
 
-## Spustenie
+- **Odpovedá z vašich dokumentov.** Zmluvy, rozpočty, stavebné denníky, kontrolné protokoly,
+  návody. Spýtate sa po slovensky a dostanete odpoveď s odkazom: kliknutím sa otvorí presné
+  miesto v PDF. Ak odpoveď v dokumentoch nie je, systém to povie, nevymýšľa si.
+- **Nájde súvislosti medzi dokumentmi.** Napríklad ktorý subdodávateľ sa objavuje v zmluve,
+  zozname dodávateľov aj v záručných listoch.
+- **Pripraví dokument.** „Priprav report o kvalite betónu“ vytvorí PDF s hlavičkou a údajmi
+  vašej firmy z tých istých podkladov.
+- **Pomáha s dennou prevádzkou (modul Firma).** Pracovník na stavbe nahovorí denný výpis do
+  mobilu po slovensky, systém sa dopýta na všetko, čo chýba, a vy dostanete PDF. Úlohy
+  môžete prideliť na tabuli alebo ich nechať navrhnúť z dokumentu od dodávateľa (s citáciou
+  zdroja, vy schvaľujete). Časy, hodiny a termíny počíta program, nie jazykový model, a
+  čo model povie, sa overuje voči tomu, čo pracovník naozaj povedal.
+- **Pracovník vidí len svoje.** Prihlasuje sa menom a PIN-om a v chate sa môže pýtať len na
+  vlastné úlohy a hodiny.
 
-```bash
-docker compose up -d --build        # http://localhost:8080
-```
+## Vaše dáta zostávajú u vás
 
-alebo natívne na macOS (rýchlejšie, Apple GPU):
+Všetko beží na jednom počítači vo firme: spracovanie dokumentov, vyhľadávanie aj jazykový
+model (cez Ollama). Do cloudu sa nič neposiela, kým si to sami nenastavíte. Prihlasovanie
+je voliteľné, prístup sa dá nastaviť po jednotlivých dokumentoch a heslá či PIN-y chat
+nikdy nevypíše.
 
-```bash
-brew install ollama tesseract tesseract-lang pango
-make models
-make install                        # uv sync --extra voice (hlas) + pnpm install
-make dev                            # backend :8000, frontend :5173
-```
-
-## Čo vie
-
-- **Dokumenty:** PDF (aj skeny), DOCX, PPTX, XLSX, HTML, Markdown; upload alebo priečinok
-  `data/inbox` (nové sa zaindexujú, zmenené preindexujú, zmazané odstránia).
-- **Chat:** citácie `[n]` otvoria PDF so zvýraznenou pasážou; overenie čísel aj viet voči
-  zdrojom; doplňujúce otázky („a pokuta?“) sa prepíšu na samostatné.
-- **Režimy:** presný filter nad tabuľkami („vzorky pod 38 MPa“), deep research (mikroskop
-  pri vstupe), témy celej knižnice („aké sú hlavné témy dokumentov?“), tvorba dokumentu
-  („Priprav report o …“) — vzhľad PDF preberá tému aplikácie (system-ui + JetBrains Mono), údaje firmy sú v **Nastaveniach**.
-- **Prevádzka:** Traces (každý krok, tokeny, latencia), palec hore/dole, MCP server pre
-  Claude Desktop/Code, voliteľné prihlasovanie so skupinami a prístupom k dokumentom.
-
-## Testy a eval
+## Vyskúšať si to
 
 ```bash
-make test        # pytest + build frontendu
-make lint        # ruff, mypy --strict, oxlint
-make eval        # ablácie retrievalu → backend/eval/REPORT.md
-make eval-full   # + kvalita odpovedí (LLM judge) + prompt-injection útoky
+make demo
 ```
+
+Príkaz vytvorí ukážku z vymyslenej firmy a spustí aplikáciu; vypíše adresu a prihlasovacie
+údaje. Potrebujete [Ollama](https://ollama.com), asi 4 GB na stiahnutie modelov, macOS alebo
+Linux. Hlasové funkcie vyžadujú Mac s čipom Apple Silicon a `uv sync --extra voice`;
+bez nich funguje všetko ostatné písomne. Rozhranie aplikácie je po slovensky.
+
+Alternatívne `docker compose up -d --build` (http://localhost:8080), podrobnosti v
+[README.md](README.md#quick-start).
+
+## Spolupráca
+
+Autor: [Adam Krampl](https://krampl.dev). Kód vznikol s pomocou Claude Code. Licencia MIT,
+licencie použitých modelov sú v [THIRD_PARTY.md](THIRD_PARTY.md). Roadmapa:
+[ROADMAP.md](ROADMAP.md). Pôvodný slovenský návrhový denník: [docs/sk/design-log.md](docs/sk/design-log.md).

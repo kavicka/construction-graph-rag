@@ -11,17 +11,18 @@ Status: ✅ done · 🚧 in progress · ⬜ planned
 ## Done before this roadmap
 
 - Docling parsing with OCR (Apple Vision / Tesseract), table extraction to markdown + parquet
-- Hybrid retrieval: dense + BM25 + knowledge-graph expansion, fused with RRF
+- Hybrid retrieval: dense + BM25 + knowledge-graph expansion, fused with RRF (graph later
+  restricted to relational queries after the eval showed it hurt otherwise)
 - Query router: `lookup` (RAG), `filter` (SQL over table records), `compose` (plan + exact solver,
   agent fallback with tool calling)
-- Number self-check: every number in an answer must exist in the evidence
+- Number self-check: significant numbers in an answer that do not exist in the evidence are flagged
 - Streaming chat with `[n]` citations that open the PDF at the cited page; graph explorer
 
 ## Document generation ✅
 
-- ✅ Company settings page (shadcn): company details, header/footer text, live + PDF preview;
-  document look comes from the app theme (system-ui + JetBrains Mono, orange accent), not per company
-  (address, IČO, DIČ, IČ DPH, IBAN, contact), live preview and exact PDF preview
+- ✅ Company settings page (shadcn): company details (address, IČO, DIČ, IČ DPH, IBAN, contact),
+  header/footer text, live preview and exact PDF preview; the document look comes from the
+  app theme (system-ui + JetBrains Mono, orange accent), not per company
 - ✅ `generate` route: "Priprav report…", "Vytvor cenovú ponuku…" in chat → outline (JSON schema)
   → sections written one by one from retrieved sources → branded PDF (WeasyPrint)
 - ✅ Templates: free-form, report, offer, memo, document summary (SK + EN)
@@ -43,8 +44,8 @@ Status: ✅ done · 🚧 in progress · ⬜ planned
 2. ✅ **Reranker** — multilingual cross-encoder over the fused top candidates (flag `RAG_RERANK`)
 3. ✅ **Contextual retrieval** — an LLM writes a one-line context for every chunk at ingest;
    it is prepended for both embeddings and BM25 (Anthropic's technique)
-4. ✅ **MCP server** — `search_documents`, `find_connections`, `ask`, `get_document`,
-   `list_documents`, `query_records`; stdio and streamable HTTP
+4. ✅ **MCP server** — `list_documents`, `search_documents`, `find_connections`, `ask`,
+   `research`, `get_document`, `generate_document`; stdio and streamable HTTP
 5. ✅ **Observability** — OpenTelemetry spans with GenAI semantic conventions for every stage
    (route, retrieve, rerank, LLM calls with token counts); built-in trace viewer, optional OTLP
    export to Langfuse / Phoenix
@@ -93,3 +94,11 @@ Status: ✅ done · 🚧 in progress · ⬜ planned
   is blocked server-side until nothing is missing
 - ✅ Branded PDF per worker report and a daily company summary (auto at 19:00)
 - ✅ Model eval (`eval/workforce_eval.py`): Whisper WER, report-extraction accuracy, import recall
+- ✅ Role-gated chat over company data (admin: everything, worker: own data, member: nothing),
+  answers from templates over read-only data; scope guard and secret redaction in front of it
+  (`eval/firma_eval.py`: 0 leaked canary secrets)
+
+## Not done / ideas
+
+- ⬜ Evaluation on real (non-synthetic) documents; the current numbers are from a synthetic corpus
+- ⬜ A larger red-team set (the current sets are small: 6 injection attacks, 21 company-chat cases)

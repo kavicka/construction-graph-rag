@@ -2,6 +2,14 @@
 
 Spustené 2026-10-08 na lokálnom stroji (`uv run python -m eval.workforce_eval`).
 
+## Summary (English)
+
+Evaluation of the Firma (company) module on synthetic Slovak data: speech-to-text of construction-site sentences (Whisper, audio generated with text-to-speech), extraction of a daily report from transcripts, and task import from two documents. Tables below are in Slovak.
+
+- Speech-to-text: lowest word error rate 5.3% (`whisper-large-v3-turbo`, voice: Laura (macOS)).
+- Report extraction: best model `qwen3:30b-a3b-instruct-2507-q4_K_M` got 33/35 fields right after validation, 0 wrong values passed, 2 fields were left for the system to ask about, 2 numbers the LLM invented were dropped by validation.
+- Task import: best model `qwen3:30b-a3b-instruct-2507-q4_K_M` found 7/8 tasks, 7/8 with the correct deadline, 0 extra tasks.
+
 ## Prepis reči (Whisper, slovenčina, 10 viet stavbárov)
 
 | Model | Hlas | WER | s / veta |

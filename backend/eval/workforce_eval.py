@@ -372,6 +372,43 @@ def eval_import(models: list[str]) -> list[dict[str, Any]]:
     return rows
 
 
+def _english_summary(
+    stt: list[dict[str, Any]], ext: list[dict[str, Any]], imp: list[dict[str, Any]]
+) -> list[str]:
+    """English summary at the top of WORKFORCE.md; the tables below stay in Slovak."""
+    lines = [
+        "## Summary (English)",
+        "",
+        "Evaluation of the Firma (company) module on synthetic Slovak data: speech-to-text of "
+        "construction-site sentences (Whisper, audio generated with text-to-speech), "
+        "extraction of a daily report from transcripts, and task import from two documents. "
+        "Tables below are in Slovak.",
+        "",
+    ]
+    if stt:
+        best = min(stt, key=lambda r: r["wer"])
+        lines.append(
+            f"- Speech-to-text: lowest word error rate {best['wer']:.1%} "
+            f"(`{best['model']}`, voice: {best['voice']})."
+        )
+    if ext:
+        r = max(ext, key=lambda r: r["accuracy"])
+        lines.append(
+            f"- Report extraction: best model `{r['model']}` got {r['correct']}/{r['fields']} "
+            f"fields right after validation, {r['wrong']} wrong values passed, "
+            f"{r['missing']} fields were left for the system to ask about, "
+            f"{r['blocked']} numbers the LLM invented were dropped by validation."
+        )
+    if imp:
+        r = max(imp, key=lambda r: (r["found"], r["dates_ok"]))
+        lines.append(
+            f"- Task import: best model `{r['model']}` found {r['found']}/{r['expected']} tasks, "
+            f"{r['dates_ok']}/{r['expected']} with the correct deadline, {r['extra']} extra tasks."
+        )
+    lines.append("")
+    return lines
+
+
 def write_report(
     stt: list[dict[str, Any]], ext: list[dict[str, Any]], imp: list[dict[str, Any]]
 ) -> None:
@@ -388,6 +425,7 @@ def write_report(
         f"Spustené {date.today().isoformat()} na lokálnom stroji "
         "(`uv run python -m eval.workforce_eval`).",
         "",
+        *_english_summary(stt, ext, imp),
     ]
     if stt:
         lines += [
