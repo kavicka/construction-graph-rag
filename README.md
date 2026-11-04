@@ -137,9 +137,13 @@ hosted model instead, set `RAG_LLM_PROVIDER=openai`, `RAG_OPENAI_API_KEY` and
 ```bash
 brew install ollama tesseract tesseract-lang pango
 make models                              # pulls the Ollama models
-cd backend && uv sync && cd ../frontend && pnpm install
+make install                             # uv sync --extra voice + pnpm install
 make dev                                 # backend :8000, frontend :5173
 ```
+
+Voice (Whisper speech-to-text, Piper text-to-speech) is the optional `voice` extra: Whisper
+runs on Apple Silicon only and Piper is GPL-3.0, so neither is a core dependency. Without it
+(Linux, Docker) reports and questions are text-only. See [THIRD_PARTY.md](THIRD_PARTY.md).
 
 Upload documents in **Dokumenty** (or copy them into `data/inbox/`), ask in **Chat**, explore
 links and themes in **Graf**, watch every step in **Traces**, fill in company details for generated documents in
@@ -170,7 +174,7 @@ Environment variables with the `RAG_` prefix (or `backend/.env`):
 |---|---|---|
 | `RAG_LLM_PROVIDER` | `ollama` | `openai` = any OpenAI-compatible API |
 | `RAG_ANSWER_MODEL` / `RAG_EXTRACT_MODEL` | `qwen3:4b-instruct` / `qwen3:1.7b` | answers / extraction |
-| `RAG_RAM_PROFILE` | `auto` | `low`: e5-small + jina reranker; `high` (≥ 32 GB): bge-m3 + bge-reranker-v2-m3 |
+| `RAG_RAM_PROFILE` | `auto` | `low`: e5-small + mMiniLMv2 reranker; `high` (≥ 32 GB): bge-m3 + bge-reranker-v2-m3 |
 | `RAG_RERANK` | profile | cross-encoder rerank |
 | `RAG_CONTEXTUAL_CHUNKS` | `true` | LLM context line per chunk at ingest |
 | `RAG_GRAPH_EXPANSION` / `RAG_GRAPH_RELATIONAL_ONLY` | `true` / `true` | graph candidates, only for relational queries |
@@ -184,7 +188,7 @@ Environment variables with the `RAG_` prefix (or `backend/.env`):
 
 ```bash
 make test     # pytest (210+ tests) + frontend build
-make lint     # ruff, mypy --strict, oxlint
+make lint     # ruff check + format, mypy --strict, oxlint
 ```
 
 CI (GitHub Actions) runs lint, types, tests, the frontend build and both Docker images. The
@@ -202,3 +206,8 @@ backend/app
 backend/eval   corpus, golden set, metrics, LLM judge, injection attacks, harness
 frontend/src   chat, documents, graph + themes, traces, settings
 ```
+
+## License
+
+MIT — see [LICENSE](LICENSE). Third-party licences (models, fonts, the optional GPL voice
+extra) are listed in [THIRD_PARTY.md](THIRD_PARTY.md).

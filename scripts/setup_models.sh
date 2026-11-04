@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-command -v ollama >/dev/null 2>&1 || { echo "ollama chýba: brew install ollama"; exit 1; }
+command -v ollama >/dev/null 2>&1 || { echo "ollama is missing: brew install ollama"; exit 1; }
 
 if ! curl -sf http://localhost:11434/api/version >/dev/null 2>&1; then
-  echo "→ štartujem ollama serve"
+  echo "→ starting ollama serve"
   nohup ollama serve >/tmp/ollama.log 2>&1 &
   sleep 2
 fi
