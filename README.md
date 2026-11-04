@@ -315,7 +315,7 @@ Environment variables with the `RAG_` prefix, or a `backend/.env` file. Copy
 ## Development
 
 ```bash
-make test     # pytest (478 tests) + frontend build
+make test     # pytest (800+ tests, 93 % line coverage) + frontend build
 make lint     # ruff check + format, mypy --strict, oxlint
 ```
 
