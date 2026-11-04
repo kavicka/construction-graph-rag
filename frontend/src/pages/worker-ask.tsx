@@ -15,7 +15,6 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import { useMutation } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
-import { toast } from 'sonner'
 
 const SUGGESTIONS = [
   'Čo mám dnes robiť?',
@@ -27,18 +26,17 @@ const SUGGESTIONS = [
 
 type Item = AskAnswer & { id: number }
 
-/** Pracovník sa pýta na svoje úlohy, dochádzku a hodiny — odpovedá kód z jeho údajov. */
+/** A worker asks about their tasks, attendance and hours — code answers from their own data. */
 export default function WorkerAskPage() {
   const { stt } = useVoice()
   const [items, setItems] = useState<Item[]>([])
   const [text, setText] = useState('')
   const nextId = useRef(1)
   const endRef = useRef<HTMLDivElement>(null)
-  const onError = (e: Error) => toast.error(e.message)
   const push = (a: AskAnswer) => setItems((list) => [...list, { ...a, id: nextId.current++ }])
 
-  const viaText = useMutation({ mutationFn: askFirma, onSuccess: push, onError })
-  const viaAudio = useMutation({ mutationFn: askFirmaAudio, onSuccess: push, onError })
+  const viaText = useMutation({ mutationFn: askFirma, onSuccess: push })
+  const viaAudio = useMutation({ mutationFn: askFirmaAudio, onSuccess: push })
   const busy = viaText.isPending || viaAudio.isPending
 
   useEffect(() => {
@@ -136,7 +134,6 @@ function Exchange({ item }: { item: Item }) {
         void audio.current.play().catch(() => undefined)
       }
     },
-    onError: (e: Error) => toast.error(e.message),
   })
   useEffect(
     () => () => {

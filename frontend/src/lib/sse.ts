@@ -12,7 +12,7 @@ export interface StreamHandlers {
   onVerify?: (ok: boolean, issues: string[], sentences: SentenceCheck[]) => void
   onDocument?: (doc: GeneratedDoc) => void
   onRewrite?: (question: string) => void
-  /** finálna odpoveď sa líši od streamu (redakcia tajomstiev, očista) — nahradí text */
+  /** the final answer differs from the stream (secret redaction, clean-up) — replaces the text */
   onReplace?: (text: string) => void
 }
 
@@ -96,7 +96,7 @@ export async function streamChat(
       try {
         dispatch(JSON.parse(dataLine.slice(6)) as StreamEvent)
       } catch {
-        // poškodený frame preskoč — stream pokračuje
+        // skip a corrupted frame — the stream continues
       }
     }
   }

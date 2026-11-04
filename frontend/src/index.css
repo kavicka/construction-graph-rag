@@ -5,7 +5,7 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Branding podľa 02ui.com: teplé neutrály, oranžový akcent, plochý vzhľad (bez tieňov a gradientov). */
+/* Branding after 02ui.com: warm neutrals, one orange accent, flat look (no shadows or gradients). */
 
 @theme inline {
     --font-sans: system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
@@ -28,6 +28,14 @@
     --color-input: var(--input);
     --color-border: var(--border);
     --color-destructive: var(--destructive);
+    /* status inks for text and tinted chips — AA on background and on their own 10 % tint */
+    --color-success: var(--success);
+    --color-warning: var(--warning);
+    --color-info: var(--info);
+    --color-danger: var(--danger);
+    /* 11px — metadata, mono labels, dense counters */
+    --text-2xs: 0.6875rem;
+    --text-2xs--line-height: 1rem;
     --color-accent-foreground: var(--accent-foreground);
     --color-accent: var(--accent);
     --color-muted-foreground: var(--muted-foreground);
@@ -51,6 +59,8 @@
     --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* `.light` re-scopes the light tokens to a subtree (the always-light PDF preview in dark mode). */
+.light,
 :root {
     color-scheme: light;
     --background: #f7f7f4;
@@ -64,10 +74,14 @@
     --secondary: #e6e5e0;
     --secondary-foreground: #26251d;
     --muted: #efeee8;
-    --muted-foreground: #8c8b85;
+    --muted-foreground: #686761;
     --accent: #e6e5e0;
     --accent-foreground: #26251d;
     --destructive: #cf2d56;
+    --success: #1d7350;
+    --warning: #965600;
+    --info: #2b5c9e;
+    --danger: #b8264b;
     --border: #edece8;
     --input: #cfcdc4;
     --ring: #f54e00;
@@ -104,6 +118,10 @@
     --accent: #242219;
     --accent-foreground: #f2f0ea;
     --destructive: #dd5470;
+    --success: #47b386;
+    --warning: #e0a83a;
+    --info: #7fa7e6;
+    --danger: #ec7d93;
     --border: #ffffff12;
     --input: #ffffff21;
     --ring: #f54e00;
@@ -122,7 +140,7 @@
     --sidebar-ring: #f54e00;
 }
 
-/* Mono štítky (dátumy, metadáta, počty) a display nadpisy — tenké, s tesným prestrkaním. */
+/* Mono labels (dates, metadata, counts) and display headings — light weight, tight tracking. */
 @utility label-mono {
     font-family: var(--font-mono);
     font-size: 13px;
@@ -151,10 +169,22 @@
     }
   html {
     @apply font-sans;
-    /* nadpisy stránok začínajú na rovnakom mieste so scrollbarom aj bez neho */
+    /* page headings start at the same x with or without a scrollbar */
     scrollbar-gutter: stable;
     }
   ::selection {
     @apply bg-primary/25;
     }
+}
+
+/* Reduced motion: dialogs, sheets and toasts (tw-animate) appear without movement, transitions are instant. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

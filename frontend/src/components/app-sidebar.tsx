@@ -46,13 +46,13 @@ export function AppSidebar({
             <SidebarMenuButton size="lg" asChild tooltip="rag">
               <NavLink to="/" onClick={() => isMobile && setOpenMobile(false)}>
                 <span className="flex size-8 shrink-0 items-center justify-center">
-                  {/* SidebarMenuButton vynucuje [&_svg]:size-4, logo má iný pomer strán */}
+                  {/* SidebarMenuButton forces [&_svg]:size-4; the logo has a different aspect ratio */}
                   <LogoMark className="h-[18px]! w-auto!" />
                 </span>
                 <span className="font-display text-lg font-medium">rag</span>
               </NavLink>
             </SidebarMenuButton>
-            {/* na mobile sidebar zatvára sheet, prepínač je v lište */}
+            {/* on phones the sidebar closes the sheet; the toggle lives in the mobile bar */}
             {!isMobile && <SidebarTrigger className="shrink-0 text-muted-foreground" />}
           </SidebarMenuItem>
         </SidebarMenu>
@@ -61,7 +61,7 @@ export function AppSidebar({
       <SidebarContent>
         {groups.map((group) => (
           <SidebarGroup key={group.label}>
-            <SidebarGroupLabel className="label-mono text-[11px] uppercase tracking-wider">
+            <SidebarGroupLabel className="label-mono text-2xs uppercase tracking-wider">
               {group.label}
             </SidebarGroupLabel>
             <SidebarGroupContent>
@@ -95,13 +95,13 @@ export function AppSidebar({
                 <WorkerAvatar name={user.name} size="md" />
                 <div className="min-w-0 leading-tight">
                   <p className="truncate text-sm font-medium">{user.name}</p>
-                  <p className="label-mono truncate text-[11px] text-muted-foreground">
+                  <p className="label-mono truncate text-2xs text-muted-foreground">
                     {user.email}
                   </p>
                 </div>
               </div>
             ) : (
-              <span className="label-mono flex-1 px-2 text-[11px] text-muted-foreground group-data-[collapsible=icon]:hidden">
+              <span className="label-mono flex-1 px-2 text-2xs text-muted-foreground group-data-[collapsible=icon]:hidden">
                 lokálny režim
               </span>
             )}

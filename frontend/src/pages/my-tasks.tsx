@@ -1,5 +1,5 @@
 import { Skeleton } from '@/components/ui/skeleton'
-import { EmptyState } from '@/components/wf/bits'
+import { EmptyState, ErrorState } from '@/components/wf/bits'
 import { Chip } from '@/components/wf/chip'
 import { variantFor } from '@/lib/chip'
 import { fetchMyBoard, formatShort, isoToday, type Task } from '@/lib/workforce'
@@ -14,10 +14,11 @@ const COLUMNS: { key: 'todo' | 'in_progress' | 'done'; title: string }[] = [
   { key: 'done', title: 'Hotové' },
 ]
 
-/** Pracovníkova nástenka v štýle Trello — len na čítanie, stav mení denný výpis. */
+/** The worker's Trello-style board — read-only, status changes come from the daily report. */
 export default function MyTasksPage() {
-  const { data, isPending } = useQuery({ queryKey: ['my-board'], queryFn: fetchMyBoard })
+  const { data, isPending, error, refetch } = useQuery({ queryKey: ['my-board'], queryFn: fetchMyBoard })
   if (isPending) return <Skeleton className="h-64" />
+  if (error) return <ErrorState error={error} title="Úlohy sa nepodarilo načítať" onRetry={() => void refetch()} />
   if (!data?.tasks.length)
     return (
       <EmptyState
@@ -33,7 +34,7 @@ export default function MyTasksPage() {
         Stav úloh sa mení podľa tvojho denného výpisu. Úlohy označené <span className="text-primary">dnes</span> sa ťa AI
         opýta, ak ich vo výpise nespomenieš.
       </p>
-      {/* na mobile sa stĺpce posúvajú do strany so zachytením ako v Trello */}
+      {/* on phones the columns scroll sideways with snapping, like Trello */}
       <div className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-3">
         {COLUMNS.map((col) => {
           const tasks = data.tasks.filter((t) => t.status === col.key)
@@ -77,7 +78,7 @@ function MyCard({ task, today }: { task: Task; today: boolean }) {
           </Chip>
         )}
       </div>
-      <p className="label-mono text-[11px] text-muted-foreground">
+      <p className="label-mono text-2xs text-muted-foreground">
         {task.date_from || task.date_to ? `${formatShort(task.date_from)} – ${formatShort(task.date_to)}` : 'bez termínu'}
       </p>
       {task.status === 'in_progress' && (
@@ -85,7 +86,7 @@ function MyCard({ task, today }: { task: Task; today: boolean }) {
           <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
             <div className="h-full rounded-full bg-primary/70" style={{ width: `${task.progress}%` }} />
           </div>
-          <span className="label-mono text-[11px] tabular-nums text-muted-foreground">{task.progress} %</span>
+          <span className="label-mono text-2xs tabular-nums text-muted-foreground">{task.progress} %</span>
         </div>
       )}
     </article>

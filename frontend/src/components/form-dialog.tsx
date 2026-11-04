@@ -17,8 +17,8 @@ const SIZE = {
 } as const
 
 /**
- * Jednotný dialóg pre pridávanie a úpravy (rovnaký ako dialóg úlohy): hlavička, formulár,
- * pätička so „Zmazať“ vľavo a Zrušiť/Uložiť vpravo. Obsah sa posúva, keď je dlhší než okno.
+ * One dialog for adding and editing (same as the task dialog): header, form, footer with
+ * Delete on the left and Cancel/Save on the right. The body scrolls when taller than the window.
  */
 export function FormDialog({
   open,
@@ -43,7 +43,7 @@ export function FormDialog({
   submitLabel?: string
   submitting?: boolean
   submitDisabled?: boolean
-  /** vľavo v pätičke — typicky tlačidlo Zmazať */
+  /** left side of the footer — typically the Delete button */
   footerStart?: React.ReactNode
   hideSubmit?: boolean
   children: React.ReactNode
@@ -51,7 +51,7 @@ export function FormDialog({
   const formId = useId()
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      {/* minmax(0,1fr): dlhý obsah (select, popis) nesmie natiahnuť stĺpec nad šírku dialógu */}
+      {/* minmax(0,1fr): long content (select, description) must not stretch the column past the dialog */}
       <DialogContent className={cn('max-h-[90svh] grid-cols-[minmax(0,1fr)] overflow-y-auto', SIZE[size])}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>

@@ -6,12 +6,13 @@ import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PinLogin } from '@/components/wf/pin-login'
 import { login } from '@/lib/api'
+import { errorMessage } from '@/lib/errors'
 import { fetchLoginWorkers } from '@/lib/workforce'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 
 export default function LoginPage() {
-  // pracovníci (PIN) sú na mobile prví — majiteľ sa prihlasuje e-mailom
+  // workers (PIN) come first on phones — the owner signs in with e-mail
   const workers = useQuery({ queryKey: ['login-workers'], queryFn: fetchLoginWorkers })
   if (workers.isPending) return null
   const hasWorkers = (workers.data?.length ?? 0) > 0
@@ -60,8 +61,9 @@ function EmailLogin() {
   const [password, setPassword] = useState('')
   const submit = useMutation({
     mutationFn: () => login(email, password),
-    // reset (nie clear) — aktívne queries sa načítajú znova už so session cookie
+    // reset (not clear) — active queries refetch with the new session cookie
     onSuccess: () => void queryClient.resetQueries(),
+    meta: { silentError: true },
   })
 
   return (
@@ -96,7 +98,7 @@ function EmailLogin() {
       </div>
       {submit.isError && (
         <p className="text-sm text-destructive" role="alert">
-          {submit.error.message}
+          {errorMessage(submit.error)}
         </p>
       )}
       <Button type="submit" className="w-full" disabled={submit.isPending}>

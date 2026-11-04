@@ -15,33 +15,45 @@ import { cn } from '@/lib/utils'
 import { Logout03Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router'
-import AttendancePage from './pages/attendance'
-import ChatPage from './pages/chat'
-import DocumentDetailPage from './pages/document-detail'
-import DocumentsPage from './pages/documents'
-import GraphPage from './pages/graph'
 import LoginPage from './pages/login'
-import MyTasksPage from './pages/my-tasks'
-import ReportsPage from './pages/reports'
-import SettingsPage from './pages/settings'
-import StatusPage from './pages/status'
-import TaskImportPage from './pages/task-import'
-import TaskImportDetailPage from './pages/task-import-detail'
-import TasksBoardPage from './pages/tasks-board'
-import TeamPage from './pages/team'
-import TracesPage from './pages/traces'
-import UsersPage from './pages/users'
-import WorkerAskPage from './pages/worker-ask'
 
-/** skupina pracovníkov prihlásených PIN-om — vidia len dochádzku */
+// routes load on demand — the graph (force-graph), PDF viewer and markdown stay out of the first chunk
+const AttendancePage = lazy(() => import('./pages/attendance'))
+const ChatPage = lazy(() => import('./pages/chat'))
+const DocumentDetailPage = lazy(() => import('./pages/document-detail'))
+const DocumentsPage = lazy(() => import('./pages/documents'))
+const GraphPage = lazy(() => import('./pages/graph'))
+const MyTasksPage = lazy(() => import('./pages/my-tasks'))
+const ReportsPage = lazy(() => import('./pages/reports'))
+const SettingsPage = lazy(() => import('./pages/settings'))
+const StatusPage = lazy(() => import('./pages/status'))
+const TaskImportPage = lazy(() => import('./pages/task-import'))
+const TaskImportDetailPage = lazy(() => import('./pages/task-import-detail'))
+const TasksBoardPage = lazy(() => import('./pages/tasks-board'))
+const TeamPage = lazy(() => import('./pages/team'))
+const TracesPage = lazy(() => import('./pages/traces'))
+const UsersPage = lazy(() => import('./pages/users'))
+const WorkerAskPage = lazy(() => import('./pages/worker-ask'))
+
+/** Placeholder while a route chunk loads: the page-header rhythm, so nothing jumps. */
+function PageFallback() {
+  return (
+    <div className="space-y-6" aria-busy="true" aria-label="Načítavam stránku">
+      <Skeleton className="h-8 w-48" />
+      <Skeleton className="h-64 w-full" />
+    </div>
+  )
+}
+
+/** group of workers signed in with a PIN — they only see attendance */
 const WORKER_GROUP = 'pracovnici'
 
 export default function App() {
   const queryClient = useQueryClient()
   const { data: me, isPending } = useQuery({ queryKey: ['me'], queryFn: fetchMe })
-  // nástenka úloh (ako Trello) využíva celú šírku; ostatné stránky majú čitateľný max-w-6xl
+  // the task board (Trello-like) uses the full width; other pages keep a readable max-w-6xl
   const fullWidth = useLocation().pathname.replace(/\/$/, '') === '/tasks'
 
   useEffect(() => {
@@ -74,7 +86,7 @@ export default function App() {
             user={me?.user ? { name: me.user.name, email: me.user.email } : null}
             onLogout={doLogout}
           />
-          {/* min-w-0: široká nástenka sa posúva vo vnútri, stránka nepretečie */}
+          {/* min-w-0: the wide board scrolls inside, the page never overflows */}
           <SidebarInset className="min-w-0">
             <MobileBar />
             <main
@@ -83,28 +95,30 @@ export default function App() {
                 !fullWidth && 'max-w-6xl',
               )}
             >
-              <Routes>
-                <Route path="/" element={<Navigate to={isAdmin ? '/reports' : '/status'} replace />} />
-                <Route path="/status" element={<StatusPage />} />
-                <Route path="/chat" element={<ChatPage />} />
-                <Route path="/documents" element={<DocumentsPage />} />
-                <Route path="/documents/:id" element={<DocumentDetailPage />} />
-                <Route path="/graph" element={<GraphPage />} />
-                <Route path="/traces" element={<TracesPage />} />
-                <Route path="/settings" element={<SettingsPage />} />
-                {isAdmin && (
-                  <>
-                    <Route path="/reports" element={<ReportsPage />} />
-                    <Route path="/tasks" element={<TasksBoardPage />} />
-                    <Route path="/tasks/import" element={<TaskImportPage />} />
-                    <Route path="/tasks/import/:id" element={<TaskImportDetailPage />} />
-                    <Route path="/attendance" element={<AttendancePage isAdmin />} />
-                    <Route path="/team" element={<TeamPage />} />
-                    <Route path="/users" element={<UsersPage />} />
-                  </>
-                )}
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
+              <Suspense fallback={<PageFallback />}>
+                <Routes>
+                  <Route path="/" element={<Navigate to={isAdmin ? '/reports' : '/status'} replace />} />
+                  <Route path="/status" element={<StatusPage />} />
+                  <Route path="/chat" element={<ChatPage />} />
+                  <Route path="/documents" element={<DocumentsPage />} />
+                  <Route path="/documents/:id" element={<DocumentDetailPage />} />
+                  <Route path="/graph" element={<GraphPage />} />
+                  <Route path="/traces" element={<TracesPage />} />
+                  <Route path="/settings" element={<SettingsPage />} />
+                  {isAdmin && (
+                    <>
+                      <Route path="/reports" element={<ReportsPage />} />
+                      <Route path="/tasks" element={<TasksBoardPage />} />
+                      <Route path="/tasks/import" element={<TaskImportPage />} />
+                      <Route path="/tasks/import/:id" element={<TaskImportDetailPage />} />
+                      <Route path="/attendance" element={<AttendancePage isAdmin />} />
+                      <Route path="/team" element={<TeamPage />} />
+                      <Route path="/users" element={<UsersPage />} />
+                    </>
+                  )}
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+              </Suspense>
             </main>
           </SidebarInset>
         </SidebarProvider>
@@ -114,7 +128,7 @@ export default function App() {
   )
 }
 
-/** Lišta len na mobile, kde je sidebar schovaný. Názov stránky nesie nadpis stránky, nie lišta. */
+/** Bar on phones only, where the sidebar is hidden. The page title lives in the page heading, not here. */
 function MobileBar() {
   return (
     <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-2 border-b bg-background/90 px-4 backdrop-blur-sm md:hidden">
@@ -128,7 +142,7 @@ function MobileBar() {
 
 type WorkerTab = 'report' | 'tasks' | 'ask'
 
-/** Pracovník na mobile: bez sidebaru — denný výpis, nástenka úloh a otázky na vlastné údaje. */
+/** Worker on a phone: no sidebar — daily report, task board and questions about their own data. */
 function WorkerShell({ name, onLogout }: { name: string; onLogout: () => void }) {
   const [tab, setTab] = useState<WorkerTab>('report')
   return (
@@ -157,9 +171,11 @@ function WorkerShell({ name, onLogout }: { name: string; onLogout: () => void })
             </TabsTrigger>
           </TabsList>
         </Tabs>
-        {tab === 'report' && <AttendancePage isAdmin={false} />}
-        {tab === 'tasks' && <MyTasksPage />}
-        {tab === 'ask' && <WorkerAskPage />}
+        <Suspense fallback={<Skeleton className="h-64" />}>
+          {tab === 'report' && <AttendancePage isAdmin={false} />}
+          {tab === 'tasks' && <MyTasksPage />}
+          {tab === 'ask' && <WorkerAskPage />}
+        </Suspense>
       </main>
     </div>
   )

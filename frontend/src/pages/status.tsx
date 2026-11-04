@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { PageHeader } from '@/components/wf/bits'
+import { ErrorState, PageHeader } from '@/components/wf/bits'
+import { Chip } from '@/components/wf/chip'
 import { fetchHealth } from '@/lib/api'
 import { useQuery } from '@tanstack/react-query'
 import { HugeiconsIcon } from '@hugeicons/react'
@@ -17,18 +18,18 @@ function StatusRow({ label, value }: { label: string; value: React.ReactNode }) 
 
 function BoolBadge({ ok, okText, failText }: { ok: boolean; okText: string; failText: string }) {
   return ok ? (
-    <Badge variant="secondary" className="gap-1 text-emerald-600 dark:text-emerald-400">
-      <HugeiconsIcon icon={CheckmarkCircle02Icon} className="size-3.5" /> {okText}
-    </Badge>
+    <Chip variant="success" icon={<HugeiconsIcon icon={CheckmarkCircle02Icon} className="size-3.5" />}>
+      {okText}
+    </Chip>
   ) : (
-    <Badge variant="secondary" className="gap-1 text-destructive">
-      <HugeiconsIcon icon={CancelCircleIcon} className="size-3.5" /> {failText}
-    </Badge>
+    <Chip variant="danger" icon={<HugeiconsIcon icon={CancelCircleIcon} className="size-3.5" />}>
+      {failText}
+    </Chip>
   )
 }
 
 export default function StatusPage() {
-  const { data, isPending, isError } = useQuery({
+  const { data, isPending, error, refetch } = useQuery({
     queryKey: ['health'],
     queryFn: fetchHealth,
     refetchInterval: 5000,
@@ -36,12 +37,14 @@ export default function StatusPage() {
 
   return (
     <div className="max-w-xl space-y-6">
-      <PageHeader title="Stav systému" />
+      <PageHeader title="Stav systému" description="Lokálne modely, OCR a generovanie PDF. Obnovuje sa každých 5 sekúnd." />
       {isPending && <Skeleton className="h-40 w-full" />}
-      {isError && (
-        <p className="text-sm text-destructive">
-          Backend je nedostupný. Spusti <code>make backend</code>.
-        </p>
+      {error && (
+        <ErrorState
+          error={error}
+          title="Backend je nedostupný"
+          onRetry={() => void refetch()}
+        />
       )}
       {data && (
         <div className="divide-y rounded-lg border px-4">
@@ -75,7 +78,7 @@ export default function StatusPage() {
               <BoolBadge ok={data.pdf_engine} okText="WeasyPrint" failText="chýba pango" />
             }
           />
-    </div>
+        </div>
       )}
     </div>
   )

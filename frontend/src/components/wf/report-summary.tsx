@@ -22,13 +22,13 @@ export function EntryChip({ entry }: { entry: TaskEntry | undefined }) {
 function Stat({ label, value, missing }: { label: string; value: string; missing?: boolean }) {
   return (
     <div className="rounded-md bg-muted/60 px-3 py-2">
-      <p className="label-mono text-[11px] text-muted-foreground uppercase">{label}</p>
+      <p className="label-mono text-2xs text-muted-foreground uppercase">{label}</p>
       <p className={cn('text-lg tabular-nums', missing && 'text-muted-foreground')}>{value}</p>
     </div>
   )
 }
 
-/** Čo AI z výpisu pochopila — pracovník si to skontroluje pred odovzdaním. */
+/** What the AI understood from the report — the worker checks it before submitting. */
 export function ReportSummary({ report }: { report: Report }) {
   const [showTranscript, setShowTranscript] = useState(false)
   const d = report.data
@@ -42,7 +42,7 @@ export function ReportSummary({ report }: { report: Report }) {
   }
   return (
     <div className="@container space-y-4 rounded-lg border p-4">
-      {/* container query — v úzkom paneli (sheet) 2 stĺpce, na stránke 4 */}
+      {/* container query — 2 columns in a narrow panel (sheet), 4 on the page */}
       <div className="grid grid-cols-2 gap-2 @lg:grid-cols-4">
         <Stat label="Začiatok" value={d.arrival ?? '—'} missing={!d.arrival} />
         <Stat label="Koniec" value={d.departure ?? '—'} missing={!d.departure} />
@@ -60,7 +60,7 @@ export function ReportSummary({ report }: { report: Report }) {
               <li key={t.id} className="flex items-start gap-3 py-2">
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium">{t.title}</p>
-                  <p className="label-mono text-[11px] text-muted-foreground">{t.site_name}</p>
+                  <p className="label-mono text-2xs text-muted-foreground">{t.site_name}</p>
                   {entry?.note && <p className="mt-0.5 text-xs text-muted-foreground">{entry.note}</p>}
                 </div>
                 <span className="label-mono pt-0.5 text-xs tabular-nums text-muted-foreground">
@@ -88,7 +88,7 @@ export function ReportSummary({ report }: { report: Report }) {
       {d.problems.length > 0 && (
         <div className="space-y-1">
           {d.problems.map((p, i) => (
-            <p key={i} className="flex items-start gap-2 rounded-md bg-rose-500/10 px-3 py-2 text-sm text-rose-700 dark:text-rose-300">
+            <p key={i} className="flex items-start gap-2 rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">
               <HugeiconsIcon icon={Alert02Icon} className="mt-0.5 size-4 shrink-0" />
               {p}
             </p>

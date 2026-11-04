@@ -31,7 +31,6 @@ function AccessForm({
       void queryClient.invalidateQueries({ queryKey: ['documents'] })
       onClose()
     },
-    onError: (e: Error) => toast.error(e.message),
   })
   const known = [...new Set((users ?? []).flatMap((u) => u.groups))].sort()
   return (
@@ -53,7 +52,7 @@ function AccessForm({
   )
 }
 
-/** Kto dokument vidí — skupiny používateľov; „*“ = všetci. Len pri zapnutom prihlasovaní. */
+/** Who can see a document — user groups; "*" = everyone. Only with login enabled. */
 export function AccessEditor({ docId, access }: { docId: string; access: string[] }) {
   const { data: me } = useQuery({ queryKey: ['me'], queryFn: fetchMe })
   const [open, setOpen] = useState(false)
@@ -74,7 +73,7 @@ export function AccessEditor({ docId, access }: { docId: string; access: string[
           <Button variant="ghost" size="sm" className="h-7 gap-1.5 px-2" onClick={() => setOpen(true)}>
             <HugeiconsIcon icon={Edit02Icon} className="size-3.5" /> Upraviť
           </Button>
-          {/* key = prístup — po uložení sa formulár načíta s novými hodnotami */}
+          {/* key = access — after saving, the form reloads with the new values */}
           <AccessForm
             key={`${open}-${access.join(',')}`}
             docId={docId}

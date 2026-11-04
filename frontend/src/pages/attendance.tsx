@@ -4,7 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { EmptyState, PageHeader } from '@/components/wf/bits'
+import { EmptyState, ErrorState, PageHeader } from '@/components/wf/bits'
 import { Chip } from '@/components/wf/chip'
 import { AbsenceChoice, QuestionChoices } from '@/components/wf/question-choices'
 import { RecordButton } from '@/components/wf/record-button'
@@ -58,19 +58,19 @@ const STATUS_CHIP: Record<Report['status'], { label: string; variant: 'neutral' 
   submitted: { label: 'Odovzdané', variant: 'success' },
 }
 
-/** Dochádzka: pracovník (PIN) za seba; majiteľ vyberie pracovníka a deň. */
+/** Attendance: a worker (PIN) reports for themselves; the owner picks a worker and a day. */
 export default function AttendancePage({ isAdmin }: { isAdmin: boolean }) {
   const [picked, setWorkerId] = useState<string>('')
   const [day, setDay] = useState(isoToday())
   const workers = useQuery({ queryKey: ['workers'], queryFn: fetchWorkers, enabled: isAdmin })
   const activeWorkers = workers.data?.filter((w) => w.active) ?? []
-  // bez výberu → prvý aktívny pracovník (odvodené pri renderi, nie efektom)
+  // no selection → the first active worker (derived during render, not in an effect)
   const workerId = picked || activeWorkers[0]?.id || ''
 
   const enabled = !isAdmin || !!workerId
   return (
     <div className="max-w-2xl space-y-6">
-      {/* pracovník má nadpis v tabe „Denný výpis“, druhý by ho len zopakoval */}
+      {/* the worker already has the heading in the "Denný výpis" tab; a second one would repeat it */}
       {isAdmin && (
         <PageHeader
           title="Dochádzka"
@@ -114,23 +114,20 @@ export default function AttendancePage({ isAdmin }: { isAdmin: boolean }) {
 function ReportView({ workerId, day }: { workerId?: string; day?: string }) {
   const queryClient = useQueryClient()
   const key = ['attendance', workerId ?? 'me', day ?? 'today']
-  const { data: report, isPending, error } = useQuery({
+  const { data: report, isPending, error, refetch } = useQuery({
     queryKey: key,
     queryFn: () => fetchTodayReport(workerId, day),
     refetchInterval: (q) => (q.state.data?.status === 'processing' ? 1000 : false),
   })
   const setReport = (r: Report) => queryClient.setQueryData(key, r)
-  const onError = (e: Error) => toast.error(e.message)
 
   const sendAudio = useMutation({
     mutationFn: (blob: Blob) => sendReportAudio(report!.id, blob),
     onSuccess: setReport,
-    onError,
   })
   const sendText = useMutation({
     mutationFn: (text: string) => sendReportText(report!.id, text),
     onSuccess: setReport,
-    onError,
   })
   const submit = useMutation({
     mutationFn: () => submitReport(report!.id),
@@ -138,11 +135,10 @@ function ReportView({ workerId, day }: { workerId?: string; day?: string }) {
       setReport(r)
       toast.success('Výpis odovzdaný, majiteľ dostal PDF')
     },
-    onError,
   })
 
   if (isPending) return <Skeleton className="h-64" />
-  if (error) return <p className="text-sm text-destructive">{error.message}</p>
+  if (error) return <ErrorState error={error} title="Výpis sa nepodarilo načítať" onRetry={() => void refetch()} />
 
   const busy = report.status === 'processing' || sendAudio.isPending || sendText.isPending
   const open = report.questions.filter((q) => q.status === 'open')
@@ -160,7 +156,7 @@ function ReportView({ workerId, day }: { workerId?: string; day?: string }) {
       {report.status === 'draft' && <TodayTasks report={report} own={!workerId} />}
 
       {report.error && report.status !== 'processing' && (
-        <p className="rounded-md bg-rose-500/10 px-3 py-2 text-sm text-rose-700 dark:text-rose-300" role="alert">
+        <p className="rounded-md bg-danger/10 px-3 py-2 text-sm text-danger" role="alert">
           {report.error}
         </p>
       )}
@@ -205,8 +201,8 @@ function ReportView({ workerId, day }: { workerId?: string; day?: string }) {
       )}
 
       {report.status === 'submitted' ? (
-        <div className="flex flex-col items-center gap-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-4 py-6 text-center">
-          <span className="flex size-10 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600">
+        <div className="flex flex-col items-center gap-3 rounded-lg border border-success/30 bg-success/5 px-4 py-6 text-center">
+          <span className="flex size-10 items-center justify-center rounded-full bg-success/15 text-success">
             <HugeiconsIcon icon={Tick02Icon} className="size-5" />
           </span>
           <p className="text-sm font-medium">Výpis je odovzdaný</p>
@@ -223,7 +219,7 @@ function ReportView({ workerId, day }: { workerId?: string; day?: string }) {
         report.status !== 'draft' && (
           <Tooltip>
             <TooltipTrigger asChild>
-              {/* span — tooltip musí fungovať aj nad neaktívnym tlačidlom */}
+              {/* span — the tooltip must work over a disabled button too */}
               <span className="block">
                 <Button
                   className="h-12 w-full text-base"
@@ -260,7 +256,7 @@ function TodayTasks({ report, own }: { report: Report; own: boolean }) {
           <li key={t.id} className="flex items-center gap-3 px-3 py-2.5">
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium">{t.title}</p>
-              <p className="label-mono text-[11px] text-muted-foreground">{t.site_name}</p>
+              <p className="label-mono text-2xs text-muted-foreground">{t.site_name}</p>
             </div>
             {t.status === 'in_progress' && <Chip variant="info">{t.progress} %</Chip>}
           </li>
@@ -351,17 +347,15 @@ function QuestionCard({
   const [text, setText] = useState('')
   const [absence, setAbsence] = useState(false)
   const audio = useRef<HTMLAudioElement>(null)
-  const onError = (e: Error) => toast.error(e.message)
-  const viaText = useMutation({ mutationFn: (t: string) => answerText(report.id, question.id, t), onSuccess: onUpdate, onError })
-  const viaAudio = useMutation({ mutationFn: (b: Blob) => answerAudio(report.id, question.id, b), onSuccess: onUpdate, onError })
+  const viaText = useMutation({ mutationFn: (t: string) => answerText(report.id, question.id, t), onSuccess: onUpdate })
+  const viaAudio = useMutation({ mutationFn: (b: Blob) => answerAudio(report.id, question.id, b), onSuccess: onUpdate })
   const viaChoice = useMutation({
     mutationFn: (c: ChoiceAnswer) => answerChoice(report.id, question.id, c),
     onSuccess: onUpdate,
-    onError,
   })
   const busy = viaText.isPending || viaAudio.isPending || viaChoice.isPending
 
-  // otázka sa prečíta nahlas hneď ako príde (prehliadač to dovolí po predošlom ťuknutí)
+  // the question is read aloud as soon as it arrives (the browser allows it after the previous tap)
   useEffect(() => {
     if (muted || !report.tts || !audio.current) return
     audio.current.src = questionSpeechUrl(question.id)
@@ -374,7 +368,7 @@ function QuestionCard({
     try {
       localStorage.setItem(MUTE_KEY, next ? '1' : '0')
     } catch {
-      // bez úložiska len pre túto stránku
+      // without storage, only for this page
     }
     if (next) audio.current?.pause()
   }

@@ -2,7 +2,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
-import { EmptyState, PageHeader } from '@/components/wf/bits'
+import { EmptyState, ErrorState, PageHeader } from '@/components/wf/bits'
 import { DOCUMENT_ACCEPT, fetchDocuments, uploadDocuments, type DocumentOut } from '@/lib/api'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { HugeiconsIcon } from '@hugeicons/react'
@@ -13,10 +13,10 @@ import { toast } from 'sonner'
 
 const STATUS_LABEL: Record<DocumentOut['status'], string> = {
   queued: 'v rade',
-  parsing: 'parsujem',
+  parsing: 'čítam',
   tables: 'tabuľky',
-  context: 'kontext chunkov',
-  embedding: 'embedujem',
+  context: 'kontext úsekov',
+  embedding: 'indexujem',
   graph: 'graf',
   done: 'hotovo',
   error: 'chyba',
@@ -42,7 +42,7 @@ function DocumentRow({ doc }: { doc: DocumentOut }) {
           <p className="truncate text-sm font-medium transition-colors group-hover:text-primary">
             {doc.filename}
           </p>
-          <p className="label-mono text-[11px] text-muted-foreground">
+          <p className="label-mono text-2xs text-muted-foreground">
             {doc.format.toUpperCase()}
             {doc.pages_count != null && ` · ${pagesLabel(doc.pages_count)}`}
             {doc.source_path && ' · inbox'}
@@ -60,7 +60,7 @@ export default function DocumentsPage() {
   const inputRef = useRef<HTMLInputElement>(null)
   const queryClient = useQueryClient()
 
-  const { data: docs, isPending } = useQuery({
+  const { data: docs, isPending, error, refetch } = useQuery({
     queryKey: ['documents'],
     queryFn: fetchDocuments,
     refetchInterval: (query) =>
@@ -73,7 +73,7 @@ export default function DocumentsPage() {
       toast.success(`Nahraté: ${created.length}, indexujem`)
       void queryClient.invalidateQueries({ queryKey: ['documents'] })
     },
-    onError: (e) => toast.error(`Upload zlyhal: ${e.message}`),
+    meta: { errorTitle: 'Nahrávanie zlyhalo' },
   })
   const pick = () => inputRef.current?.click()
 
@@ -81,6 +81,7 @@ export default function DocumentsPage() {
     <div className="max-w-3xl space-y-6">
       <PageHeader
         title="Dokumenty"
+        description="PDF, Office, HTML a Markdown. Každý dokument sa rozloží na úseky, tabuľky a uzly grafu."
         actions={
           <Button onClick={pick} disabled={upload.isPending} className="gap-2">
             <HugeiconsIcon icon={Upload04Icon} className="size-4" />
@@ -102,6 +103,7 @@ export default function DocumentsPage() {
       />
 
       {isPending && <Skeleton className="h-24 w-full" />}
+      {error && <ErrorState error={error} title="Dokumenty sa nepodarilo načítať" onRetry={() => void refetch()} />}
       {docs?.length === 0 && (
         <EmptyState
           icon={File02Icon}

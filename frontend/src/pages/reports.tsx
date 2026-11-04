@@ -5,7 +5,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { EmptyState, PageHeader, WorkerAvatar } from '@/components/wf/bits'
+import { EmptyState, ErrorState, PageHeader, WorkerAvatar } from '@/components/wf/bits'
 import { Chip } from '@/components/wf/chip'
 import type { ChipVariant } from '@/lib/chip'
 import { ReportSummary } from '@/components/wf/report-summary'
@@ -49,7 +49,7 @@ const ROW_STATUS: Record<DayRow['status'], { label: string; variant: ChipVariant
 function Kpi({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div className="rounded-lg border px-4 py-3">
-      <p className="label-mono text-[11px] text-muted-foreground uppercase">{label}</p>
+      <p className="label-mono text-2xs text-muted-foreground uppercase">{label}</p>
       <p className="text-2xl tabular-nums">{value}</p>
       {hint && <p className="truncate text-xs text-muted-foreground">{hint}</p>}
     </div>
@@ -107,7 +107,7 @@ export default function ReportsPage() {
       {overview.isPending ? (
         <Skeleton className="h-64" />
       ) : overview.error ? (
-        <p className="text-sm text-destructive">{overview.error.message}</p>
+        <ErrorState error={overview.error} onRetry={() => void overview.refetch()} />
       ) : overview.data.rows.length === 0 ? (
         <EmptyState icon={UserIcon} title="Žiadni pracovníci" description="Pridaj pracovníkov v sekcii Tím a stavby." />
       ) : (
@@ -121,7 +121,7 @@ export default function ReportsPage() {
           <div className="overflow-x-auto rounded-lg border">
             <table className="w-full min-w-[640px] text-sm">
               <thead className="border-b bg-muted/40 text-left">
-                <tr className="label-mono text-[11px] text-muted-foreground uppercase">
+                <tr className="label-mono text-2xs text-muted-foreground uppercase">
                   <th className="px-3 py-2 font-normal">Pracovník</th>
                   <th className="px-3 py-2 font-normal">Výpis</th>
                   <th className="px-3 py-2 font-normal">Začiatok</th>
@@ -161,7 +161,7 @@ export default function ReportsPage() {
                       <td className="px-3 py-2.5 text-right tabular-nums">{formatHours(r.worked_hours)}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums">
                         {r.problems > 0 ? (
-                          <span className="inline-flex items-center gap-1 text-rose-600">
+                          <span className="inline-flex items-center gap-1 text-danger">
                             <HugeiconsIcon icon={Alert02Icon} className="size-3.5" />
                             {r.problems}
                           </span>
@@ -241,7 +241,7 @@ function ReportSheet({ reportId, onClose, day }: { reportId: string | null; onCl
               <ReportSummary report={report.data} />
               {report.data.questions.some((q) => q.status === 'answered') && (
                 <div className="space-y-2">
-                  <p className="label-mono text-[11px] text-muted-foreground uppercase">Doplnené na otázky AI</p>
+                  <p className="label-mono text-2xs text-muted-foreground uppercase">Doplnené na otázky AI</p>
                   {report.data.questions
                     .filter((q) => q.status === 'answered')
                     .map((q) => (
@@ -254,7 +254,7 @@ function ReportSheet({ reportId, onClose, day }: { reportId: string | null; onCl
               )}
               {report.data.inputs.some((i) => i.has_audio) && (
                 <div className="space-y-2">
-                  <p className="label-mono text-[11px] text-muted-foreground uppercase">Nahrávky</p>
+                  <p className="label-mono text-2xs text-muted-foreground uppercase">Nahrávky</p>
                   {report.data.inputs
                     .filter((i) => i.has_audio)
                     .map((i) => (
@@ -305,7 +305,6 @@ function ReportEditor({
       toast.success(r.status === 'submitted' ? 'Uložené, PDF pregenerované' : 'Uložené')
       onDone()
     },
-    onError: (e) => toast.error(e.message),
   })
   const entry = (id: string) => form.tasks.find((e) => e.task_id === id)
   const setEntry = (id: string, patch: Partial<ReportData['tasks'][number]>) =>
@@ -329,15 +328,15 @@ function ReportEditor({
     >
       <div className="grid grid-cols-3 gap-2">
         <label className="space-y-1">
-          <span className="label-mono text-[11px] text-muted-foreground uppercase">Začiatok</span>
+          <span className="label-mono text-2xs text-muted-foreground uppercase">Začiatok</span>
           <Input type="time" value={form.arrival ?? ''} onChange={(e) => setForm({ ...form, arrival: e.target.value || null })} />
         </label>
         <label className="space-y-1">
-          <span className="label-mono text-[11px] text-muted-foreground uppercase">Koniec</span>
+          <span className="label-mono text-2xs text-muted-foreground uppercase">Koniec</span>
           <Input type="time" value={form.departure ?? ''} onChange={(e) => setForm({ ...form, departure: e.target.value || null })} />
         </label>
         <label className="space-y-1">
-          <span className="label-mono text-[11px] text-muted-foreground uppercase">Prestávka min</span>
+          <span className="label-mono text-2xs text-muted-foreground uppercase">Prestávka min</span>
           <Input
             inputMode="numeric"
             value={form.break_minutes ?? ''}
@@ -351,7 +350,7 @@ function ReportEditor({
         return (
           <div key={t.id} className="space-y-2 rounded-md border p-3">
             <p className="text-sm font-medium">
-              {t.title} <span className="label-mono text-[11px] text-muted-foreground">{t.site_name}</span>
+              {t.title} <span className="label-mono text-2xs text-muted-foreground">{t.site_name}</span>
             </p>
             <div className="flex flex-wrap gap-2">
               <Select value={e?.status ?? ''} onValueChange={(v) => setEntry(t.id, { status: v as EntryStatus, progress: v === 'done' ? 100 : e?.progress ?? null })}>
@@ -392,7 +391,7 @@ function ReportEditor({
         )
       })}
       <label className="block space-y-1">
-        <span className="label-mono text-[11px] text-muted-foreground uppercase">Problémy (každý na nový riadok)</span>
+        <span className="label-mono text-2xs text-muted-foreground uppercase">Problémy (každý na nový riadok)</span>
         <Textarea value={problems} onChange={(e) => setProblems(e.target.value)} rows={3} />
       </label>
       <div className="flex justify-end gap-2">

@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 import { Mic01Icon, StopIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 
-/** Veľké tlačidlo „ťukni a hovor, ťukni a pošli“ — ovládateľné aj v pracovných rukaviciach. */
+/** Large "tap to talk, tap to send" button — usable even in work gloves. */
 export function RecordButton({
   onRecorded,
   disabled,

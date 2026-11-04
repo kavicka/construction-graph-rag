@@ -144,7 +144,6 @@ function TaskForm({
       toast.success(existing ? 'Úloha uložená' : 'Úloha vytvorená')
       done()
     },
-    onError: (e) => toast.error(e.message),
   })
   const remove = useMutation({
     mutationFn: () => deleteTask(existing!.id),
@@ -152,7 +151,6 @@ function TaskForm({
       toast.success('Úloha zmazaná')
       done()
     },
-    onError: (e) => toast.error(e.message),
   })
   const depOptions = tasks.filter((t) => t.site_id === form.site_id && t.id !== existing?.id)
   const activeWorkers = workers.filter((w) => w.active || form.assignees.includes(w.id))
@@ -294,7 +292,7 @@ function TaskForm({
 
       {existing?.source_quote && (
         <div className="space-y-2 rounded-md bg-muted/60 p-3">
-          <p className="label-mono text-[11px] text-muted-foreground uppercase">
+          <p className="label-mono text-2xs text-muted-foreground uppercase">
             Zdroj{existing.source_page ? ` · str. ${existing.source_page}` : ''}
           </p>
           <p className="text-sm italic">„{existing.source_quote}“</p>
@@ -317,7 +315,7 @@ function TaskForm({
 
       {detail.data && detail.data.history.length > 0 && (
         <div className="space-y-2">
-          <p className="label-mono text-[11px] text-muted-foreground uppercase">História z denných výpisov</p>
+          <p className="label-mono text-2xs text-muted-foreground uppercase">História z denných výpisov</p>
           <ol className="relative space-y-3 border-l pl-4">
             {detail.data.history.map((h) => (
               <li key={`${h.report_id}`} className="relative">

@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ErrorState, PageHeader } from '@/components/wf/bits'
 import { deleteDocument, fetchDocument, reindexDocument } from '@/lib/api'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { HugeiconsIcon } from '@hugeicons/react'
@@ -40,13 +41,12 @@ export default function DocumentDetailPage() {
       void queryClient.invalidateQueries({ queryKey: ['documents'] })
       void navigate('/documents')
     },
-    onError: (e: Error) => toast.error(e.message),
   })
   const reindex = useMutation({
     mutationFn: () => reindexDocument(id!),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['documents'] }),
   })
-  const { data: doc, isPending } = useQuery({
+  const { data: doc, isPending, error, refetch } = useQuery({
     queryKey: ['documents', id],
     queryFn: () => fetchDocument(id!),
     enabled: !!id,
@@ -57,74 +57,84 @@ export default function DocumentDetailPage() {
   })
 
   if (isPending) return <Skeleton className="h-64 max-w-3xl" />
-  if (!doc) return <p className="text-sm text-muted-foreground">Dokument neexistuje.</p>
+  if (error || !doc) {
+    return <ErrorState error={error} title="Dokument sa nepodarilo načítať" onRetry={() => void refetch()} />
+  }
+  const busy = doc.status !== 'done' && doc.status !== 'error'
 
   return (
     <div className="max-w-3xl space-y-6">
       <Link to="/documents" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-primary">
         <HugeiconsIcon icon={ArrowLeft01Icon} className="size-4" /> Dokumenty
       </Link>
-      <div className="flex flex-wrap items-center gap-3">
-        <h1 className="min-w-0 flex-1 truncate font-display-lg text-2xl">{doc.filename}</h1>
-        <StatusBadge doc={doc} />
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={reindex.isPending || (doc.status !== 'done' && doc.status !== 'error')}
-          onClick={() => reindex.mutate()}
-        >
-          <HugeiconsIcon icon={RefreshIcon} className="size-4" /> Reindex
-        </Button>
-        <Button variant="outline" size="sm" asChild>
-          <a href={`/api/documents/${doc.id}/file`} target="_blank" rel="noreferrer">
-            <HugeiconsIcon icon={LinkSquare02Icon} className="size-4" /> {doc.format.toUpperCase()}
-          </a>
-        </Button>
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
+      <PageHeader
+        title={doc.filename}
+        description={
+          <span className="flex flex-wrap items-center gap-2">
+            <StatusBadge doc={doc} />
+            <span className="label-mono text-xs">
+              strany: {doc.pages_count ?? '?'} · tabuľky: {doc.tables.length}
+            </span>
+            {doc.error && <span className="text-xs text-destructive">{doc.error}</span>}
+          </span>
+        }
+        actions={
+          <>
             <Button
               variant="outline"
-              size="icon"
-              aria-label="Zmazať dokument"
-              disabled={remove.isPending || (doc.status !== 'done' && doc.status !== 'error')}
+              size="sm"
+              disabled={reindex.isPending || busy}
+              onClick={() => reindex.mutate()}
             >
-              <HugeiconsIcon icon={Delete02Icon} className="size-4" />
+              <HugeiconsIcon icon={RefreshIcon} className="size-4" /> Preindexovať
             </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Zmazať {doc.filename}?</AlertDialogTitle>
-              <AlertDialogDescription>
-                Dokument zmizne z vyhľadávania, grafu aj tabuliek. Staré odpovede v chate si
-                citácie ponechajú, ale PDF sa už neotvorí.
-                {doc.source_path && ' Súbor ostáva v inboxe. Zmaž ho aj tam, inak sa vráti.'}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Zrušiť</AlertDialogCancel>
-              <AlertDialogAction variant="destructive" onClick={() => remove.mutate()}>
-                Zmazať
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </div>
+            <Button variant="outline" size="sm" asChild>
+              <a href={`/api/documents/${doc.id}/file`} target="_blank" rel="noreferrer">
+                <HugeiconsIcon icon={LinkSquare02Icon} className="size-4" /> {doc.format.toUpperCase()}
+              </a>
+            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  aria-label="Zmazať dokument"
+                  disabled={remove.isPending || busy}
+                >
+                  <HugeiconsIcon icon={Delete02Icon} className="size-4" />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Zmazať {doc.filename}?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Dokument zmizne z vyhľadávania, grafu aj tabuliek. Staré odpovede v chate si
+                    citácie ponechajú, ale PDF sa už neotvorí.
+                    {doc.source_path && ' Súbor ostáva v inboxe. Zmaž ho aj tam, inak sa vráti.'}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Zrušiť</AlertDialogCancel>
+                  <AlertDialogAction variant="destructive" onClick={() => remove.mutate()}>
+                    Zmazať
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </>
+        }
+      />
 
-      <div className="space-y-3">
-        <p className="label-mono text-xs text-muted-foreground">
-          strany: {doc.pages_count ?? '?'} · tabuľky: {doc.tables.length}
-          {doc.error && <span className="text-destructive"> · {doc.error}</span>}
-        </p>
-        <AccessEditor docId={doc.id} access={doc.access} />
-      </div>
+      <AccessEditor docId={doc.id} access={doc.access} />
 
       {doc.tables.length > 0 && (
         <section className="space-y-2">
-          <h2 className="label-mono text-[11px] text-muted-foreground uppercase">Tabuľky z dokumentu</h2>
+          <h2 className="label-mono text-2xs text-muted-foreground uppercase">Tabuľky z dokumentu</h2>
           <ul className="divide-y rounded-lg border">
             {doc.tables.map((t) => (
               <li key={t.id}>
                 <button
+                  type="button"
                   onClick={() => setOpenTable(t.id)}
                   className="group flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-sm transition-colors hover:bg-muted/50"
                 >

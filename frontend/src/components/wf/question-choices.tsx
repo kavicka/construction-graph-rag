@@ -6,7 +6,7 @@ import { formatHours } from '@/lib/workforce'
 import { cn } from '@/lib/utils'
 import { useState, type ReactNode } from 'react'
 
-/** Režim výberu — po dvoch nejasných odpovediach. Vyplní sa vždy, bez LLM. */
+/** Choice mode — after two unclear answers. Always completable, no LLM involved. */
 export function QuestionChoices({
   question,
   report,
@@ -274,7 +274,7 @@ function HoursChoice({
         <Input value={otherText} onChange={(e) => setOtherText(e.target.value)} placeholder="Iná práca (napr. upratovanie)" className="h-11" />
         <Input value={otherHours} onChange={(e) => setOtherHours(e.target.value)} inputMode="decimal" placeholder="h" className="h-11 w-20 tabular-nums" />
       </div>
-      <p className={cn('label-mono text-xs', ok ? 'text-emerald-600' : 'text-muted-foreground')}>
+      <p className={cn('label-mono text-xs', ok ? 'text-success' : 'text-muted-foreground')}>
         spolu {formatHours(total)} z {formatHours(worked)}
       </p>
       <Button

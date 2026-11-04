@@ -1,9 +1,9 @@
 import { cn } from '@/lib/utils'
 
 /**
- * Logo „Tehly“: múr z kúskov dokumentov, oranžová tehla = kúsok, ktorý RAG vytiahol k odpovedi.
- * Šedé tehly berú farbu textu (currentColor), takže logo funguje vo svetlej aj tmavej téme.
- * Rovnaký tvar je vo favicon.svg a v hlavičke PDF (docgen/workforce šablóny).
+ * "Bricks" logo: a wall of document chunks; the orange brick is the chunk RAG pulled for the answer.
+ * Grey bricks take the text colour (currentColor), so the logo works in light and dark themes.
+ * The same shape is in favicon.svg and in the PDF header (docgen / workforce templates).
  */
 export function LogoMark({ className }: { className?: string }) {
   return (

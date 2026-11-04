@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-/** Formáty v poradí preferencie: Chrome/Android webm+opus, Safari/iOS mp4 (aac). */
+/** Formats in order of preference: Chrome/Android webm+opus, Safari/iOS mp4 (aac). */
 const MIME_CANDIDATES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus']
 
 export type RecorderState = 'idle' | 'recording' | 'stopping'
@@ -13,7 +13,7 @@ export function recorderSupport(): string | null {
   return null
 }
 
-/** Nahrávanie z mikrofónu → Blob. `level` 0–1 pre vizuálnu odozvu (pracovník vidí, že ho počuť). */
+/** Microphone recording → Blob. `level` 0–1 drives visual feedback (the worker sees they are heard). */
 export function useRecorder() {
   const [state, setState] = useState<RecorderState>('idle')
   const [seconds, setSeconds] = useState(0)
@@ -71,7 +71,7 @@ export function useRecorder() {
         () => setSeconds(Math.floor((Date.now() - startedAt) / 1000)),
         250,
       )
-      // úroveň hlasitosti pre animovaný indikátor
+      // volume level for the animated indicator
       const ctx = new AudioContext()
       const analyser = ctx.createAnalyser()
       analyser.fftSize = 512

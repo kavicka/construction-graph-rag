@@ -1,3 +1,4 @@
+import { ApiTokensCard } from '@/components/api-tokens-card'
 import { LogoMark } from '@/components/logo'
 import { PdfDialog, type PdfTarget } from '@/components/pdf-dialog'
 import { Badge } from '@/components/ui/badge'
@@ -9,8 +10,7 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
-import { ApiTokenCard } from '@/components/users-panel'
-import { PageHeader } from '@/components/wf/bits'
+import { ErrorState, PageHeader } from '@/components/wf/bits'
 import {
   fetchCompany,
   fetchMe,
@@ -26,14 +26,17 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
-/** Svetlá téma PDF — rovnaké hodnoty ako backend/app/docgen/theme.py (a index.css :root). */
+/**
+ * PDF paper colours = the light theme tokens (index.css :root, mirrored by
+ * backend/app/docgen/theme.py). The preview root carries `.light`, so it stays light in dark mode.
+ */
 const PAPER = {
-  ink: '#26251d',
-  muted: '#8c8b85',
-  surface: '#efeee8',
-  border: '#edece8',
-  rule: '#cfcdc4',
-  primary: '#f54e00',
+  ink: 'var(--foreground)',
+  muted: 'var(--muted-foreground)',
+  surface: 'var(--muted)',
+  border: 'var(--border)',
+  rule: 'var(--input)',
+  primary: 'var(--primary)',
 }
 
 type TextKey =
@@ -91,7 +94,7 @@ function DocumentPreview({ form }: { form: CompanySettings }) {
 
   return (
     <div
-      className="flex aspect-[210/297] w-full flex-col rounded-sm bg-white px-[8%] py-[7%] font-sans shadow-sm ring-1 ring-black/5"
+      className="light flex aspect-[210/297] w-full flex-col rounded-sm bg-white px-[8%] py-[7%] font-sans shadow-sm ring-1 ring-black/5"
       style={{ color: PAPER.ink }}
     >
       <div className="flex items-center justify-between gap-2 border-b pb-2" style={{ borderColor: PAPER.rule }}>
@@ -169,12 +172,12 @@ function DocumentPreview({ form }: { form: CompanySettings }) {
 
 export default function SettingsPage() {
   const queryClient = useQueryClient()
-  const { data: company, isPending, isError } = useQuery({ queryKey: ['company'], queryFn: fetchCompany })
+  const { data: company, isPending, error, refetch } = useQuery({ queryKey: ['company'], queryFn: fetchCompany })
   const { data: me } = useQuery({ queryKey: ['me'], queryFn: fetchMe })
-  // pri zapnutom prihlasovaní mení nastavenia len admin (backend vráti 403)
+  // with login enabled only an admin may change settings (the backend answers 403)
   const canEdit = !me?.auth_enabled || me.user?.role === 'admin'
 
-  // draft = neuložené úpravy; null → formulár ukazuje uložený stav
+  // draft = unsaved edits; null → the form shows the saved state
   const [draft, setDraft] = useState<CompanySettings | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [pdfTarget, setPdfTarget] = useState<PdfTarget | null>(null)
@@ -204,11 +207,9 @@ export default function SettingsPage() {
       toast.success('Nastavenia uložené')
     },
     onError: (e: Error) => {
-      if (e instanceof ValidationError) {
-        setErrors(e.fields)
-        toast.error('Skontroluj zvýraznené polia')
-      } else toast.error(e.message)
+      if (e instanceof ValidationError) setErrors(e.fields)
     },
+    meta: { errorTitle: 'Nastavenia sa neuložili' },
   })
 
   const preview = useMutation({
@@ -218,11 +219,9 @@ export default function SettingsPage() {
       setPdfTarget({ url, downloadUrl: url, filename: 'nahlad-dokumentu.pdf', page: 1 })
     },
     onError: (e: Error) => {
-      if (e instanceof ValidationError) {
-        setErrors(e.fields)
-        toast.error('Náhľad: skontroluj zvýraznené polia')
-      } else toast.error(e.message)
+      if (e instanceof ValidationError) setErrors(e.fields)
     },
+    meta: { errorTitle: 'Náhľad sa nepodarilo vytvoriť' },
   })
 
   const closePreview = () => {
@@ -230,8 +229,8 @@ export default function SettingsPage() {
     setPdfTarget(null)
   }
 
-  if (isError) {
-    return <p className="text-sm text-destructive">Nastavenia sa nepodarilo načítať. Beží backend?</p>
+  if (error) {
+    return <ErrorState error={error} title="Nastavenia sa nepodarilo načítať" onRetry={() => void refetch()} />
   }
   if (isPending || !form) {
     return (
@@ -259,7 +258,7 @@ export default function SettingsPage() {
             Údaje a hlavička, ktoré dostane každý dokument vygenerovaný z chatu. Farby a písmo preberá z témy
             aplikácie.
             {!canEdit && (
-              <span className="mt-1 block text-xs text-amber-600 dark:text-amber-400">
+              <span className="mt-1 block text-xs text-warning">
                 Len na čítanie. Nastavenia mení administrátor.
               </span>
             )}
@@ -401,7 +400,7 @@ export default function SettingsPage() {
         </aside>
       </div>
 
-      <ApiTokenCard />
+      <ApiTokensCard />
 
       <PdfDialog target={pdfTarget} onClose={closePreview} />
     </div>

@@ -1,14 +1,8 @@
-/** API modulu Firma — pracovníci, stavby, úlohy, import úloh, dochádzka. */
+/** Firma module API — workers, sites, tasks, task import, attendance. */
 
-export class ApiError extends Error {
-  status: number
-  detail: unknown
-  constructor(status: number, message: string, detail: unknown) {
-    super(message)
-    this.status = status
-    this.detail = detail
-  }
-}
+import { ApiError } from './errors'
+
+export { ApiError }
 
 async function call<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init)
@@ -19,7 +13,7 @@ async function call<T>(url: string, init?: RequestInit): Promise<T> {
     try {
       detail = (JSON.parse(text) as { detail?: unknown }).detail ?? text
     } catch {
-      // nie JSON
+      // not JSON
     }
     let message = typeof detail === 'string' ? detail : `${res.status}`
     if (Array.isArray(detail)) {
@@ -39,7 +33,7 @@ const body = (method: string, payload: unknown): RequestInit => ({
   body: JSON.stringify(payload),
 })
 
-// --- pracovníci -------------------------------------------------------------------------
+// --- workers -----------------------------------------------------------------------------
 
 export interface Worker {
   id: string
@@ -69,7 +63,7 @@ export const fetchLoginWorkers = () => call<WorkerPublic[]>('/api/auth/workers')
 export const pinLogin = (worker_id: string, pin: string) =>
   call<WorkerPublic>('/api/auth/pin', body('POST', { worker_id, pin }))
 
-// --- stavby a úlohy ---------------------------------------------------------------------
+// --- sites and tasks ---------------------------------------------------------------------
 
 export interface Site {
   id: string
@@ -158,7 +152,7 @@ export const STATUS_LABEL: Record<TaskStatus, string> = {
   cancelled: 'Zrušená',
 }
 
-// --- import úloh ------------------------------------------------------------------------
+// --- task import -------------------------------------------------------------------------
 
 export type ImportStatus = 'waiting' | 'extracting' | 'review' | 'applied' | 'error'
 
@@ -249,7 +243,7 @@ export const applyImport = (sourceId: string) =>
 export const retryImport = (sourceId: string) =>
   call<ImportSource>(`/api/task-imports/${sourceId}/retry`, { method: 'POST' })
 
-// --- dochádzka --------------------------------------------------------------------------
+// --- attendance --------------------------------------------------------------------------
 
 export type EntryStatus = 'done' | 'in_progress' | 'not_started'
 
@@ -383,13 +377,13 @@ export const ownerEditReport = (id: string, data: ReportData) =>
   call<Report>(`/api/attendance/reports/${id}`, body('PUT', { data }))
 export const questionSpeechUrl = (qid: string) => `/api/attendance/questions/${qid}/speech`
 
-/** Hlas na serveri je voliteľný (extra `voice`): stt = prepis (Whisper), tts = Piper. */
+/** Server voice is optional (the `voice` extra): stt = transcription (Whisper), tts = Piper. */
 export interface VoiceStatus {
   stt: boolean
   tts: boolean
 }
 
-/** Server bez /api/voice (staršia verzia) hlas mal vždy → predvolene zapnuté. */
+/** A server without /api/voice (older version) always had voice → enabled by default. */
 export async function fetchVoice(): Promise<VoiceStatus> {
   try {
     return await call<VoiceStatus>('/api/voice')
@@ -398,7 +392,7 @@ export async function fetchVoice(): Promise<VoiceStatus> {
   }
 }
 
-// --- otázky pracovníka na vlastné údaje (mobil, PLAN.md §17) -----------------------------
+// --- worker questions about their own data (phone, design log §17) --------------------------
 
 export interface AskAnswer {
   question: string
@@ -412,7 +406,7 @@ export const askFirma = (question: string) =>
 export const askFirmaAudio = (blob: Blob) =>
   call<AskAnswer>('/api/attendance/ask/audio', { method: 'POST', body: audioForm(blob) })
 
-/** Odpoveď nahlas (Piper) — wav ako blob, prehrá sa cez object URL. */
+/** Spoken answer (Piper) — wav as a blob, played through an object URL. */
 export async function askSpeech(text: string): Promise<Blob> {
   const res = await fetch('/api/attendance/ask/speech', body('POST', { text }))
   if (res.status === 401) window.dispatchEvent(new Event('rag:unauthorized'))
@@ -454,7 +448,7 @@ export const generateSummary = (day: string) =>
   call<DayOverview>(`/api/attendance/days/${day}/summary`, { method: 'POST' })
 export const summaryPdfUrl = (day: string) => `/api/attendance/days/${day}/summary.pdf`
 
-// --- pomocníci --------------------------------------------------------------------------
+// --- helpers -----------------------------------------------------------------------------
 
 export function isoToday(): string {
   const d = new Date()

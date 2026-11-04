@@ -2,26 +2,26 @@ import type { ChipVariant } from '@/lib/chip'
 import { cn } from '@/lib/utils'
 import type { ReactNode } from 'react'
 
-/** Kategorické farby čipov — explicitné triedy, téma má len jeden akcent. */
+/** Status tints come from the theme's status tokens (index.css), AA in both themes. */
 const TINT: Record<ChipVariant, string> = {
-  success: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
-  warning: 'bg-amber-500/12 text-amber-700 dark:text-amber-400',
-  danger: 'bg-rose-500/10 text-rose-700 dark:text-rose-400',
-  info: 'bg-sky-500/10 text-sky-700 dark:text-sky-400',
+  success: 'bg-success/10 text-success',
+  warning: 'bg-warning/12 text-warning',
+  danger: 'bg-danger/10 text-danger',
+  info: 'bg-info/10 text-info',
   primary: 'bg-primary/10 text-primary',
   neutral: 'bg-muted text-muted-foreground',
 }
 
 const DOT: Record<ChipVariant, string> = {
-  success: 'bg-emerald-500',
-  warning: 'bg-amber-500',
-  danger: 'bg-rose-500',
-  info: 'bg-sky-500',
+  success: 'bg-success',
+  warning: 'bg-warning',
+  danger: 'bg-danger',
+  info: 'bg-info',
   primary: 'bg-primary',
   neutral: 'bg-muted-foreground',
 }
 
-/** Tónovaný čip (stav) alebo bodkový čip s rámikom (kategória, napr. stavba). */
+/** Tinted chip (status) or outlined dot chip (category, e.g. a site). */
 export function Chip({
   variant = 'neutral',
   dot = false,

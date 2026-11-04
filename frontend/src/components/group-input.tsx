@@ -3,7 +3,7 @@ import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { useState } from 'react'
 
-/** Skupiny ako štítky: Enter / čiarka pridá, × odoberie, návrhy z existujúcich skupín jedným klikom. */
+/** Groups as tags: Enter / comma adds, × removes, existing groups are one-click suggestions. */
 export function GroupInput({
   id,
   value,
@@ -15,7 +15,7 @@ export function GroupInput({
   value: string[]
   onChange: (groups: string[]) => void
   suggestions?: string[]
-  /** „*“ = všetci (prístup k dokumentu) */
+  /** "*" = everyone (document access) */
   allowEveryone?: boolean
 }) {
   const [draft, setDraft] = useState('')

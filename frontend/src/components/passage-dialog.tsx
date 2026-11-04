@@ -13,7 +13,7 @@ import { useQuery } from '@tanstack/react-query'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Download04Icon } from '@hugeicons/core-free-icons'
 
-/** Citovaná pasáž pre formáty bez strán (DOCX, PPTX, HTML, MD) — PDF ide cez PdfDialog. */
+/** Cited passage for formats without pages (DOCX, PPTX, HTML, MD) — PDFs go through PdfDialog. */
 export function PassageDialog({
   chunkId,
   onClose,

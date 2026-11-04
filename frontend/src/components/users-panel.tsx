@@ -2,13 +2,11 @@ import { FormDialog } from '@/components/form-dialog'
 import { GroupInput } from '@/components/group-input'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { PageHeader, WorkerAvatar } from '@/components/wf/bits'
 import {
-  createApiToken,
   createUser,
   deleteUser,
   fetchMe,
@@ -16,97 +14,12 @@ import {
   updateUser,
   type AuthUser,
 } from '@/lib/api'
-import { Add01Icon, Copy01Icon, Delete02Icon, Edit02Icon, UserAdd01Icon } from '@hugeicons/core-free-icons'
+import { Delete02Icon, Edit02Icon, UserAdd01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
-// --- API token ---------------------------------------------------------------------------
-
-/** key = open → po zatvorení sa formulár zahodí, nový token začne s čistým stavom. */
-function TokenDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  return <TokenForm key={String(open)} open={open} onClose={onClose} />
-}
-
-function TokenForm({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [name, setName] = useState('mcp')
-  const [token, setToken] = useState<string | null>(null)
-  const create = useMutation({
-    mutationFn: () => createApiToken(name.trim()),
-    onSuccess: (out) => setToken(out.token),
-    onError: (e: Error) => toast.error(e.message),
-  })
-  return (
-    <FormDialog
-      open={open}
-      onClose={onClose}
-      size="md"
-      title="Nový API token"
-      description="Claude Desktop / Code sa pripojí na /mcp s hlavičkou Authorization: Bearer … a uvidí len tvoje dokumenty."
-      onSubmit={() => create.mutate()}
-      submitLabel="Vytvoriť token"
-      submitting={create.isPending}
-      submitDisabled={!name.trim() || token !== null}
-      hideSubmit={token !== null}
-    >
-      <div className="space-y-1.5">
-        <Label htmlFor="token-name">Názov</Label>
-        <Input
-          id="token-name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          disabled={token !== null}
-          autoFocus
-        />
-      </div>
-      {token && (
-        <div className="space-y-2 rounded-md border bg-muted/40 p-3">
-          <div className="flex items-center gap-2">
-            <code className="min-w-0 flex-1 truncate text-xs">{token}</code>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              aria-label="Kopírovať token"
-              onClick={() =>
-                void navigator.clipboard.writeText(token).then(() => toast.success('Skopírované'))
-              }
-            >
-              <HugeiconsIcon icon={Copy01Icon} className="size-4" />
-            </Button>
-          </div>
-          <p className="text-xs text-amber-600 dark:text-amber-400">
-            Token sa zobrazí len teraz. Ulož si ho.
-          </p>
-        </div>
-      )}
-    </FormDialog>
-  )
-}
-
-/** API token pre MCP klienta — vlastný token prihláseného používateľa (aj člena). */
-export function ApiTokenCard() {
-  const { data: me } = useQuery({ queryKey: ['me'], queryFn: fetchMe })
-  const [open, setOpen] = useState(false)
-  if (!me?.auth_enabled || !me.user) return null
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
-        <div className="space-y-1">
-          <CardTitle>Prístup cez API a MCP</CardTitle>
-          <CardDescription>Token nahrádza heslo pre skripty a MCP klientov.</CardDescription>
-        </div>
-        <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-          <HugeiconsIcon icon={Add01Icon} className="size-4" /> Nový token
-        </Button>
-      </CardHeader>
-      <TokenDialog open={open} onClose={() => setOpen(false)} />
-    </Card>
-  )
-}
-
-// --- používatelia -------------------------------------------------------------------------
 
 interface UserForm {
   email: string
@@ -179,12 +92,10 @@ function UserForm({
           })
         : createUser({ ...form, email: form.email.trim(), name: form.name.trim() }),
     onSuccess: () => done(existing ? 'Používateľ uložený' : 'Používateľ pridaný'),
-    onError: (e: Error) => toast.error(e.message),
   })
   const remove = useMutation({
     mutationFn: () => deleteUser(existing!.id),
     onSuccess: () => done('Používateľ zmazaný'),
-    onError: (e: Error) => toast.error(e.message),
   })
   const pwTooShort = form.password.length > 0 && form.password.length < 10
 
@@ -285,7 +196,7 @@ function UserForm({
   )
 }
 
-/** Správa používateľov — len pri zapnutom prihlasovaní a pre admina. */
+/** User management — only with login enabled, and only for an admin. */
 export function UsersManager() {
   const { data: me } = useQuery({ queryKey: ['me'], queryFn: fetchMe })
   const isAdmin = me?.user?.role === 'admin'
@@ -315,7 +226,7 @@ export function UsersManager() {
             <WorkerAvatar name={u.name} />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{u.name}</p>
-              <p className="label-mono truncate text-[11px] text-muted-foreground">{u.email}</p>
+              <p className="label-mono truncate text-2xs text-muted-foreground">{u.email}</p>
             </div>
             <Badge variant={u.role === 'admin' ? 'default' : 'outline'}>{u.role}</Badge>
             <div className="hidden flex-wrap justify-end gap-1 sm:flex">

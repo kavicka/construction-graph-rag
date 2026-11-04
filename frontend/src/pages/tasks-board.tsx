@@ -2,10 +2,8 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { EmptyState, PageHeader, WorkerAvatar } from '@/components/wf/bits'
-import { Chip } from '@/components/wf/chip'
-import { variantFor } from '@/lib/chip'
+import { EmptyState, PageHeader } from '@/components/wf/bits'
+import { Column, TaskCard } from '@/components/tasks/board-column'
 import { TaskDialog, type TaskDialogState } from '@/components/wf/task-dialog'
 import {
   addDays,
@@ -18,19 +16,20 @@ import {
   setTaskAssignees,
   startOfWeek,
   type Task,
-  type Worker,
 } from '@/lib/workforce'
-import { cn } from '@/lib/utils'
 import {
   DndContext,
   DragOverlay,
+  KeyboardCode,
+  KeyboardSensor,
   PointerSensor,
   pointerWithin,
   rectIntersection,
+  type Announcements,
   type CollisionDetection,
+  type KeyboardCoordinateGetter,
+  type ScreenReaderInstructions,
   TouchSensor,
-  useDraggable,
-  useDroppable,
   useSensor,
   useSensors,
   type DragEndEvent,
@@ -41,10 +40,7 @@ import {
   ArrowLeft01Icon,
   ArrowRight01Icon,
   Building03Icon,
-  CheckListIcon,
-  FileAttachmentIcon,
   FileImportIcon,
-  Link01Icon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -54,16 +50,47 @@ import { toast } from 'sonner'
 
 const UNASSIGNED = 'unassigned'
 
-/** cieľ = stĺpec pod kurzorom; mimo stĺpcov (okraj) podľa prekryvu karty */
+/** target = the column under the pointer; outside columns (the margin) by card overlap */
 const collision: CollisionDetection = (args) => {
   const hits = pointerWithin(args)
   return hits.length ? hits : rectIntersection(args)
 }
 const ALL = '__all__'
 
+/**
+ * Keyboard drag: ←/→ jump the card to the neighbouring column (columns sit side by side and
+ * have no order inside), so the overlap-based collision lands it in that column.
+ */
+const columnCoordinates: KeyboardCoordinateGetter = (event, { context, currentCoordinates }) => {
+  const { active, over, collisionRect, droppableRects, droppableContainers } = context
+  const step = event.code === KeyboardCode.Right ? 1 : event.code === KeyboardCode.Left ? -1 : 0
+  if (!step || !active || !collisionRect) return undefined
+  event.preventDefault()
+  const columns = droppableContainers
+    .getEnabled()
+    .map((c) => ({ id: c.id, rect: droppableRects.get(c.id) }))
+    .filter((c): c is { id: typeof c.id; rect: NonNullable<typeof c.rect> } => !!c.rect)
+    .sort((a, b) => a.rect.left - b.rect.left)
+  const from = (active.data.current as { from: string } | undefined)?.from
+  const currentId = over?.id ?? from
+  const index = columns.findIndex((c) => c.id === currentId)
+  const target = columns[index + step]
+  if (!target) return currentCoordinates
+  return {
+    x: target.rect.left + (target.rect.width - collisionRect.width) / 2,
+    y: Math.max(target.rect.top + 48, currentCoordinates.y),
+  }
+}
+
+const screenReaderInstructions: ScreenReaderInstructions = {
+  draggable:
+    'Enter otvorí detail úlohy. Medzerníkom úlohu zdvihneš, šípkami doľava a doprava ju presunieš ' +
+    'k inému pracovníkovi, medzerníkom alebo Enterom ju položíš, Escape presun zruší. ' +
+    'S podržaným Alt pracovníka pridáš, nie presunieš.',
+}
 type Period = { kind: 'week'; start: string } | { kind: 'all' }
 
-/** Nástenka: stĺpce = pracovníci (+ Nepriradené). Ťahanie presúva priradenie, ⌥/Alt pridá. */
+/** Board: columns = workers (+ Unassigned). Dragging moves the assignment, ⌥/Alt adds one. */
 export default function TasksBoardPage() {
   const queryClient = useQueryClient()
   const [siteId, setSiteId] = useState<string>(ALL)
@@ -103,16 +130,24 @@ export default function TasksBoardPage() {
       queryClient.setQueryData<Task[]>(tasksKey, (old) => old?.map((t) => (t.id === task.id ? { ...t, assignees } : t)))
       return { prev }
     },
-    onError: (e, _v, ctx) => {
+    onError: (_e, _v, ctx) => {
       if (ctx?.prev) queryClient.setQueryData(tasksKey, ctx.prev)
-      toast.error(e.message)
     },
+    meta: { errorTitle: 'Presun sa nepodaril' },
     onSettled: () => void queryClient.invalidateQueries({ queryKey: ['tasks'] }),
   })
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 220, tolerance: 6 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: columnCoordinates,
+      keyboardCodes: {
+        start: [KeyboardCode.Space],
+        cancel: [KeyboardCode.Esc],
+        end: [KeyboardCode.Space, KeyboardCode.Enter],
+      },
+    }),
   )
 
   const columnWorkers = useMemo(() => (workers.data ?? []).filter((w) => w.active), [workers.data])
@@ -131,9 +166,25 @@ export default function TasksBoardPage() {
     [workers.data],
   )
 
+  const columnName = (id: string | number | undefined) =>
+    id === UNASSIGNED ? 'Nepriradené' : id ? (nameOf.get(String(id)) ?? 'stĺpec') : undefined
+  const taskTitle = (data: unknown) => (data as { task?: Task } | undefined)?.task?.title ?? 'Úloha'
+  const announcements: Announcements = {
+    onDragStart: ({ active }) => `Zdvihnutá úloha ${taskTitle(active.data.current)}.`,
+    onDragOver: ({ active, over }) =>
+      over
+        ? `Úloha ${taskTitle(active.data.current)} je nad stĺpcom ${columnName(over.id)}.`
+        : `Úloha ${taskTitle(active.data.current)} nie je nad žiadnym stĺpcom.`,
+    onDragEnd: ({ active, over }) =>
+      over
+        ? `Úloha ${taskTitle(active.data.current)} položená do stĺpca ${columnName(over.id)}.`
+        : `Úloha ${taskTitle(active.data.current)} položená mimo stĺpcov, bez zmeny.`,
+    onDragCancel: ({ active }) => `Presun úlohy ${taskTitle(active.data.current)} zrušený.`,
+  }
+
   function onDragStart(e: DragStartEvent) {
     const data = e.active.data.current as { task: Task; from: string }
-    const ev = e.activatorEvent as PointerEvent | undefined
+    const ev = e.activatorEvent as PointerEvent | KeyboardEvent | undefined
     if (ev?.altKey) altHeld.current = true
     setDragging(data)
   }
@@ -248,8 +299,15 @@ export default function TasksBoardPage() {
           }
         />
       ) : (
-        <DndContext sensors={sensors} collisionDetection={collision} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setDragging(null)}>
-          {/* stĺpce sa rozdelia na celú šírku (min 9,5 rem); až keď sa nezmestia, nástenka sa posúva */}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={collision}
+          accessibility={{ announcements, screenReaderInstructions }}
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
+          onDragCancel={() => setDragging(null)}
+        >
+          {/* columns share the full width (min 9.5rem); the board scrolls only when they no longer fit */}
           <div className="-mx-4 overflow-x-auto px-4 pb-4 md:-mx-8 md:px-8">
             <div className="flex min-w-full items-stretch gap-2">
               <Column
@@ -295,177 +353,5 @@ export default function TasksBoardPage() {
         tasks={allTasks.data ?? []}
       />
     </div>
-  )
-}
-
-function Column({
-  id,
-  title,
-  worker,
-  tasks,
-  nameOf,
-  onOpen,
-  onAdd,
-}: {
-  id: string
-  title: string
-  worker?: Worker
-  tasks: Task[]
-  nameOf: Map<string, string>
-  onOpen: (t: Task) => void
-  onAdd: () => void
-}) {
-  const { setNodeRef, isOver } = useDroppable({ id })
-  return (
-    <section
-      ref={setNodeRef}
-      className={cn(
-        'flex min-w-[9.5rem] flex-1 basis-[9.5rem] flex-col rounded-lg border bg-muted/40 transition-colors',
-        isOver && 'border-primary/60 bg-primary/5',
-      )}
-      aria-label={`Stĺpec ${title}`}
-    >
-      <header className="flex items-center gap-2 border-b px-3 py-2.5">
-        {worker ? (
-          <WorkerAvatar name={worker.name} />
-        ) : (
-          <span className="flex size-7 items-center justify-center rounded-full border border-dashed text-muted-foreground">
-            <HugeiconsIcon icon={CheckListIcon} className="size-3.5" />
-          </span>
-        )}
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium" title={title}>{title}</p>
-          {worker && worker.professions.length > 0 && (
-            <p className="label-mono truncate text-[11px] text-muted-foreground">{worker.professions.join(', ')}</p>
-          )}
-        </div>
-        <span className="label-mono text-xs tabular-nums text-muted-foreground">{tasks.length}</span>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" className="size-7" onClick={onAdd} aria-label={`Nová úloha: ${title}`}>
-              <HugeiconsIcon icon={Add01Icon} className="size-3.5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Nová úloha{worker ? ` pre ${worker.name}` : ''}</TooltipContent>
-        </Tooltip>
-      </header>
-      <div className="flex min-h-24 flex-col gap-2 p-2">
-        {tasks.map((t) => (
-          <DraggableCard key={t.id} task={t} from={id} nameOf={nameOf} onOpen={onOpen} />
-        ))}
-        {tasks.length === 0 && (
-          <p className="px-2 py-6 text-center text-xs text-muted-foreground">
-            {worker ? 'Žiadne úlohy v tomto období' : 'Všetko je priradené'}
-          </p>
-        )}
-      </div>
-    </section>
-  )
-}
-
-function DraggableCard({
-  task,
-  from,
-  nameOf,
-  onOpen,
-}: {
-  task: Task
-  from: string
-  nameOf: Map<string, string>
-  onOpen: (t: Task) => void
-}) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id: `${from}:${task.id}`,
-    data: { task, from },
-  })
-  return (
-    <div ref={setNodeRef} {...attributes} {...listeners} className={cn('touch-manipulation', isDragging && 'opacity-40')}>
-      <TaskCard task={task} from={from} nameOf={nameOf} onOpen={() => onOpen(task)} />
-    </div>
-  )
-}
-
-function statusChip(task: Task) {
-  if (task.status === 'done') return <Chip variant="success">Hotová</Chip>
-  if (task.status === 'cancelled') return <Chip variant="neutral">Zrušená</Chip>
-  if (task.status === 'in_progress') return <Chip variant="info">{task.progress} %</Chip>
-  if (task.date_to && task.date_to < isoToday()) return <Chip variant="danger">Po termíne</Chip>
-  return null
-}
-
-function TaskCard({
-  task,
-  from,
-  nameOf,
-  onOpen,
-  overlay,
-}: {
-  task: Task
-  from: string
-  nameOf: Map<string, string>
-  onOpen?: () => void
-  overlay?: boolean
-}) {
-  const others = task.assignees.filter((a) => a !== from)
-  return (
-    <article
-      onClick={onOpen}
-      onKeyDown={(e) => e.key === 'Enter' && onOpen?.()}
-      tabIndex={0}
-      className={cn(
-        'group cursor-grab space-y-2 rounded-md border bg-background p-3 text-left transition-colors duration-150 hover:border-foreground/20 focus-visible:border-primary focus-visible:outline-none active:cursor-grabbing',
-        overlay && 'rotate-1 border-primary/50',
-        task.status === 'done' && 'opacity-60',
-      )}
-    >
-      <div className="flex items-start gap-2">
-        <p className="flex-1 text-sm leading-snug font-medium transition-colors group-hover:text-primary">{task.title}</p>
-        {task.source_id && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="text-muted-foreground">
-                <HugeiconsIcon icon={FileAttachmentIcon} className="size-3.5" />
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>Z dokumentu {task.source_filename}</TooltipContent>
-          </Tooltip>
-        )}
-      </div>
-      <div className="flex flex-wrap items-center gap-1.5">
-        <Chip dot variant={variantFor(task.site_id)}>
-          {task.site_name}
-        </Chip>
-        {statusChip(task)}
-        {task.blocked && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span>
-                <Chip variant="warning" icon={<HugeiconsIcon icon={Link01Icon} className="size-3" />}>
-                  čaká
-                </Chip>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>Začne po dokončení: {task.depends_on_title}</TooltipContent>
-          </Tooltip>
-        )}
-      </div>
-      <div className="flex items-center justify-between gap-2">
-        <span className="label-mono text-[11px] text-muted-foreground">
-          {task.date_from || task.date_to ? `${formatShort(task.date_from)} – ${formatShort(task.date_to)}` : 'bez termínu'}
-        </span>
-        {others.length > 0 && (
-          <span className="flex -space-x-1.5">
-            {others.map((a) => (
-              <WorkerAvatar key={a} name={nameOf.get(a) ?? '?'} size="sm" className="ring-2 ring-background" />
-            ))}
-          </span>
-        )}
-      </div>
-      {task.status === 'in_progress' && (
-        <div className="h-1 overflow-hidden rounded-full bg-muted">
-          <div className="h-full rounded-full bg-primary/70" style={{ width: `${task.progress}%` }} />
-        </div>
-      )}
-    </article>
   )
 }

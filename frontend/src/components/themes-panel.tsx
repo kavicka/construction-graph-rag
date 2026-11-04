@@ -6,9 +6,8 @@ import { fetchCommunities } from '@/lib/api'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { AiBrain01Icon } from '@hugeicons/core-free-icons'
-import { toast } from 'sonner'
 
-/** Témy knižnice = komunity pojmov v grafe; súhrny sa dopočítajú na požiadanie (LLM). */
+/** Library themes = concept communities in the graph; summaries are computed on demand (LLM). */
 export function ThemesPanel() {
   const queryClient = useQueryClient()
   const { data, isPending } = useQuery({
@@ -18,7 +17,6 @@ export function ThemesPanel() {
   const summarize = useMutation({
     mutationFn: () => fetchCommunities(true),
     onSuccess: (out) => queryClient.setQueryData(['communities'], out),
-    onError: (e: Error) => toast.error(e.message),
   })
   const missing = data?.some((c) => !c.summary)
 
@@ -60,12 +58,12 @@ export function ThemesPanel() {
               )}
               <div className="flex flex-wrap gap-1">
                 {c.documents.slice(0, 4).map((d) => (
-                  <Badge key={d.doc_id} variant="outline" className="max-w-44 truncate text-[10px]">
+                  <Badge key={d.doc_id} variant="outline" className="max-w-44 truncate text-2xs">
                     {d.filename}
                   </Badge>
                 ))}
                 {c.documents.length > 4 && (
-                  <Badge variant="outline" className="text-[10px]">
+                  <Badge variant="outline" className="text-2xs">
                     +{c.documents.length - 4}
                   </Badge>
                 )}

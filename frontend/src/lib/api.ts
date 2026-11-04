@@ -1,3 +1,7 @@
+import { ApiError, ValidationError } from './errors'
+
+export { ValidationError }
+
 export interface HealthResponse {
   status: string
   version: string
@@ -47,19 +51,20 @@ export interface DocumentDetail extends DocumentOut {
 
 async function json<T>(res: Response): Promise<T> {
   if (res.status === 401) {
-    // session vypršala / odhlásenie v inej karte — App ukáže prihlásenie
+    // session expired or logged out in another tab — App shows the login screen
     window.dispatchEvent(new Event('rag:unauthorized'))
   }
   if (!res.ok) {
     const body = await res.text()
-    let detail = body
+    let detail: unknown = body
     try {
-      detail = (JSON.parse(body) as { detail?: string }).detail ?? body
+      detail = (JSON.parse(body) as { detail?: unknown }).detail ?? body
     } catch {
-      // nie JSON — necháme text
+      // not JSON — keep the text
     }
-    throw new Error(typeof detail === 'string' ? detail : `${res.status}: ${body}`)
+    throw new ApiError(res.status, typeof detail === 'string' ? detail : `${res.status}`, detail)
   }
+  if (res.status === 204) return undefined as T
   return res.json() as Promise<T>
 }
 
@@ -278,16 +283,6 @@ export interface CompanySettings {
   show_page_numbers: boolean
 }
 
-/** FastAPI 422 → čitateľné hlášky po poliach. */
-export class ValidationError extends Error {
-  fields: Record<string, string>
-
-  constructor(fields: Record<string, string>) {
-    super(Object.values(fields).join(', '))
-    this.fields = fields
-  }
-}
-
 async function jsonOrValidation<T>(res: Response): Promise<T> {
   if (res.status === 422) {
     const body = (await res.json()) as { detail: { loc: string[]; msg: string }[] }
@@ -314,7 +309,7 @@ export async function previewCompanyPdf(data: CompanySettings): Promise<Blob> {
     body: JSON.stringify(data),
   })
   if (res.status === 422) return jsonOrValidation<Blob>(res)
-  if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`)
+  if (!res.ok) return json<Blob>(res)
   return res.blob()
 }
 
@@ -322,7 +317,7 @@ export const DOCUMENT_ACCEPT = '.pdf,.docx,.pptx,.xlsx,.html,.htm,.md,.markdown'
 
 export async function deleteDocument(id: string): Promise<void> {
   const res = await fetch(`/api/documents/${id}`, { method: 'DELETE' })
-  if (!res.ok) throw new Error((await res.json().catch(() => null))?.detail ?? `${res.status}`)
+  if (!res.ok) await json(res)
 }
 
 export interface ChunkOut {
@@ -395,10 +390,28 @@ export async function deleteUser(id: string): Promise<void> {
   if (!res.ok) await json(res)
 }
 
+export interface ApiTokenInfo {
+  id: string
+  name: string
+  user_id: string
+  user_email: string
+  created_at: string
+  expires_at: string
+}
+
 export const createApiToken = (name: string) =>
   fetch('/api/auth/tokens', jsonBody('POST', { name })).then((r) =>
-    json<{ name: string; token: string }>(r),
+    json<ApiTokenInfo & { token: string }>(r),
   )
+
+/** Own tokens; an admin may pass allUsers to see everyone's. Never includes the secret. */
+export const fetchApiTokens = (allUsers = false) =>
+  fetch(`/api/auth/tokens${allUsers ? '?all_users=true' : ''}`).then((r) => json<ApiTokenInfo[]>(r))
+
+export async function revokeApiToken(id: string): Promise<void> {
+  const res = await fetch(`/api/auth/tokens/${encodeURIComponent(id)}`, { method: 'DELETE' })
+  if (!res.ok) await json(res)
+}
 
 export const setDocumentAccess = (id: string, groups: string[]) =>
   fetch(`/api/documents/${id}/access`, jsonBody('PUT', { groups })).then((r) =>

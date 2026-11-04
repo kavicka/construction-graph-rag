@@ -18,7 +18,7 @@ export interface NavItem {
   to: string
   label: string
   icon: IconSvgElement
-  /** aktívna len na presnej ceste — /tasks nesmie svietiť na /tasks/import */
+  /** active only on the exact path — /tasks must not light up on /tasks/import */
   exact?: boolean
 }
 
@@ -57,7 +57,7 @@ export function navGroups({ isAdmin }: { isAdmin: boolean }): NavGroup[] {
       ...(isAdmin
         ? [
             { to: '/users', label: 'Používatelia', icon: UserSettings01Icon },
-            { to: '/traces', label: 'Traces', icon: Activity01Icon },
+            { to: '/traces', label: 'Priebeh odpovedí', icon: Activity01Icon },
           ]
         : []),
       { to: '/settings', label: 'Nastavenia', icon: Settings02Icon },

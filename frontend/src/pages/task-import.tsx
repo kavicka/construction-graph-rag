@@ -86,7 +86,7 @@ function ImportRow({ item }: { item: ImportSource }) {
           </Chip>
           <Chip variant={st.variant}>{st.label}</Chip>
         </div>
-        <p className="label-mono mt-1 text-[11px] text-muted-foreground">
+        <p className="label-mono mt-1 text-2xs text-muted-foreground">
           nahraté {formatDay(item.created_at.slice(0, 10), false)}
           {item.error && <span className="text-destructive"> · {item.error}</span>}
         </p>
@@ -126,7 +126,6 @@ function UploadDialog({ open, onClose }: { open: boolean; onClose: () => void })
       onClose()
       navigate(`/tasks/import/${src.id}`)
     },
-    onError: (e) => toast.error(e.message),
   })
 
   const activeSites = sites.data?.filter((s) => s.active) ?? []

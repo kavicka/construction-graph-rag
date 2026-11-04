@@ -1,6 +1,6 @@
 export type ChipVariant = 'success' | 'warning' | 'danger' | 'info' | 'primary' | 'neutral'
 
-/** Stabilná farba bodky pre ľubovoľný reťazec (stavba). */
+/** Stable dot colour for any string (a site). */
 export function variantFor(key: string): ChipVariant {
   const options: ChipVariant[] = ['info', 'success', 'warning', 'primary', 'danger']
   let h = 0

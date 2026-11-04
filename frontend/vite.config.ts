@@ -12,10 +12,10 @@ export default defineConfig({
     },
   },
   server: {
-    // mobil na stavbe cez `tailscale serve` (HTTPS na *.ts.net → localhost:5173)
+    // phone on the building site via `tailscale serve` (HTTPS on *.ts.net → localhost:5173)
     allowedHosts: ['.ts.net'],
     proxy: {
-      // RAG_API = backend mimo localhost:8000 (Docker, druhá inštancia)
+      // RAG_API = a backend other than localhost:8000 (Docker, a second instance)
       '/api': process.env.RAG_API ?? 'http://localhost:8000',
       '/mcp': process.env.RAG_API ?? 'http://localhost:8000',
     },

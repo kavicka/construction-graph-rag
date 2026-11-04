@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button'
 import { WorkerAvatar } from '@/components/wf/bits'
 import { fetchLoginWorkers, pinLogin, type WorkerPublic } from '@/lib/workforce'
+import { errorMessage } from '@/lib/errors'
 import { cn } from '@/lib/utils'
 import { ArrowLeft01Icon, Delete02Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
@@ -17,7 +18,7 @@ function lastWorker(): string | null {
   }
 }
 
-/** Prihlásenie pracovníka na mobile: ťukne na svoje meno, zadá PIN na veľkej klávesnici. */
+/** Worker sign-in on a phone: tap your name, enter the PIN on a large keypad. */
 export function PinLogin() {
   const queryClient = useQueryClient()
   const workers = useQuery({ queryKey: ['login-workers'], queryFn: fetchLoginWorkers })
@@ -31,11 +32,12 @@ export function PinLogin() {
       try {
         localStorage.setItem(LAST_WORKER_KEY, w.id)
       } catch {
-        // bez úložiska sa len nebude pamätať posledné meno
+        // without storage the last name simply isn't remembered
       }
       void queryClient.resetQueries()
     },
     onError: () => setPin(''),
+    meta: { silentError: true },
   })
 
   const press = (digit: string) => {
@@ -101,7 +103,7 @@ export function PinLogin() {
       </div>
       {login.isError && (
         <p className="text-center text-sm text-destructive" role="alert">
-          {login.error.message}
+          {errorMessage(login.error)}
         </p>
       )}
       <div className="grid grid-cols-3 gap-2">
