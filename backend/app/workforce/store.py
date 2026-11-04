@@ -8,7 +8,7 @@ import json
 import uuid
 from typing import Any
 
-from app.db import get_conn
+from app.db import get_conn, revoke_credentials
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS wf_workers (
@@ -216,7 +216,7 @@ def update_worker(user_id: str, *, name: str, professions: list[str], active: bo
         )
         if not active:
             # deaktivovaný pracovník sa odhlási všade
-            conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+            revoke_credentials(user_id, conn)
 
 
 def set_worker_pin(user_id: str, pin_hash: str) -> None:
@@ -226,15 +226,32 @@ def set_worker_pin(user_id: str, pin_hash: str) -> None:
                WHERE user_id = ?""",
             (pin_hash, user_id),
         )
+        # a new PIN logs the worker out everywhere (lost or shared phone)
+        revoke_credentials(user_id, conn)
 
 
-def record_pin_failure(user_id: str, locked_until: str | None) -> None:
+def claim_pin_attempt(
+    user_id: str, *, now_iso: str, max_attempts: int, lock_until_iso: str
+) -> int | None:
+    """Atomically count one PIN attempt BEFORE the PIN is verified.
+
+    → attempt number in the current round, or None while the worker is locked. The
+    attempt that reaches `max_attempts` sets the lock in the same statement, so parallel
+    requests can never verify more than `max_attempts` guesses per lock period. An expired
+    lock starts a fresh round."""
     with get_conn() as conn:
-        conn.execute(
-            """UPDATE wf_workers SET failed_attempts = failed_attempts + 1,
-                 locked_until = COALESCE(?, locked_until) WHERE user_id = ?""",
-            (locked_until, user_id),
-        )
+        row = conn.execute(
+            """UPDATE wf_workers SET
+                 failed_attempts = CASE WHEN locked_until IS NOT NULL THEN 1
+                                        ELSE failed_attempts + 1 END,
+                 locked_until = CASE WHEN (CASE WHEN locked_until IS NOT NULL THEN 1
+                                                ELSE failed_attempts + 1 END) >= :max
+                                     THEN :lock ELSE NULL END
+               WHERE user_id = :uid AND (locked_until IS NULL OR locked_until <= :now)
+               RETURNING failed_attempts""",
+            {"uid": user_id, "now": now_iso, "max": max_attempts, "lock": lock_until_iso},
+        ).fetchone()
+    return int(row[0]) if row else None
 
 
 def reset_pin_failures(user_id: str) -> None:
@@ -247,6 +264,7 @@ def reset_pin_failures(user_id: str) -> None:
 
 def delete_worker(user_id: str) -> None:
     with get_conn() as conn:
+        revoke_credentials(user_id, conn)
         conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
 
 

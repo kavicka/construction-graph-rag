@@ -177,6 +177,9 @@ Environment variables with the `RAG_` prefix (or `backend/.env`):
 | `RAG_VISUAL_RETRIEVAL` | `false` | ColPali page retrieval (`uv sync --extra visual`) |
 | `RAG_INJECTION_GUARD` | `true` | prompt-injection defenses |
 | `RAG_AUTH_ENABLED` | `false` | login, groups, per-document access (`RAG_ADMIN_EMAIL`, `RAG_ADMIN_PASSWORD` bootstrap the first admin) |
+| `RAG_API_TOKEN_TTL_DAYS` | `90` | lifetime of API (Bearer) tokens |
+| `RAG_LOGIN_MAX_FAILURES` / `RAG_LOGIN_WINDOW_MINUTES` | `10` / `15` | failed password/PIN logins per client IP before `429` |
+| `RAG_TRUSTED_PROXY` | `false` | take the client IP from `X-Forwarded-For` (only behind your own proxy) |
 | `RAG_OTLP_ENDPOINT` / `RAG_OTLP_HEADERS` | — | export traces to Langfuse / Phoenix / Jaeger |
 | `RAG_INBOX_SYNC` | `true` | watch `data/inbox` |
 

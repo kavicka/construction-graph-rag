@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from app.api.access import require_admin
 from app.api.documents import MAX_FILE_BYTES
+from app.api.uploads import read_capped
 from app.ingest.formats import FORMATS, detect_format
 from app.ingest.service import schedule_ingest
 from app.ingest.store import store_document
@@ -88,16 +89,14 @@ async def upload(
         if prev is None or prev["site_id"] != site_id:
             raise HTTPException(status_code=422, detail="predošlá verzia neexistuje")
         version = prev["version"] + 1
-    data = await file.read()
     name = file.filename or "dokument"
+    data = await read_capped(file, MAX_FILE_BYTES, f"{name}: nad 100 MB")
     fmt = detect_format(name, data)
     if fmt is None:
         raise HTTPException(
             status_code=415,
             detail=f"{name}: nepodporovaný formát (podporované: {', '.join(sorted(FORMATS))})",
         )
-    if len(data) > MAX_FILE_BYTES:
-        raise HTTPException(status_code=413, detail=f"{name}: nad 100 MB")
     doc, created = await run_in_threadpool(store_document, name, data, fmt)
     if created:
         schedule_ingest(doc["id"])

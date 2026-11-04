@@ -5,7 +5,6 @@ môže výpis vyplniť za pracovníka (worker_id) a opraviť ho aj po odovzdaní
 Spracovanie hlasu a LLM beží na pozadí — klient sa pýta na stav (status = processing).
 """
 
-import mimetypes
 import re
 import tempfile
 from datetime import date
@@ -17,6 +16,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from app.api.uploads import UPLOAD_CHUNK_BYTES, read_capped
 from app.auth import current_scope
 from app.retrieve.scope_guard import check_question, reply_for
 from app.retrieve.secrets import redact_secrets
@@ -43,6 +43,8 @@ AUDIO_EXT = {
     "audio/aac": "aac",
     "audio/x-m4a": "m4a",
 }
+# stored file extension → media type it is served as (first content type wins)
+AUDIO_MEDIA = {ext: ctype for ctype, ext in reversed(AUDIO_EXT.items())}
 
 
 def _is_admin() -> bool:
@@ -200,18 +202,43 @@ async def get_report(report_id: str) -> ReportOut:
     return await run_in_threadpool(report_out, report)
 
 
+def _audio_ext(file: UploadFile) -> str:
+    """Extension of the stored recording — only from the AUDIO_EXT allowlist, never taken
+    verbatim from the client (a `.html` "recording" would be stored XSS)."""
+    ctype = (file.content_type or "").split(";")[0].strip().lower()
+    if ctype in AUDIO_EXT:
+        return AUDIO_EXT[ctype]
+    ext = Path(file.filename or "").suffix.lstrip(".").lower()
+    if ext in AUDIO_MEDIA:
+        return ext
+    supported = ", ".join(sorted(AUDIO_MEDIA))
+    raise HTTPException(
+        status_code=415, detail=f"nepodporovaný formát nahrávky (podporované: {supported})"
+    )
+
+
+AUDIO_TOO_LARGE = "nahrávka je nad 50 MB"
+
+
 async def _save_audio(report_id: str, file: UploadFile) -> Path:
-    data = await file.read()
-    if not data:
-        raise HTTPException(status_code=422, detail="prázdna nahrávka")
-    if len(data) > MAX_AUDIO_BYTES:
-        raise HTTPException(status_code=413, detail="nahrávka je nad 50 MB")
-    ctype = (file.content_type or "").split(";")[0].strip()
-    ext = AUDIO_EXT.get(ctype) or Path(file.filename or "").suffix.lstrip(".") or "webm"
+    ext = _audio_ext(file)
     folder = get_workforce_settings().audio_dir / report_id
     folder.mkdir(parents=True, exist_ok=True)
-    path = folder / f"{store.new_id()}.{ext[:5]}"
-    path.write_bytes(data)
+    path = folder / f"{store.new_id()}.{ext}"
+    size = 0
+    try:
+        # streamed straight to disk with a cap — never the whole upload in memory
+        with path.open("wb") as out:
+            while chunk := await file.read(UPLOAD_CHUNK_BYTES):
+                size += len(chunk)
+                if size > MAX_AUDIO_BYTES:
+                    raise HTTPException(status_code=413, detail=AUDIO_TOO_LARGE)
+                out.write(chunk)
+        if size == 0:
+            raise HTTPException(status_code=422, detail="prázdna nahrávka")
+    except BaseException:
+        path.unlink(missing_ok=True)
+        raise
     return path
 
 
@@ -347,8 +374,19 @@ async def input_audio(input_id: str) -> FileResponse:
     path = Path(row["audio_path"])
     if not path.exists():
         raise HTTPException(status_code=404, detail="nahrávka už bola zmazaná")
-    media = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
-    return FileResponse(path, media_type=media)
+    # like untrusted documents: no MIME sniffing, sandboxed, inline only for real audio
+    # (recordings stored before the extension allowlist may carry any extension)
+    media = AUDIO_MEDIA.get(path.suffix.lstrip(".").lower())
+    return FileResponse(
+        path,
+        media_type=media or "application/octet-stream",
+        filename=path.name,
+        content_disposition_type="inline" if media else "attachment",
+        headers={
+            "Content-Security-Policy": "sandbox; default-src 'none'",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 # --- majiteľ ----------------------------------------------------------------------------
@@ -537,17 +575,14 @@ def _ask_vocabulary() -> str:
 
 @router.post("/ask/audio")
 async def ask_audio(file: UploadFile) -> AskOut:
-    data = await file.read()
+    ext = _audio_ext(file)
+    data = await read_capped(file, MAX_AUDIO_BYTES, AUDIO_TOO_LARGE)
     if not data:
         raise HTTPException(status_code=422, detail="prázdna nahrávka")
-    if len(data) > MAX_AUDIO_BYTES:
-        raise HTTPException(status_code=413, detail="nahrávka je nad 50 MB")
-    ctype = (file.content_type or "").split(";")[0].strip()
-    ext = AUDIO_EXT.get(ctype) or Path(file.filename or "").suffix.lstrip(".") or "webm"
     prompt = await run_in_threadpool(_ask_vocabulary)
     # otázka sa neukladá — nahrávka žije len počas prepisu
     with tempfile.TemporaryDirectory() as tmp:
-        path = Path(tmp) / f"otazka.{ext[:5]}"
+        path = Path(tmp) / f"otazka.{ext}"
         path.write_bytes(data)
         try:
             text = await run_in_threadpool(speech.transcribe, path, prompt)

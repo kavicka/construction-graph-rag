@@ -2,6 +2,7 @@
 
 import hashlib
 import logging
+import sqlite3
 import uuid
 from pathlib import Path
 from typing import Any
@@ -26,8 +27,17 @@ def store_document(
     if existing:
         return existing, False
     doc_id = uuid.uuid4().hex
-    document_path(doc_id, fmt).write_bytes(data)
-    db.insert_document(doc_id, filename, sha, fmt=fmt, source_path=source_path)
+    path = document_path(doc_id, fmt)
+    path.write_bytes(data)
+    try:
+        db.insert_document(doc_id, filename, sha, fmt=fmt, source_path=source_path)
+    except sqlite3.IntegrityError:
+        # concurrent upload of the same content won the race (sha256 is UNIQUE)
+        path.unlink(missing_ok=True)
+        existing = db.find_document_by_sha(sha)
+        if existing is None:
+            raise
+        return existing, False
     row = db.get_document(doc_id)
     assert row is not None
     return row, True

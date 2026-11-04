@@ -65,22 +65,23 @@ def check_pin(user_id: str, pin: str) -> PinResult:
     row = store.get_worker(user_id)
     if row is None or not row["active"]:
         return PinResult(ok=False)
-    if _locked(row):
+    now = datetime.now(UTC)
+    # the attempt is counted (and the lock set) atomically before the slow hash check —
+    # parallel requests cannot squeeze in more guesses than pin_max_attempts
+    attempt = store.claim_pin_attempt(
+        user_id,
+        now_iso=now.isoformat(),
+        max_attempts=settings.pin_max_attempts,
+        lock_until_iso=(now + timedelta(minutes=settings.pin_lock_minutes)).isoformat(),
+    )
+    if attempt is None:
         return PinResult(ok=False, locked=True)
     if verify_password(pin, row["pin_hash"]):
         store.reset_pin_failures(user_id)
         return PinResult(ok=True)
-    failures = row["failed_attempts"] + 1
-    lock = None
-    if failures >= settings.pin_max_attempts:
-        lock = (datetime.now(UTC) + timedelta(minutes=settings.pin_lock_minutes)).isoformat()
-    store.record_pin_failure(user_id, lock)
-    if lock:
-        # po zámku sa počítadlo resetuje — ďalšie kolo pokusov až po uplynutí zámku
-        store.reset_pin_failures(user_id)
-        store.record_pin_failure(user_id, lock)
+    if attempt >= settings.pin_max_attempts:
         return PinResult(ok=False, locked=True)
-    return PinResult(ok=False, attempts_left=settings.pin_max_attempts - failures)
+    return PinResult(ok=False, attempts_left=settings.pin_max_attempts - attempt)
 
 
 def create_worker_session(user_id: str) -> tuple[str, int]:

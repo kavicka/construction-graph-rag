@@ -19,6 +19,7 @@ from fastapi.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.auth import current_scope
+from app.security import request_path
 from app.workforce import store
 from app.workforce.config import get_workforce_settings
 
@@ -59,8 +60,16 @@ async def wait_for_jobs() -> None:
 
 # --- ochrana API pre pracovníkov --------------------------------------------------------
 
-WORKER_ALLOWED_PREFIXES = ("/api/auth/", "/api/attendance/", "/api/me/")
-WORKER_ALLOWED_PATHS = {"/api/health"}
+WORKER_ALLOWED_PREFIXES = ("/api/attendance/", "/api/me/")
+# only the auth endpoints a worker's phone needs — no API tokens, users or anything else
+WORKER_ALLOWED_PATHS = {
+    "/api/health",
+    "/api/auth/login",
+    "/api/auth/logout",
+    "/api/auth/me",
+    "/api/auth/pin",
+    "/api/auth/workers",
+}
 _CACHE_TTL_S = 5.0
 _worker_cache: tuple[float, set[str]] = (0.0, set())
 
@@ -88,7 +97,7 @@ class WorkerGuard:
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        path = scope.get("path", "")
+        path = request_path(scope)  # same root_path handling as AuthMiddleware
         if scope["type"] == "http" and (path.startswith("/api/") or path == "/mcp"):
             user_id = current_scope().user_id
             allowed = path in WORKER_ALLOWED_PATHS or path.startswith(WORKER_ALLOWED_PREFIXES)

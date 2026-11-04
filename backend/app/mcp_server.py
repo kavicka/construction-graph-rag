@@ -16,7 +16,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 from mcp_types import ToolAnnotations
 
 from app import db
-from app.auth import allowed_doc_ids, can_access_document
+from app.auth import LOCAL_ADMIN, allowed_doc_ids, can_access_document, set_scope
 from app.config import get_settings
 from app.docgen.intent import detect_generate_intent
 from app.graph.schema import CONCEPT
@@ -232,16 +232,16 @@ async def generate_document(request: str) -> dict[str, Any]:
     """Create a branded PDF (report, offer, memo, summary or free-form) from the documents.
 
     Example: "Prepare a report on concrete quality at the Agatova project". Branding and
-    company details come from the app's Settings page. Returns the PDF path and URL.
+    company details come from the app's Settings page. Returns the document id and its
+    download URL (relative to the app, e.g. /api/generated/<id>/pdf).
     """
     prompt = request if detect_generate_intent(request) else f"Vytvor dokument: {request}"
     result = await answer_question(prompt)
     if result.document is None:
         raise ValueError("request was not recognised as a document request")
-    path = get_settings().generated_dir / f"{result.document['id']}.pdf"
+    # id + app-relative URL only — never an absolute path on the server's disk
     return {
         **result.document,
-        "path": str(path),
         "summary": result.answer,
         "sources": [_source_out(s, with_text=False) for s in result.sources],
     }
@@ -261,6 +261,9 @@ def main() -> None:
     settings = get_settings()
     settings.ensure_dirs()
     db.init_db()
+    # stdio = a local process started by the owner with direct access to the data
+    # directory; the fail-closed default (no access when login is on) is for HTTP only
+    set_scope(LOCAL_ADMIN)
     mcp.run("stdio")
 
 

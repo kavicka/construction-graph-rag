@@ -22,6 +22,7 @@ from typing import Any
 
 from app import db
 from app.config import get_settings
+from app.security import get_security_settings
 
 SESSION_COOKIE = "rag_session"
 SCRYPT = {"n": 2**14, "r": 8, "p": 1, "dklen": 32}
@@ -40,19 +41,25 @@ class AccessScope:
         return self.role == "admin"
 
     def can_see(self, access_groups: list[str]) -> bool:
-        return (
-            self.unrestricted or EVERYONE in access_groups or bool(self.groups & set(access_groups))
-        )
+        if self.unrestricted:
+            return True
+        if not self.user_id:
+            return False  # anonymous (NO_ACCESS) sees nothing, not even documents for "*"
+        return EVERYONE in access_groups or bool(self.groups & set(access_groups))
 
 
 LOCAL_ADMIN = AccessScope(user_id=None, email=None, role="admin")
 # neprihlásený request na verejnú cestu pri zapnutom prihlasovaní — nevidí nič
 NO_ACCESS = AccessScope(user_id="", email=None, role="member")
-_scope: ContextVar[AccessScope] = ContextVar("rag_access_scope", default=LOCAL_ADMIN)
+_scope: ContextVar[AccessScope | None] = ContextVar("rag_access_scope", default=None)
 
 
 def current_scope() -> AccessScope:
-    return _scope.get()
+    scope = _scope.get()
+    if scope is not None:
+        return scope
+    # Fail closed: without an explicit request scope, full access only when login is off.
+    return NO_ACCESS if get_settings().auth_enabled else LOCAL_ADMIN
 
 
 def set_scope(scope: AccessScope) -> object:  # noqa: D103
@@ -113,10 +120,16 @@ def create_session(user_id: str) -> str:
     return token
 
 
-def create_api_token(user_id: str, name: str) -> str:
+def create_api_token(user_id: str, name: str) -> tuple[str, dict[str, Any]]:
+    """→ (plain token shown once, stored row without the hash). Expires after
+    RAG_API_TOKEN_TTL_DAYS."""
     token = "rag_" + secrets.token_urlsafe(32)
-    db.insert_api_token(_token_hash(token), user_id, name)
-    return token
+    expires = datetime.now(UTC) + timedelta(days=get_security_settings().api_token_ttl_days)
+    token_id = uuid.uuid4().hex
+    db.insert_api_token(_token_hash(token), user_id, name, token_id, expires.isoformat())
+    row = db.get_api_token(token_id)
+    assert row is not None
+    return token, row
 
 
 def scope_for_user(user: dict[str, Any]) -> AccessScope:
@@ -130,7 +143,7 @@ def scope_for_user(user: dict[str, Any]) -> AccessScope:
 
 def resolve_token(session_token: str | None, bearer: str | None) -> AccessScope | None:
     if bearer:
-        user = db.user_for_api_token(_token_hash(bearer))
+        user = db.user_for_api_token(_token_hash(bearer), datetime.now(UTC).isoformat())
         return scope_for_user(user) if user else None
     if session_token:
         user = db.user_for_session(_token_hash(session_token), datetime.now(UTC).isoformat())

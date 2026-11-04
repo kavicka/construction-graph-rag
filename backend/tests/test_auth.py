@@ -147,7 +147,13 @@ def test_retrieval_prefilters_by_access(secured: None) -> None:
         reset_scope(token)
     # B je najbližší vektor, ale filter je vo vyhľadávaní → B sa vôbec neobjaví
     assert {s.doc_id for s in sources} == {"A", "C"}
-    assert {s.doc_id for s in retrieve_sources("prietok", k=3)} == {"A", "B", "C"}  # lokálne
+    # fail closed: with login on, code running outside a request scope sees nothing
+    assert retrieve_sources("prietok", k=3) == []
+    token = set_scope(AccessScope(user_id="a1", email=None, role="admin"))
+    try:
+        assert {s.doc_id for s in retrieve_sources("prietok", k=3)} == {"A", "B", "C"}
+    finally:
+        reset_scope(token)
 
 
 def test_chats_are_private(secured: None, monkeypatch: pytest.MonkeyPatch) -> None:

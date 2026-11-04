@@ -37,11 +37,15 @@ services:
       RAG_OPENAI_API_KEY: ${RAG_OPENAI_API_KEY:-}
       RAG_ANSWER_MODEL: ${RAG_ANSWER_MODEL:-qwen3:4b-instruct}
       RAG_EXTRACT_MODEL: ${RAG_EXTRACT_MODEL:-qwen3:1.7b}
-      # kontajner nevidí RAM hostiteľa spoľahlivo — profil explicitne (low = menšie modely)
+      # the container cannot see host RAM reliably — set the profile explicitly (low = smaller models)
       RAG_RAM_PROFILE: ${RAG_RAM_PROFILE:-low}
       RAG_AUTH_ENABLED: ${RAG_AUTH_ENABLED:-false}
+      # the backend is reachable only through the frontend nginx, which sets X-Forwarded-For
+      # → per-client login rate limit sees real client IPs
+      RAG_TRUSTED_PROXY: "true"
       RAG_ADMIN_EMAIL: ${RAG_ADMIN_EMAIL:-}
       RAG_ADMIN_PASSWORD: ${RAG_ADMIN_PASSWORD:-}
+      RAG_COOKIE_SECURE: ${RAG_COOKIE_SECURE:-false}
       RAG_MCP_ALLOWED_HOSTS: "localhost:*,backend:*"
       RAG_OTLP_ENDPOINT: ${RAG_OTLP_ENDPOINT:-}
     volumes:
@@ -54,7 +58,12 @@ services:
     depends_on:
       - backend
     ports:
-      - "8080:80"
+      # Localhost only: with RAG_AUTH_ENABLED=false (the default) anyone who can reach this
+      # port can read and change the whole library. To expose it on your LAN or the
+      # internet, first set RAG_AUTH_ENABLED=true with RAG_ADMIN_EMAIL / RAG_ADMIN_PASSWORD,
+      # add your hostname to RAG_MCP_ALLOWED_HOSTS, put it behind HTTPS (RAG_COOKIE_SECURE=true),
+      # then change this to "8080:80".
+      - "127.0.0.1:8080:80"
 
 volumes:
   ollama:

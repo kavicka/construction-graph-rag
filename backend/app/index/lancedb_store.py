@@ -56,7 +56,7 @@ def replace_document_chunks(doc_id: str, chunks: list[Chunk], vectors: list[list
     if not vectors:
         return 0
     tbl = _get_or_create_table(dim=len(vectors[0]))
-    tbl.delete(f"doc_id = '{doc_id}'")
+    tbl.delete(f"doc_id = {_sql_str(doc_id)}")
     tbl.add(
         [
             {
@@ -83,7 +83,7 @@ def delete_document_chunks(doc_id: str) -> None:
     tbl = _table_or_none()
     if tbl is None:
         return
-    tbl.delete(f"doc_id = '{doc_id}'")
+    tbl.delete(f"doc_id = {_sql_str(doc_id)}")
     if tbl.count_rows():
         tbl.create_fts_index("text", replace=True)
 
@@ -110,8 +110,13 @@ def _table_or_none() -> Any | None:
     return db.open_table(CHUNKS_TABLE)
 
 
+def _sql_str(value: str) -> str:
+    """Quoted SQL string literal for LanceDB filters (ids may come from the outside)."""
+    return "'" + value.replace("'", "''") + "'"
+
+
 def _doc_filter(doc_ids: set[str]) -> str:
-    quoted = ",".join("'" + d.replace("'", "''") + "'" for d in sorted(doc_ids))
+    quoted = ",".join(_sql_str(d) for d in sorted(doc_ids))
     return f"doc_id IN ({quoted})"
 
 
@@ -149,7 +154,7 @@ def get_chunks_by_ids(chunk_ids: list[str]) -> list[dict[str, Any]]:
     tbl = _table_or_none()
     if tbl is None or not chunk_ids:
         return []
-    quoted = ",".join("'" + cid.replace("'", "''") + "'" for cid in chunk_ids)
+    quoted = ",".join(_sql_str(cid) for cid in chunk_ids)
     rows = tbl.search().where(f"chunk_id IN ({quoted})").limit(len(chunk_ids)).to_list()
     return [_row_out(r, "_distance") for r in rows]
 
@@ -159,7 +164,7 @@ def document_chunks(doc_id: str) -> list[dict[str, Any]]:
     tbl = _table_or_none()
     if tbl is None:
         return []
-    rows = tbl.search().where(f"doc_id = '{doc_id}'").limit(100_000).to_list()
+    rows = tbl.search().where(f"doc_id = {_sql_str(doc_id)}").limit(100_000).to_list()
 
     def order(row: dict[str, Any]) -> tuple[int, int]:
         suffix = row["chunk_id"].rsplit(":", 1)[-1]
@@ -176,13 +181,8 @@ def chunks_on_pages(pages: list[tuple[str, int]], per_page: int = 2) -> list[dic
         return []
     out: list[dict[str, Any]] = []
     for doc_id, page in pages:
-        safe = doc_id.replace("'", "''")
-        rows = (
-            tbl.search()
-            .where(f"doc_id = '{safe}' AND page_from <= {int(page)} AND page_to >= {int(page)}")
-            .limit(per_page)
-            .to_list()
-        )
+        where = f"doc_id = {_sql_str(doc_id)} AND page_from <= {int(page)}"
+        rows = tbl.search().where(f"{where} AND page_to >= {int(page)}").limit(per_page).to_list()
         out += [_row_out(r, "_distance") for r in rows]
     return out
 
@@ -193,4 +193,4 @@ def count_chunks(doc_id: str | None = None) -> int:
         return 0
     if doc_id is None:
         return int(tbl.count_rows())
-    return int(tbl.count_rows(f"doc_id = '{doc_id}'"))
+    return int(tbl.count_rows(f"doc_id = {_sql_str(doc_id)}"))

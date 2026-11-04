@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from app import db
 from app.api.access import ensure_document, require_admin
+from app.api.uploads import read_capped
 from app.auth import allowed_doc_ids, can_access_document, current_scope, document_access
 from app.index.lancedb_store import get_chunks_by_ids
 from app.ingest.formats import FORMATS, detect_format, media_type
@@ -60,16 +61,14 @@ def _to_out(row: dict) -> DocumentOut:  # type: ignore[type-arg]
 async def upload_documents(files: list[UploadFile]) -> list[DocumentOut]:
     out: list[DocumentOut] = []
     for f in files:
-        data = await f.read()
         name = f.filename or "dokument"
+        data = await read_capped(f, MAX_FILE_BYTES, f"{name}: nad 100 MB")
         fmt = detect_format(name, data)
         if fmt is None:
             supported = ", ".join(sorted(FORMATS))
             raise HTTPException(
                 status_code=415, detail=f"{name}: nepodporovaný formát (podporované: {supported})"
             )
-        if len(data) > MAX_FILE_BYTES:
-            raise HTTPException(status_code=413, detail=f"{name}: nad 100 MB")
         row, created = await run_in_threadpool(store_document, name, data, fmt)
         if not created and not await run_in_threadpool(can_access_document, row["id"]):
             # identický obsah ako dokument, ktorý používateľ nevidí — nič o ňom neprezradiť

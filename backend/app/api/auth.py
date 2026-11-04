@@ -21,6 +21,8 @@ from app.auth import (
     verify_password,
 )
 from app.config import get_settings
+from app.security import LOGIN_RATE_LIMITED, get_login_limiter
+from app.workforce.runtime import is_worker
 
 router = APIRouter()
 
@@ -53,13 +55,33 @@ class LoginIn(BaseModel):
     password: str = Field(min_length=1, max_length=200)
 
 
+def ensure_login_allowed(request: Request) -> str:
+    """429 while this client has too many recent failed logins → client key for
+    `record_login_failure`. Shared by password and worker PIN login."""
+    limiter = get_login_limiter()
+    key = limiter.client_key(request)
+    if limiter.blocked(key):
+        raise HTTPException(
+            status_code=429,
+            detail=LOGIN_RATE_LIMITED,
+            headers={"Retry-After": str(int(limiter.window_s))},
+        )
+    return key
+
+
+def record_login_failure(key: str) -> None:
+    get_login_limiter().record_failure(key)
+
+
 @router.post("/auth/login")
-async def login(body: LoginIn, response: Response) -> UserOut:
+async def login(body: LoginIn, request: Request, response: Response) -> UserOut:
+    client = ensure_login_allowed(request)
     user = await run_in_threadpool(db.get_user_by_email, body.email)
     # rovnaká chyba aj rovnaký čas pre neexistujúci účet a zlé heslo
     stored = user["password_hash"] if user else DUMMY_HASH
     valid = await run_in_threadpool(verify_password, body.password, stored)
     if user is None or not valid:
+        record_login_failure(client)
         raise HTTPException(status_code=401, detail="nesprávny e-mail alebo heslo")
     token = await run_in_threadpool(create_session, user["id"])
     settings = get_settings()
@@ -158,8 +180,16 @@ class TokenIn(BaseModel):
     name: str = Field(min_length=1, max_length=80)
 
 
-class TokenOut(BaseModel):
+class TokenInfo(BaseModel):
+    id: str
     name: str
+    user_id: str
+    user_email: str
+    created_at: str
+    expires_at: str
+
+
+class TokenOut(TokenInfo):
     token: str  # zobrazí sa len raz
 
 
@@ -167,10 +197,39 @@ class TokenOut(BaseModel):
 async def new_token(body: TokenIn) -> TokenOut:
     """API token pre MCP klienta / skripty — `Authorization: Bearer <token>`."""
     scope = current_scope()
-    if scope.user_id is None:
+    if not scope.user_id:
         raise HTTPException(status_code=400, detail="bez prihlasovania token netreba")
-    token = await run_in_threadpool(create_api_token, scope.user_id, body.name)
-    return TokenOut(name=body.name, token=token)
+    # defence in depth — WorkerGuard already blocks this path for workers
+    if await run_in_threadpool(is_worker, scope.user_id):
+        raise HTTPException(status_code=403, detail="pracovník si API token vytvoriť nemôže")
+    token, row = await run_in_threadpool(create_api_token, scope.user_id, body.name)
+    return TokenOut(**row, token=token)
+
+
+@router.get("/auth/tokens")
+async def list_tokens(all_users: bool = False) -> list[TokenInfo]:
+    """Own API tokens (without the secret); an admin may list everyone's (?all_users=true)."""
+    scope = current_scope()
+    if not scope.user_id:
+        return []
+    if all_users:
+        require_admin()
+    rows = await run_in_threadpool(db.list_api_tokens, None if all_users else scope.user_id)
+    return [TokenInfo(**r) for r in rows]
+
+
+@router.delete("/auth/tokens/{token_id}", status_code=204)
+async def revoke_token(token_id: str) -> None:
+    """Revoke an own API token; an admin may revoke anyone's."""
+    scope = current_scope()
+    row = await run_in_threadpool(db.get_api_token, token_id)
+    if (
+        row is None
+        or not scope.user_id
+        or not (scope.unrestricted or row["user_id"] == scope.user_id)
+    ):
+        raise HTTPException(status_code=404, detail="token neexistuje")
+    await run_in_threadpool(db.delete_api_token, token_id)
 
 
 class AccessIn(BaseModel):

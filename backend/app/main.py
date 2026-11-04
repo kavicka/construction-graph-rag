@@ -39,6 +39,7 @@ from app.ingest.inbox import watch_inbox
 from app.ingest.service import schedule_ingest
 from app.mcp_server import mcp, mcp_transport_security
 from app.obs.tracing import shutdown_tracing
+from app.security import request_path, reset_login_limiter
 from app.workforce.runtime import WorkerGuard, init_workforce, scheduler_loop
 
 logger = logging.getLogger(__name__)
@@ -71,6 +72,7 @@ mcp_endpoint = _McpEndpoint()
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     get_settings().ensure_dirs()
     init_db()
+    reset_login_limiter()
     if get_settings().auth_enabled:
         ensure_bootstrap_admin()
     _recover_stuck_ingests()
@@ -104,13 +106,36 @@ PUBLIC_PATHS = {
 }
 
 
+def _matches(value: str, patterns: list[str]) -> bool:
+    """Exact match, or `name:*` = that name with any numeric port."""
+    for allowed in patterns:
+        if value == allowed:
+            return True
+        if allowed.endswith(":*") and value.startswith(allowed[:-1]):
+            port = value[len(allowed) - 1 :]
+            if port.isdigit():
+                return True
+    return False
+
+
 def _host_allowed(host: str) -> bool:
     """Rovnaký zoznam hostov ako DNS-rebinding ochrana MCP — chráni aj /api: bez neho by
     cudzia stránka s rebindovanou doménou čítala knižnicu cez prehliadač používateľa."""
-    for allowed in mcp_transport_security().allowed_hosts:
-        if host == allowed or (allowed.endswith(":*") and host.startswith(allowed[:-2] + ":")):
-            return True
-    return False
+    return _matches(host, mcp_transport_security().allowed_hosts)
+
+
+SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+
+
+def _cross_origin_write(method: str, origin: str | None, fetch_site: str | None) -> bool:
+    """CSRF guard: a browser on another site must not POST/PUT/DELETE into the library —
+    with login off the API trusts every caller. Clients without an Origin header (curl,
+    scripts, MCP desktop clients) are not browsers and keep working."""
+    if method in SAFE_METHODS:
+        return False
+    if fetch_site == "cross-site":
+        return True
+    return origin is not None and not _matches(origin, mcp_transport_security().allowed_origins)
 
 
 class AuthMiddleware:
@@ -124,15 +149,18 @@ class AuthMiddleware:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
-        path = scope.get("path", "")
-        root = scope.get("root_path", "")
-        if root and path.startswith(root):
-            path = path[len(root) :]  # --root-path / reverse proxy prefix
+        path = request_path(scope)  # --root-path / reverse proxy prefix
         request = Request(scope)
-        if (path.startswith("/api/") or path == "/mcp") and not _host_allowed(
-            request.headers.get("host", "")
-        ):
+        guarded = path.startswith("/api/") or path == "/mcp"
+        if guarded and not _host_allowed(request.headers.get("host", "")):
             await JSONResponse({"detail": "neplatný Host"}, status_code=421)(scope, receive, send)
+            return
+        if guarded and _cross_origin_write(
+            request.method, request.headers.get("origin"), request.headers.get("sec-fetch-site")
+        ):
+            await JSONResponse({"detail": "požiadavka z cudzej stránky"}, status_code=403)(
+                scope, receive, send
+            )
             return
         if not get_settings().auth_enabled:
             await self.app(scope, receive, send)
