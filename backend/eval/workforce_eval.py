@@ -14,7 +14,7 @@ model: koľko polí trafil (po validácii), koľko by bez validácie prešlo zle
 Import úloh: texty od dodávateľov s očakávanými úlohami a termínmi; zhoda názvov (kľúčové
 slová), správne termíny, odfiltrované halucinácie (úloha bez citátu v texte).
 
-Výstup: eval/WORKFORCE.md + eval/results-workforce.json.
+Výstup: eval/WORKFORCE.md + eval/_runs/results-workforce.json.
 """
 
 import argparse
@@ -235,7 +235,7 @@ def eval_extraction(models: list[str]) -> list[dict[str, Any]]:
             _holder["raw"] = out
             return out
 
-        extract._llm_json = spy  # type: ignore[assignment]
+        extract._llm_json = spy
         try:
             extract.extract_report("Prišiel som o siedmej.", TASKS, ReportData(), "2026-10-08")
             total = {"correct": 0, "wrong": 0, "missing": 0, "blocked": 0}
@@ -248,7 +248,7 @@ def eval_extraction(models: list[str]) -> list[dict[str, Any]]:
                 for k, v in _score_case(case, data, raw_holder.get("raw")).items():
                     total[k] += v
         finally:
-            extract._llm_json = original  # type: ignore[assignment]
+            extract._llm_json = original
         fields = total["correct"] + total["wrong"] + total["missing"]
         rows.append(
             {
@@ -270,7 +270,7 @@ def eval_extraction(models: list[str]) -> list[dict[str, Any]]:
 
 # --- import úloh -------------------------------------------------------------------------
 
-DOCS = [
+DOCS: list[tuple[str, list[tuple[str, str | None]]]] = [
     (
         "Dobrý deň, posielam zhrnutie z kontrolného dňa 5. 10. 2026. Betonáž základovej dosky "
         "treba dokončiť do 20. 10. 2026. Po dokončení základov sa začne murovanie obvodových "
@@ -375,7 +375,7 @@ def write_report(
     stt: list[dict[str, Any]], ext: list[dict[str, Any]], imp: list[dict[str, Any]]
 ) -> None:
     # čiastočný beh (--only) ponechá ostatné sekcie z minulého behu
-    previous_path = EVAL_DIR / "results-workforce.json"
+    previous_path = EVAL_DIR / "_runs" / "results-workforce.json"
     if previous_path.exists():
         previous = json.loads(previous_path.read_text(encoding="utf-8"))
         stt = stt or previous.get("stt", [])
@@ -430,7 +430,8 @@ def write_report(
         ]
         lines.append("")
     (EVAL_DIR / "WORKFORCE.md").write_text("\n".join(lines), encoding="utf-8")
-    (EVAL_DIR / "results-workforce.json").write_text(
+    previous_path.parent.mkdir(exist_ok=True)
+    previous_path.write_text(
         json.dumps({"stt": stt, "extraction": ext, "import": imp}, indent=2, ensure_ascii=False),
         encoding="utf-8",
     )

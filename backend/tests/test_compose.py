@@ -77,6 +77,18 @@ def test_cross_language_category_via_embedding(monkeypatch: pytest.MonkeyPatch) 
     assert plan.slots[1].category == "Snídaně"
 
 
+def test_e5_skips_embedding_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    """E5 nemá rozlišujúce kosínusy (všetko ~0.8) → mapuje sa len lexikálne."""
+
+    class E5Embedder(FakeEmbedder):
+        model_name = "intfloat/multilingual-e5-small"
+
+    monkeypatch.setattr("app.index.embedder.get_embedder", E5Embedder)
+    plan_json = VALID_PLAN.replace('"category": "snidane"', '"category": "raňajky"')
+    monkeypatch.setattr("app.retrieve.compose.generate_sync", lambda *a, **kw: plan_json)
+    assert extract_compose_plan(QUESTION, KNOWN) is None
+
+
 def test_plan_rejects_unknown_category(monkeypatch: pytest.MonkeyPatch) -> None:
     bad = VALID_PLAN.replace("obed", "vecere-neexistuju")
     monkeypatch.setattr("app.retrieve.compose.generate_sync", lambda *a, **kw: bad)

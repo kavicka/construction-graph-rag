@@ -8,7 +8,7 @@
 Korpus (eval/construction.py) sa zaindexuje do eval/_runs/<variant>/data — každý
 ingest variant (bez / s contextual retrieval) má vlastnú SQLite + LanceDB. Index sa
 použije znova, kým sa nezmení korpus ani kód ingestu (hash v manifest.json).
-Výstup: eval/results-v2.json a eval/REPORT.md (tabuľky do README).
+Výstup: eval/_runs/results-v2.json (necommituje sa) a eval/REPORT.md (tabuľky do README).
 """
 
 import argparse
@@ -50,7 +50,7 @@ logger = logging.getLogger("eval")
 
 EVAL_DIR = Path(__file__).resolve().parent
 RUNS_DIR = EVAL_DIR / "_runs"
-RESULTS_PATH = EVAL_DIR / "results-v2.json"
+RESULTS_PATH = RUNS_DIR / "results-v2.json"
 REPORT_PATH = EVAL_DIR / "REPORT.md"
 BASELINE_PATH = EVAL_DIR / "baseline.json"
 APP_DIR = EVAL_DIR.parent / "app"
@@ -534,6 +534,7 @@ def main() -> int:
         print("→ prompt injection: bez obrany / s obranou")
         results["injection"] = {"off": run_attacks(guard=False), "on": run_attacks(guard=True)}
 
+    RESULTS_PATH.parent.mkdir(parents=True, exist_ok=True)
     RESULTS_PATH.write_text(json.dumps(results, ensure_ascii=False, indent=1, default=str))
     write_report(results)
     print(f"→ {REPORT_PATH.relative_to(EVAL_DIR.parent)}")

@@ -28,7 +28,7 @@ from eval.corpus import generate_corpus
 from eval.golden import GOLDEN, GoldenQuestion
 
 BASE = "http://localhost:8000/api"
-RESULTS_PATH = Path(__file__).parent / "results.json"
+RESULTS_PATH = Path(__file__).parent / "_runs" / "results.json"
 CITATION = re.compile(r"\[(\d+)\]")
 
 
@@ -147,6 +147,7 @@ def main() -> int:
         f"latencia={summary['avg_latency_s']}s"
     )
 
+    RESULTS_PATH.parent.mkdir(parents=True, exist_ok=True)
     RESULTS_PATH.write_text(
         json.dumps({"summary": summary, "results": results}, ensure_ascii=False, indent=1),
         encoding="utf-8",
