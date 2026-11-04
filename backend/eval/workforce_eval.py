@@ -102,10 +102,18 @@ def eval_stt() -> list[dict[str, Any]]:
                     text = speech.transcribe(path, STT_PROMPT)
                     secs += time.perf_counter() - t0
                     errs.append(wer(sentence, text))
-                rows.append({"model": model.split("/")[-1], "voice": voice,
-                             "wer": sum(errs) / len(errs), "seconds": secs / len(errs)})
-                print(f"STT {model.split('/')[-1]:28} {voice:14} WER {rows[-1]['wer']:.1%} "
-                      f"{rows[-1]['seconds']:.2f} s/vetu")
+                rows.append(
+                    {
+                        "model": model.split("/")[-1],
+                        "voice": voice,
+                        "wer": sum(errs) / len(errs),
+                        "seconds": secs / len(errs),
+                    }
+                )
+                print(
+                    f"STT {model.split('/')[-1]:28} {voice:14} WER {rows[-1]['wer']:.1%} "
+                    f"{rows[-1]['seconds']:.2f} s/vetu"
+                )
     os.environ.pop("RAG_STT_MODEL", None)
     return rows
 
@@ -113,12 +121,14 @@ def eval_stt() -> list[dict[str, Any]]:
 # --- extrakcia výpisu --------------------------------------------------------------------
 
 TASKS = [
-    {"id": "t1", "title": "Murovanie priečok 2. NP", "site_name": "RD Rovinka",
-     "description": ""},
-    {"id": "t2", "title": "Osadenie okenných rámov", "site_name": "RD Rovinka",
-     "description": ""},
-    {"id": "t3", "title": "Betonáž základovej dosky", "site_name": "RD Rovinka",
-     "description": "debnenie, armovanie, betón C25/30"},
+    {"id": "t1", "title": "Murovanie priečok 2. NP", "site_name": "RD Rovinka", "description": ""},
+    {"id": "t2", "title": "Osadenie okenných rámov", "site_name": "RD Rovinka", "description": ""},
+    {
+        "id": "t3",
+        "title": "Betonáž základovej dosky",
+        "site_name": "RD Rovinka",
+        "description": "debnenie, armovanie, betón C25/30",
+    },
 ]
 
 
@@ -190,8 +200,9 @@ def _score_case(case: Case, data: Any, raw: Any) -> dict[str, int]:
             if want is None:
                 continue
             got = getattr(entry, name) if entry else None
-            same = got == want if name == "status" else (
-                got is not None and float(got) == float(want))
+            same = (
+                got == want if name == "status" else (got is not None and float(got) == float(want))
+            )
             if same:
                 s["correct"] += 1
             elif got is None:
@@ -213,8 +224,13 @@ def eval_extraction(models: list[str]) -> list[dict[str, Any]]:
         raw_holder: dict[str, Any] = {}
         original = extract._llm_json
 
-        def spy(prompt: str, system: str, schema: Any, _orig: Any = original,
-                _holder: dict[str, Any] = raw_holder) -> Any:
+        def spy(
+            prompt: str,
+            system: str,
+            schema: Any,
+            _orig: Any = original,
+            _holder: dict[str, Any] = raw_holder,
+        ) -> Any:
             out = _orig(prompt, system, schema)
             _holder["raw"] = out
             return out
@@ -234,11 +250,20 @@ def eval_extraction(models: list[str]) -> list[dict[str, Any]]:
         finally:
             extract._llm_json = original  # type: ignore[assignment]
         fields = total["correct"] + total["wrong"] + total["missing"]
-        rows.append({"model": model, **total, "fields": fields,
-                     "accuracy": total["correct"] / fields, "seconds": secs / len(CASES)})
-        print(f"EXTRAKCIA {model:36} správne {total['correct']}/{fields} "
-              f"zle {total['wrong']} chýba {total['missing']} (zastavené {total['blocked']}) "
-              f"{secs / len(CASES):.1f} s/výpis")
+        rows.append(
+            {
+                "model": model,
+                **total,
+                "fields": fields,
+                "accuracy": total["correct"] / fields,
+                "seconds": secs / len(CASES),
+            }
+        )
+        print(
+            f"EXTRAKCIA {model:36} správne {total['correct']}/{fields} "
+            f"zle {total['wrong']} chýba {total['missing']} (zastavené {total['blocked']}) "
+            f"{secs / len(CASES):.1f} s/výpis"
+        )
     os.environ.pop("RAG_WORKFORCE_MODEL", None)
     return rows
 
@@ -252,8 +277,12 @@ DOCS = [
         "stien, termín do konca mesiaca. Elektroinštaláciu v 1. NP urobí Peter Kováč v termíne "
         "2.–6. 11. 2026. Hydroizoláciu spodnej stavby treba urobiť budúci týždeň. Faktúry "
         "uhraďte do 14 dní. S pozdravom, Ing. Novák",
-        [("betonaz", "2026-10-20"), ("murovanie", "2026-10-31"), ("elektro", "2026-11-06"),
-         ("hydroizol", "2026-10-16")],
+        [
+            ("betonaz", "2026-10-20"),
+            ("murovanie", "2026-10-31"),
+            ("elektro", "2026-11-06"),
+            ("hydroizol", "2026-10-16"),
+        ],
     ),
     (
         "Harmonogram prác RD Pezinok:\n| Práca | Termín |\n|---|---|\n"
@@ -261,8 +290,12 @@ DOCS = [
         "| Klampiarske prvky a žľaby | 26.–28. 10. 2026 |\n"
         "| Sadrokartónové podhľady v podkroví | v 45. týždni |\n"
         "Poznámka: lešenie demontovať až po dokončení žľabov.",
-        [("kryti", "2026-10-24"), ("zlab", "2026-10-28"), ("podhlad", "2026-11-06"),
-         ("lesen", None)],
+        [
+            ("kryti", "2026-10-24"),
+            ("zlab", "2026-10-28"),
+            ("podhlad", "2026-11-06"),
+            ("lesen", None),
+        ],
     ),
 ]
 
@@ -274,8 +307,16 @@ def eval_import(models: list[str]) -> list[dict[str, Any]]:
     from app.workforce.sk_dates import parse_term
     from app.workforce.sk_numbers import normalize
 
-    professions = ["murár", "betonár", "elektrikár", "izolatér", "pokrývač", "klampiar",
-                   "sadrokartonista", "pomocný robotník"]
+    professions = [
+        "murár",
+        "betonár",
+        "elektrikár",
+        "izolatér",
+        "pokrývač",
+        "klampiar",
+        "sadrokartonista",
+        "pomocný robotník",
+    ]
     rows = []
     for model in models:
         os.environ["RAG_WORKFORCE_MODEL"] = model
@@ -286,34 +327,53 @@ def eval_import(models: list[str]) -> list[dict[str, Any]]:
             window = Window([Segment(text, 1)])
             t0 = time.perf_counter()
             items, doc_date = importer.extract_drafts(
-                {"filename": "zadanie.pdf", "doc_id": None}, [window], professions)
+                {"filename": "zadanie.pdf", "doc_id": None}, [window], professions
+            )
             secs += time.perf_counter() - t0
             items = importer.dedupe(items)
             ref = doc_date or date(2026, 10, 8)
             matched: set[int] = set()
             for key, want_to in want:
                 expected += 1
-                hit = next((i for i, it in enumerate(items)
-                            if key in normalize(it["title"]) and i not in matched), None)
+                hit = next(
+                    (
+                        i
+                        for i, it in enumerate(items)
+                        if key in normalize(it["title"]) and i not in matched
+                    ),
+                    None,
+                )
                 if hit is None:
                     continue
                 matched.add(hit)
                 found += 1
-                term = parse_term(importer.expand_term(items[hit]["date_text"],
-                                                       items[hit]["quote"]), ref)
+                term = parse_term(
+                    importer.expand_term(items[hit]["date_text"], items[hit]["quote"]), ref
+                )
                 got_to = term.date_to.isoformat() if term.date_to else None
                 dates_ok += got_to == want_to
             extra += len(items) - len(matched)
-        rows.append({"model": model, "found": found, "expected": expected,
-                     "dates_ok": dates_ok, "extra": extra, "seconds": secs / len(DOCS)})
-        print(f"IMPORT {model:36} úlohy {found}/{expected} termíny {dates_ok}/{expected} "
-              f"navyše {extra} {secs / len(DOCS):.1f} s/dokument")
+        rows.append(
+            {
+                "model": model,
+                "found": found,
+                "expected": expected,
+                "dates_ok": dates_ok,
+                "extra": extra,
+                "seconds": secs / len(DOCS),
+            }
+        )
+        print(
+            f"IMPORT {model:36} úlohy {found}/{expected} termíny {dates_ok}/{expected} "
+            f"navyše {extra} {secs / len(DOCS):.1f} s/dokument"
+        )
     os.environ.pop("RAG_WORKFORCE_MODEL", None)
     return rows
 
 
-def write_report(stt: list[dict[str, Any]], ext: list[dict[str, Any]],
-                 imp: list[dict[str, Any]]) -> None:
+def write_report(
+    stt: list[dict[str, Any]], ext: list[dict[str, Any]], imp: list[dict[str, Any]]
+) -> None:
     # čiastočný beh (--only) ponechá ostatné sekcie z minulého behu
     previous_path = EVAL_DIR / "results-workforce.json"
     if previous_path.exists():
@@ -321,38 +381,59 @@ def write_report(stt: list[dict[str, Any]], ext: list[dict[str, Any]],
         stt = stt or previous.get("stt", [])
         ext = ext or previous.get("extraction", [])
         imp = imp or previous.get("import", [])
-    lines =["# Eval modulu Firma (dochádzka, import úloh)", "",
-             f"Spustené {date.today().isoformat()} na lokálnom stroji "
-             "(`uv run python -m eval.workforce_eval`).", ""]
+    lines = [
+        "# Eval modulu Firma (dochádzka, import úloh)",
+        "",
+        f"Spustené {date.today().isoformat()} na lokálnom stroji "
+        "(`uv run python -m eval.workforce_eval`).",
+        "",
+    ]
     if stt:
-        lines += ["## Prepis reči (Whisper, slovenčina, 10 viet stavbárov)", "",
-                  "| Model | Hlas | WER | s / veta |", "|---|---|---:|---:|"]
-        lines += [f"| {r['model']} | {r['voice']} | {r['wer']:.1%} | {r['seconds']:.2f} |"
-                  for r in stt]
+        lines += [
+            "## Prepis reči (Whisper, slovenčina, 10 viet stavbárov)",
+            "",
+            "| Model | Hlas | WER | s / veta |",
+            "|---|---|---:|---:|",
+        ]
+        lines += [
+            f"| {r['model']} | {r['voice']} | {r['wer']:.1%} | {r['seconds']:.2f} |" for r in stt
+        ]
         lines.append("")
     if ext:
-        lines += ["## Extrakcia denného výpisu (6 prepisov, overené polia)", "",
-                  "*správne* = pole po validácii sedí; *zle* = prešla nesprávna hodnota; "
-                  "*chýba* = systém sa dopýta; *zastavené* = LLM tvrdil iné číslo, než "
-                  "zaznelo, a validácia ho zahodila.", "",
-                  "| Model | Správne | Zle | Chýba | Zastavené | s / výpis |",
-                  "|---|---:|---:|---:|---:|---:|"]
-        lines += [f"| {r['model']} | {r['correct']}/{r['fields']} ({r['accuracy']:.0%}) | "
-                  f"{r['wrong']} | {r['missing']} | {r['blocked']} | {r['seconds']:.1f} |"
-                  for r in ext]
+        lines += [
+            "## Extrakcia denného výpisu (6 prepisov, overené polia)",
+            "",
+            "*správne* = pole po validácii sedí; *zle* = prešla nesprávna hodnota; "
+            "*chýba* = systém sa dopýta; *zastavené* = LLM tvrdil iné číslo, než "
+            "zaznelo, a validácia ho zahodila.",
+            "",
+            "| Model | Správne | Zle | Chýba | Zastavené | s / výpis |",
+            "|---|---:|---:|---:|---:|---:|",
+        ]
+        lines += [
+            f"| {r['model']} | {r['correct']}/{r['fields']} ({r['accuracy']:.0%}) | "
+            f"{r['wrong']} | {r['missing']} | {r['blocked']} | {r['seconds']:.1f} |"
+            for r in ext
+        ]
         lines.append("")
     if imp:
-        lines += ["## Import úloh (2 dokumenty, 8 očakávaných úloh)", "",
-                  "| Model | Nájdené úlohy | Správny termín | Navyše | s / dokument |",
-                  "|---|---:|---:|---:|---:|"]
-        lines += [f"| {r['model']} | {r['found']}/{r['expected']} | "
-                  f"{r['dates_ok']}/{r['expected']} | {r['extra']} | {r['seconds']:.1f} |"
-                  for r in imp]
+        lines += [
+            "## Import úloh (2 dokumenty, 8 očakávaných úloh)",
+            "",
+            "| Model | Nájdené úlohy | Správny termín | Navyše | s / dokument |",
+            "|---|---:|---:|---:|---:|",
+        ]
+        lines += [
+            f"| {r['model']} | {r['found']}/{r['expected']} | "
+            f"{r['dates_ok']}/{r['expected']} | {r['extra']} | {r['seconds']:.1f} |"
+            for r in imp
+        ]
         lines.append("")
     (EVAL_DIR / "WORKFORCE.md").write_text("\n".join(lines), encoding="utf-8")
     (EVAL_DIR / "results-workforce.json").write_text(
-        json.dumps({"stt": stt, "extraction": ext, "import": imp}, indent=2,
-                   ensure_ascii=False), encoding="utf-8")
+        json.dumps({"stt": stt, "extraction": ext, "import": imp}, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
     print(f"→ {EVAL_DIR / 'WORKFORCE.md'}")
 
 

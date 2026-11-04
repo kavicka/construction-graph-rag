@@ -50,10 +50,12 @@ def login_admin(client: TestClient) -> None:
     assert resp.status_code == 200, resp.text
 
 
-def make_worker(client: TestClient, name: str, pin: str = "1234",
-                professions: list[str] | None = None) -> str:
-    resp = client.post("/api/workers", json={"name": name, "pin": pin,
-                                             "professions": professions or []})
+def make_worker(
+    client: TestClient, name: str, pin: str = "1234", professions: list[str] | None = None
+) -> str:
+    resp = client.post(
+        "/api/workers", json={"name": name, "pin": pin, "professions": professions or []}
+    )
     assert resp.status_code == 201, resp.text
     return str(resp.json()["id"])
 
@@ -64,8 +66,9 @@ def make_site(client: TestClient, name: str = "Rovinka") -> str:
     return str(resp.json()["id"])
 
 
-def make_task(client: TestClient, site_id: str, title: str, assignees: list[str],
-              **extra: Any) -> dict[str, Any]:
+def make_task(
+    client: TestClient, site_id: str, title: str, assignees: list[str], **extra: Any
+) -> dict[str, Any]:
     body = {"site_id": site_id, "title": title, "assignees": assignees, **extra}
     resp = client.post("/api/tasks", json=body)
     assert resp.status_code == 201, resp.text

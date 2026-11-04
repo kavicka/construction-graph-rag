@@ -14,13 +14,21 @@ from tests.wf_fixtures import login_admin, make_worker
 def test_worker_crud_without_auth(client: TestClient) -> None:
     wid = make_worker(client, "Jano Murár", professions=["murár", " murár ", "tesár"])
     workers = client.get("/api/workers").json()
-    assert workers == [{"id": wid, "name": "Jano Murár", "professions": ["murár", "tesár"],
-                        "active": True, "locked": False}]
+    assert workers == [
+        {
+            "id": wid,
+            "name": "Jano Murár",
+            "professions": ["murár", "tesár"],
+            "active": True,
+            "locked": False,
+        }
+    ]
     assert client.post("/api/workers", json={"name": "X", "pin": "12"}).status_code == 422
     assert client.post("/api/workers", json={"name": "X", "pin": "12ab"}).status_code == 422
 
-    resp = client.put(f"/api/workers/{wid}", json={"name": "Ján Murár",
-                                                   "professions": ["murár"], "active": False})
+    resp = client.put(
+        f"/api/workers/{wid}", json={"name": "Ján Murár", "professions": ["murár"], "active": False}
+    )
     assert resp.json()["name"] == "Ján Murár" and resp.json()["active"] is False
     assert client.put(f"/api/workers/{wid}/pin", json={"pin": "9876"}).status_code == 204
     assert client.delete(f"/api/workers/{wid}").status_code == 204
@@ -63,8 +71,9 @@ def test_pin_lockout(secured: None, client: TestClient) -> None:
     wid = make_worker(client, "Ondro")
     client.post("/api/auth/logout")
     for _ in range(4):
-        assert client.post("/api/auth/pin", json={"worker_id": wid, "pin": "1111"}).status_code \
-            == 401
+        assert (
+            client.post("/api/auth/pin", json={"worker_id": wid, "pin": "1111"}).status_code == 401
+        )
     assert client.post("/api/auth/pin", json={"worker_id": wid, "pin": "1111"}).status_code == 423
     # ani správny PIN počas zámku nepustí
     assert client.post("/api/auth/pin", json={"worker_id": wid, "pin": "1234"}).status_code == 423

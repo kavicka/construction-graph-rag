@@ -141,9 +141,7 @@ class ToolRuntime:
         return context
 
     def pick_items(self, args: dict[str, Any]) -> str:
-        per_cat_max = {
-            str(k): float(v) for k, v in (args.get("per_category_max") or {}).items()
-        }
+        per_cat_max = {str(k): float(v) for k, v in (args.get("per_category_max") or {}).items()}
         budget_attr = str(args["budget_attr"])
         slots = [
             Slot(
@@ -212,8 +210,7 @@ async def run_agent(question: str) -> AgentResult:
         for a in db.list_record_attrs()
     ]
     messages: list[dict[str, Any]] = [
-        {"role": "system",
-         "content": AGENT_SYSTEM + "\nDostupné atribúty: " + "; ".join(attrs)},
+        {"role": "system", "content": AGENT_SYSTEM + "\nDostupné atribúty: " + "; ".join(attrs)},
         {"role": "user", "content": question},
     ]
 

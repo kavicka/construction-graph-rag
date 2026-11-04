@@ -124,8 +124,15 @@ async def _fixed(mode: str, text: str, steps: list[dict[str, str]]) -> AsyncIter
     yield _sources_event([])
     yield {"type": "delta", "text": text}
     yield {"type": "verify", "ok": True, "issues": [], "sentences": []}
-    yield {"type": "final", "mode": mode, "answer": text, "sources": [], "document": None,
-           "trace_id": None, "verification": {"issues": [], "sentences": []}}
+    yield {
+        "type": "final",
+        "mode": mode,
+        "answer": text,
+        "sources": [],
+        "document": None,
+        "trace_id": None,
+        "verification": {"issues": [], "sentences": []},
+    }
 
 
 def _in_scope(question: str) -> bool:
@@ -136,8 +143,11 @@ def _in_scope(question: str) -> bool:
     if match_sites(question, snap.sites) or match_workers(question, snap.workers).workers:
         return True
     allowed = allowed_doc_ids()
-    titles = [d["filename"].rsplit(".", 1)[0] for d in db.list_documents()
-              if allowed is None or d["id"] in allowed]
+    titles = [
+        d["filename"].rsplit(".", 1)[0]
+        for d in db.list_documents()
+        if allowed is None or d["id"] in allowed
+    ]
     return classify_scope(question, titles) == "ok"
 
 
@@ -157,7 +167,11 @@ async def run_query(
         blocked = get_settings().scope_guard and check_question(question).blocked
         if history and not blocked and needs_rewrite(question, history):
             standalone = await _traced(
-                "rag.rewrite", ctx, rewrite_question, question, history,
+                "rag.rewrite",
+                ctx,
+                rewrite_question,
+                question,
+                history,
                 rag__history=len(history),
             )
             if standalone != question:
@@ -181,12 +195,20 @@ async def run_query(
                     # finálna odpoveď prešla redakciou / očistou → UI ju vymení celú
                     yield {"type": "replace", "text": event["answer"]}
                 event["trace_id"] = trace_id_of(root)
-                set_attrs(root, rag__mode=event["mode"], rag__answer=event["answer"],
-                          rag__sources=len(event["sources"]))
+                set_attrs(
+                    root,
+                    rag__mode=event["mode"],
+                    rag__answer=event["answer"],
+                    rag__sources=len(event["sources"]),
+                )
             elif event["type"] == "verify":
                 weak = [x for x in event["sentences"] if x["status"] != "supported"]
-                set_attrs(root, rag__verify_ok=event["ok"],
-                          rag__sentences=len(event["sentences"]), rag__weak_sentences=len(weak))
+                set_attrs(
+                    root,
+                    rag__verify_ok=event["ok"],
+                    rag__sentences=len(event["sentences"]),
+                    rag__weak_sentences=len(weak),
+                )
             yield event
     except Exception as exc:
         root.set_status(Status(StatusCode.ERROR, str(exc)[:200]))
@@ -203,13 +225,15 @@ async def _run(
     if settings.scope_guard:
         decision = check_question(question)
         if decision.blocked:
-            async for event in _fixed("refuse", reply_for(decision, question),
-                                      [{"tool": "guard", "summary": decision.verdict}]):
+            async for event in _fixed(
+                "refuse",
+                reply_for(decision, question),
+                [{"tool": "guard", "summary": decision.verdict}],
+            ):
                 yield event
             return
     if mode != "research":
-        firma = await _traced("rag.firma", ctx,
-                              lambda: answer_firma(question, viewer_from_scope()))
+        firma = await _traced("rag.firma", ctx, lambda: answer_firma(question, viewer_from_scope()))
         if firma is not None:
             async for event in _fixed("firma", firma.answer, firma.steps):
                 yield event
@@ -239,18 +263,33 @@ async def _run(
         company = await run_in_threadpool(load_company)
         bodies: list[str] = []
         for i, heading in enumerate(outline.headings, start=1):
-            yield {"type": "step", "tool": "section",
-                   "summary": f"{i}/{len(outline.headings)} {heading}"}
-            bodies.append(redact_secrets(
-                await _traced(
-                    "docgen.section", ctx, write_section, question, heading, outline, doc_type,
-                    lang, sources, company, rag__heading=heading,
+            yield {
+                "type": "step",
+                "tool": "section",
+                "summary": f"{i}/{len(outline.headings)} {heading}",
+            }
+            bodies.append(
+                redact_secrets(
+                    await _traced(
+                        "docgen.section",
+                        ctx,
+                        write_section,
+                        question,
+                        heading,
+                        outline,
+                        doc_type,
+                        lang,
+                        sources,
+                        company,
+                        rag__heading=heading,
+                    )
                 )
-            ))
+            )
         yield {"type": "step", "tool": "render", "summary": "renderujem PDF…"}
         content = build_content(outline, doc_type, lang, bodies)
-        generated = await _traced("docgen.render", ctx, save_document, content, company, sources,
-                                  chat_id)
+        generated = await _traced(
+            "docgen.render", ctx, save_document, content, company, sources, chat_id
+        )
         document = generated.to_json()
         yield {"type": "document", "document": document}
 
@@ -301,12 +340,14 @@ async def _run(
         top = await _traced("global.rank", ctx, rank_communities, question, communities, 6)
         for theme in top:
             if not theme.summary:
-                yield {"type": "step", "tool": "summarize",
-                       "summary": ", ".join(theme.concepts[:4])}
+                yield {
+                    "type": "step",
+                    "tool": "summarize",
+                    "summary": ", ".join(theme.concepts[:4]),
+                }
                 await _traced("global.summarize", ctx, summarize_community, theme)
         sources, messages = await _traced("global.context", ctx, global_context, question, top)
-        yield {"type": "step", "tool": "themes",
-               "summary": " · ".join(t.title or "" for t in top)}
+        yield {"type": "step", "tool": "themes", "summary": " · ".join(t.title or "" for t in top)}
         yield _sources_event(sources)
         stream = chat_stream(settings.answer_model, messages, num_ctx=12288, parent=ctx)
         async for token in strip_think(stream):
@@ -330,8 +371,10 @@ async def _run(
             findings.append((sub, finding))
         yield {"type": "step", "tool": "synthesis", "summary": "píšem správu…"}
         stream = chat_stream(
-            settings.answer_model, synthesis_messages(question, findings, sources),
-            num_ctx=12288, parent=ctx,
+            settings.answer_model,
+            synthesis_messages(question, findings, sources),
+            num_ctx=12288,
+            parent=ctx,
         )
         async for token in strip_think(stream):
             answer_parts.append(token)
@@ -340,8 +383,11 @@ async def _run(
 
     else:
         if settings.scope_guard and not await _traced("rag.scope", ctx, _in_scope, question):
-            async for event in _fixed("refuse", reply_for(ScopeDecision("offtopic"), question),
-                                      [{"tool": "guard", "summary": "mimo účelu"}]):
+            async for event in _fixed(
+                "refuse",
+                reply_for(ScopeDecision("offtopic"), question),
+                [{"tool": "guard", "summary": "mimo účelu"}],
+            ):
                 yield event
             return
         if is_compound(question):
@@ -358,8 +404,11 @@ async def _run(
         yield _sources_event(sources)
         messages = build_messages(question, sources)
         if flagged := [s.n for s in sources if s.flagged]:
-            yield {"type": "step", "tool": "guard",
-                   "summary": f"zdroje {flagged} obsahujú pokyny pre AI — označené ako dáta"}
+            yield {
+                "type": "step",
+                "tool": "guard",
+                "summary": f"zdroje {flagged} obsahujú pokyny pre AI — označené ako dáta",
+            }
         stream = chat_stream(settings.answer_model, messages, parent=ctx)
         async for token in strip_think(stream):
             answer_parts.append(token)
@@ -383,9 +432,15 @@ async def _run(
         checks = await _traced("rag.verify", ctx, verify_sentences, answer, sources)
         sentences = [c.to_json() for c in checks]
     yield {"type": "verify", "ok": not issues, "issues": issues, "sentences": sentences}
-    yield {"type": "final", "mode": plan.mode, "answer": answer, "sources": sources,
-           "document": document, "trace_id": None,
-           "verification": {"issues": issues, "sentences": sentences}}
+    yield {
+        "type": "final",
+        "mode": plan.mode,
+        "answer": answer,
+        "sources": sources,
+        "document": document,
+        "trace_id": None,
+        "verification": {"issues": issues, "sentences": sentences},
+    }
 
 
 @dataclass
@@ -411,8 +466,13 @@ async def answer_question(question: str, *, mode: str | None = None) -> AnswerRe
             issues = event["issues"]
         elif event["type"] == "final":
             return AnswerResult(
-                mode=event["mode"], answer=event["answer"], sources=event["sources"],
-                document=event["document"], steps=steps, verify_issues=issues,
-                sentences=event["verification"]["sentences"], trace_id=event["trace_id"],
+                mode=event["mode"],
+                answer=event["answer"],
+                sources=event["sources"],
+                document=event["document"],
+                steps=steps,
+                verify_issues=issues,
+                sentences=event["verification"]["sentences"],
+                trace_id=event["trace_id"],
             )
     raise RuntimeError("run_query skončil bez final udalosti")

@@ -175,7 +175,14 @@ MIGRATIONS: list[tuple[str, str, str]] = [
 
 # status pipeline: queued → parsing → tables → embedding → graph → done | error
 INGEST_STAGES = [
-    "queued", "parsing", "tables", "context", "embedding", "visual", "graph", "done",
+    "queued",
+    "parsing",
+    "tables",
+    "context",
+    "embedding",
+    "visual",
+    "graph",
+    "done",
 ]
 
 
@@ -259,9 +266,7 @@ def set_pages(doc_id: str, pages: list[tuple[int, int]]) -> None:
             "INSERT INTO pages (doc_id, page_no, text_len) VALUES (?, ?, ?)",
             [(doc_id, no, ln) for no, ln in pages],
         )
-        conn.execute(
-            "UPDATE documents SET pages_count = ? WHERE id = ?", (len(pages), doc_id)
-        )
+        conn.execute("UPDATE documents SET pages_count = ? WHERE id = ?", (len(pages), doc_id))
 
 
 def get_pages(doc_id: str) -> list[dict[str, Any]]:
@@ -287,8 +292,17 @@ def insert_table(
         conn.execute(
             """INSERT INTO tables_meta (id, doc_id, page_no, caption, n_rows, n_cols,
                markdown_path, parquet_path, boxes_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (table_id, doc_id, page_no, caption, n_rows, n_cols, markdown_path, parquet_path,
-             boxes_json),
+            (
+                table_id,
+                doc_id,
+                page_no,
+                caption,
+                n_rows,
+                n_cols,
+                markdown_path,
+                parquet_path,
+                boxes_json,
+            ),
         )
 
 
@@ -324,8 +338,14 @@ def replace_document_records(doc_id: str, rows: list[dict[str, Any]]) -> int:
                attrs_json, raw_text) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             [
                 (
-                    r["id"], doc_id, r["table_id"], r["page_no"], r["category"],
-                    r["name"], r["attrs_json"], r["raw_text"],
+                    r["id"],
+                    doc_id,
+                    r["table_id"],
+                    r["page_no"],
+                    r["category"],
+                    r["name"],
+                    r["attrs_json"],
+                    r["raw_text"],
                 )
                 for r in rows
             ],
@@ -412,8 +432,7 @@ def delete_document_graph(doc_id: str) -> None:
         if doc_nodes:
             placeholders = ",".join("?" * len(doc_nodes))
             conn.execute(
-                f"DELETE FROM graph_edges WHERE src IN ({placeholders})"
-                f" OR dst IN ({placeholders})",
+                f"DELETE FROM graph_edges WHERE src IN ({placeholders}) OR dst IN ({placeholders})",
                 doc_nodes + doc_nodes,
             )
             conn.execute(f"DELETE FROM graph_nodes WHERE id IN ({placeholders})", doc_nodes)
@@ -802,9 +821,7 @@ def insert_generated_document(
 
 def get_generated_document(doc_id: str) -> dict[str, Any] | None:
     with get_conn() as conn:
-        row = conn.execute(
-            "SELECT * FROM generated_documents WHERE id = ?", (doc_id,)
-        ).fetchone()
+        row = conn.execute("SELECT * FROM generated_documents WHERE id = ?", (doc_id,)).fetchone()
     return dict(row) if row else None
 
 

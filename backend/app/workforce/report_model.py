@@ -64,8 +64,7 @@ class ReportData(BaseModel):
         return round(total + sum(x.hours or 0 for x in self.extra_work), 2)
 
 
-GapKind = Literal["absence", "arrival", "departure", "break", "task", "extra", "problems",
-                  "hours"]
+GapKind = Literal["absence", "arrival", "departure", "break", "task", "extra", "problems", "hours"]
 
 
 @dataclass(frozen=True)
@@ -77,9 +76,7 @@ class Gap:
     extra_index: int | None = None
 
 
-def find_gaps(
-    data: ReportData, active_task_ids: list[str], *, tolerance: float
-) -> list[Gap]:
+def find_gaps(data: ReportData, active_task_ids: list[str], *, tolerance: float) -> list[Gap]:
     """Chýbajúce údaje v poradí, v akom sa na ne pýtame. Prázdny zoznam = dá sa odovzdať."""
     if data.absent:
         return [] if data.absence_reason.strip() else [Gap("absence", "absence")]

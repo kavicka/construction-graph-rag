@@ -88,12 +88,15 @@ def _match_known_category(name: str, known: list[str]) -> str | None:
 
 def extract_compose_plan(question: str, known_categories: list[str]) -> ComposePlan | None:
     settings = get_settings()
-    prompt = PLAN_PROMPT.format(categories="\n".join(f"- {c}" for c in known_categories),
-                                question=question)
+    prompt = PLAN_PROMPT.format(
+        categories="\n".join(f"- {c}" for c in known_categories), question=question
+    )
     try:
         raw = generate_sync(
-            settings.answer_model, prompt,
-            json_schema=ComposePlan.model_json_schema(), num_ctx=4096,
+            settings.answer_model,
+            prompt,
+            json_schema=ComposePlan.model_json_schema(),
+            num_ctx=4096,
         )
         plan = ComposePlan.model_validate_json(raw)
     except (OllamaError, ValidationError) as exc:
@@ -140,17 +143,14 @@ def format_combo_answer(plan: ComposePlan, combo: Combo, sources: list[Source]) 
     for cat, hit in combo.picks:
         n = table_n.get(hit.table_id, 1)
         lines.append(f"- **{cat}**: {hit.name} ({_fmt_attrs(hit.attrs)}) [{n}]")
-    totals = ", ".join(
-        f"{ATTR_LABELS.get(k, k)} {v:g}" for k, v in combo.total.items()
-    )
+    totals = ", ".join(f"{ATTR_LABELS.get(k, k)} {v:g}" for k, v in combo.total.items())
     lines.append("")
     if combo.within_budget:
         lines.append(f"Súčet: {totals} — limit {plan.budget_max:g} {plan.budget_attr} dodržaný.")
     else:
         over = combo.total[plan.budget_attr] - plan.budget_max
         lines.append(
-            f"Súčet: {totals} — o {over:g} {plan.budget_attr} nad limitom "
-            f"{plan.budget_max:g}."
+            f"Súčet: {totals} — o {over:g} {plan.budget_attr} nad limitom {plan.budget_max:g}."
         )
     return "\n".join(lines)
 
@@ -166,22 +166,19 @@ def run_compose(
     slots = [
         Slot(
             category=s.category,
-            constraints=(
-                [Constraint(plan.budget_attr, "<=", s.max_value)] if s.max_value else []
-            ),
+            constraints=([Constraint(plan.budget_attr, "<=", s.max_value)] if s.max_value else []),
         )
         for s in plan.slots
     ]
     combo = pick_items(
-        slots, budget_attr=plan.budget_attr, budget_max=plan.budget_max,
+        slots,
+        budget_attr=plan.budget_attr,
+        budget_max=plan.budget_max,
         maximize=plan.maximize,
     )
     if combo is None:
         cats = ", ".join(s.category for s in plan.slots)
-        answer = (
-            f"V kategóriách ({cats}) nie sú položky, z ktorých by sa dala "
-            f"zostaviť kombinácia."
-        )
+        answer = f"V kategóriách ({cats}) nie sú položky, z ktorých by sa dala zostaviť kombinácia."
         return answer, [], [question]
 
     hits = [h for _, h in combo.picks]

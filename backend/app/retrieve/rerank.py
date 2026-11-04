@@ -47,8 +47,9 @@ class SentenceTransformersReranker:
             self._model.model.half()  # fp16 na Apple GPU — ~2× rýchlejšie, poradie rovnaké
 
     def score(self, query: str, passages: list[str]) -> list[float]:
-        scores = self._model.predict([(query, p) for p in passages], batch_size=16,
-                                     show_progress_bar=False)
+        scores = self._model.predict(
+            [(query, p) for p in passages], batch_size=16, show_progress_bar=False
+        )
         return [float(s) for s in scores]
 
 

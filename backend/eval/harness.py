@@ -75,15 +75,24 @@ ABLATIONS: list[Ablation] = [
     Ablation("dense", "base", RetrievalConfig(fts=False, graph=False)),
     Ablation("bm25", "base", RetrievalConfig(dense=False, graph=False)),
     Ablation("hybrid (dense+bm25, RRF)", "base", RetrievalConfig(graph=False)),
-    Ablation("hybrid + graph on every query", "base",
-             RetrievalConfig(graph=True, graph_relational_only=False)),
+    Ablation(
+        "hybrid + graph on every query",
+        "base",
+        RetrievalConfig(graph=True, graph_relational_only=False),
+    ),
     Ablation("hybrid + graph on relational queries", "base", RetrievalConfig(graph=True)),
     Ablation("hybrid + graph + rerank", "base", RetrievalConfig(graph=True, rerank=True)),
     Ablation("contextual + hybrid + graph", "contextual", RetrievalConfig(graph=True)),
-    Ablation("contextual + hybrid + graph + rerank", "contextual",
-             RetrievalConfig(graph=True, rerank=True)),
-    Ablation("… + visual pages (ColSmol, experimental)", "contextual",
-             RetrievalConfig(graph=True, rerank=True, visual=True)),
+    Ablation(
+        "contextual + hybrid + graph + rerank",
+        "contextual",
+        RetrievalConfig(graph=True, rerank=True),
+    ),
+    Ablation(
+        "… + visual pages (ColSmol, experimental)",
+        "contextual",
+        RetrievalConfig(graph=True, rerank=True, visual=True),
+    ),
 ]
 DEFAULT_ABLATION = "contextual + hybrid + graph + rerank"  # = produkčné nastavenie
 
@@ -112,8 +121,11 @@ def _source_hash() -> str:
 
     h = hashlib.sha256()
     # obsah dokumentov, nie celý súbor — úprava očakávaných odpovedí nemá vynútiť re-ingest
-    h.update(json.dumps([(d.filename, d.title, d.pages) for d in CORPUS + POISONED],
-                        ensure_ascii=False).encode())
+    h.update(
+        json.dumps(
+            [(d.filename, d.title, d.pages) for d in CORPUS + POISONED], ensure_ascii=False
+        ).encode()
+    )
     files = [EVAL_DIR / "pdfgen.py"]
     for sub in ("ingest", "index", "graph"):
         files += sorted((APP_DIR / sub).glob("*.py"))
@@ -166,8 +178,10 @@ def ingest_variant(variant: str, *, force: bool = False) -> None:
 
 def _ranked(question: str, cfg: RetrievalConfig, names: dict[str, str]) -> list[RetrievedChunk]:
     rows = rank_chunks(question, k=10, cfg=cfg)
-    return [RetrievedChunk(names.get(r["doc_id"], r["doc_id"]), r["page_from"], r["page_to"])
-            for r in rows]
+    return [
+        RetrievedChunk(names.get(r["doc_id"], r["doc_id"]), r["page_from"], r["page_to"])
+        for r in rows
+    ]
 
 
 def _ensure_visual_index() -> None:
@@ -193,29 +207,40 @@ def eval_retrieval(ablation: Ablation, questions: list[EvalQuestion]) -> dict[st
         t0 = time.perf_counter()
         ranked = _ranked(q.question, ablation.cfg, names)
         latency = (time.perf_counter() - t0) * 1000
-        per_q.append({
-            "id": q.id, "kind": q.kind, "lang": q.lang,
-            "recall@5": recall_at_k(ranked, q.gold, 5),
-            "recall@10": recall_at_k(ranked, q.gold, 10),
-            "mrr": reciprocal_rank(ranked, q.gold),
-            "ndcg@10": ndcg_at_k(ranked, q.gold, 10),
-            "latency_ms": round(latency, 1),
-        })
+        per_q.append(
+            {
+                "id": q.id,
+                "kind": q.kind,
+                "lang": q.lang,
+                "recall@5": recall_at_k(ranked, q.gold, 5),
+                "recall@10": recall_at_k(ranked, q.gold, 10),
+                "mrr": reciprocal_rank(ranked, q.gold),
+                "ndcg@10": ndcg_at_k(ranked, q.gold, 10),
+                "latency_ms": round(latency, 1),
+            }
+        )
 
     def agg(rows: list[dict[str, Any]]) -> dict[str, float]:
-        return {m: round(mean([r[m] for r in rows]), 4)
-                for m in ("recall@5", "recall@10", "mrr", "ndcg@10")}
+        return {
+            m: round(mean([r[m] for r in rows]), 4)
+            for m in ("recall@5", "recall@10", "mrr", "ndcg@10")
+        }
 
     latencies = [r["latency_ms"] for r in per_q]
-    by_kind = {k: agg([r for r in per_q if r["kind"] == k])
-               for k in sorted({r["kind"] for r in per_q})}
-    by_lang = {lang: agg([r for r in per_q if r["lang"] == lang])
-               for lang in sorted({r["lang"] for r in per_q})}
+    by_kind = {
+        k: agg([r for r in per_q if r["kind"] == k]) for k in sorted({r["kind"] for r in per_q})
+    }
+    by_lang = {
+        lang: agg([r for r in per_q if r["lang"] == lang])
+        for lang in sorted({r["lang"] for r in per_q})
+    }
     return {
         "name": ablation.name,
-        "summary": {**agg(per_q),
-                    "p50_ms": round(statistics.median(latencies), 1),
-                    "p95_ms": round(sorted(latencies)[int(len(latencies) * 0.95) - 1], 1)},
+        "summary": {
+            **agg(per_q),
+            "p50_ms": round(statistics.median(latencies), 1),
+            "p95_ms": round(sorted(latencies)[int(len(latencies) * 0.95) - 1], 1),
+        },
         "by_kind": by_kind,
         "by_lang": by_lang,
         "questions": per_q,
@@ -244,21 +269,32 @@ def eval_generation(ablation: Ablation, questions: list[EvalQuestion]) -> dict[s
             answer = result.answer
             refused = is_refusal(answer)
             correct = (
-                all(contains_expected(answer, e) for e in q.expected)
-                and not any(contains_expected(answer, f) for f in q.forbidden)
-                and not refused
-            ) if q.kind != "unanswerable" else refused
+                (
+                    all(contains_expected(answer, e) for e in q.expected)
+                    and not any(contains_expected(answer, f) for f in q.forbidden)
+                    and not refused
+                )
+                if q.kind != "unanswerable"
+                else refused
+            )
             faithfulness = None
             if q.kind != "unanswerable" and not refused:
                 sources_text = "\n\n".join(f"[{s.n}] {s.text}" for s in result.sources)
                 faithfulness = await asyncio.to_thread(judge_faithfulness, answer, sources_text)
-            rows.append({
-                "id": q.id, "kind": q.kind, "lang": q.lang, "mode": result.mode,
-                "correct": correct, "refused": refused,
-                "citations_valid": citation_validity(answer, len(result.sources)),
-                "faithfulness": faithfulness, "latency_s": round(latency, 2),
-                "answer": answer[:400],
-            })
+            rows.append(
+                {
+                    "id": q.id,
+                    "kind": q.kind,
+                    "lang": q.lang,
+                    "mode": result.mode,
+                    "correct": correct,
+                    "refused": refused,
+                    "citations_valid": citation_validity(answer, len(result.sources)),
+                    "faithfulness": faithfulness,
+                    "latency_s": round(latency, 2),
+                    "answer": answer[:400],
+                }
+            )
             mark = "✓" if correct else "✗"
             print(f"  {mark} [{i:3d}/{len(questions)}] {q.id:24s} {latency:5.1f}s")
         return rows
@@ -275,9 +311,13 @@ def eval_generation(ablation: Ablation, questions: list[EvalQuestion]) -> dict[s
             "faithfulness": round(mean(faith), 4) if faith else math.nan,
             "citation_validity": round(mean([float(c) for c in cited]), 4) if cited else math.nan,
             "answered_with_citation": round(
-                sum(r["citations_valid"] is not None for r in answerable) / len(answerable), 4),
+                sum(r["citations_valid"] is not None for r in answerable) / len(answerable), 4
+            ),
             "abstention_on_unanswerable": round(
-                mean([float(r["refused"]) for r in unanswerable]), 4) if unanswerable else math.nan,
+                mean([float(r["refused"]) for r in unanswerable]), 4
+            )
+            if unanswerable
+            else math.nan,
             "false_refusal_rate": round(mean([float(r["refused"]) for r in answerable]), 4),
             "avg_latency_s": round(mean([r["latency_s"] for r in rows]), 2),
         },
@@ -329,12 +369,14 @@ def write_report(results: dict[str, Any]) -> None:
         "|---|---:|---:|---:|",
     ]
     for kind, s in best["by_kind"].items():
-        lines.append(f"| {kind} | {_pct(s['recall@10'])} | {_pct(s['mrr'])} | "
-                     f"{_pct(s['ndcg@10'])} |")
+        lines.append(
+            f"| {kind} | {_pct(s['recall@10'])} | {_pct(s['mrr'])} | {_pct(s['ndcg@10'])} |"
+        )
     lines += ["", "| Language | Recall@10 | MRR | nDCG@10 |", "|---|---:|---:|---:|"]
     for lang, s in best["by_lang"].items():
-        lines.append(f"| {lang} | {_pct(s['recall@10'])} | {_pct(s['mrr'])} | "
-                     f"{_pct(s['ndcg@10'])} |")
+        lines.append(
+            f"| {lang} | {_pct(s['recall@10'])} | {_pct(s['mrr'])} | {_pct(s['ndcg@10'])} |"
+        )
 
     if gen := results.get("generation"):
         s = gen["summary"]
@@ -348,8 +390,7 @@ def write_report(results: dict[str, Any]) -> None:
             f"| Faithfulness (LLM judge, supported claims) | {_pct(s['faithfulness'])} % |",
             f"| Valid citations | {_pct(s['citation_validity'])} % |",
             f"| Answers with a citation | {_pct(s['answered_with_citation'])} % |",
-            f"| Abstains on unanswerable questions | "
-            f"{_pct(s['abstention_on_unanswerable'])} % |",
+            f"| Abstains on unanswerable questions | {_pct(s['abstention_on_unanswerable'])} % |",
             f"| False refusals on answerable questions | {_pct(s['false_refusal_rate'])} % |",
             f"| Average end-to-end latency | {s['avg_latency_s']} s |",
             "",
@@ -416,8 +457,9 @@ def _merge_previous(results: dict[str, Any]) -> dict[str, Any]:
         return results
     fresh = {r["name"] for r in results["retrieval"]}
     order = [a.name for a in ABLATIONS]
-    merged = results["retrieval"] + [r for r in previous.get("retrieval", [])
-                                     if r["name"] not in fresh and r["name"] in order]
+    merged = results["retrieval"] + [
+        r for r in previous.get("retrieval", []) if r["name"] not in fresh and r["name"] in order
+    ]
     results["retrieval"] = sorted(merged, key=lambda r: order.index(r["name"]))
     for key in ("generation", "injection"):
         if key not in results and key in previous:
@@ -426,16 +468,21 @@ def _merge_previous(results: dict[str, Any]) -> dict[str, Any]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--reingest", action="store_true", help="vynúť nový ingest korpusu")
     parser.add_argument("--configs", help="čiarkou oddelené názvy ablácií (default všetky)")
     parser.add_argument("--generate", action="store_true", help="aj generačné metriky")
-    parser.add_argument("--gen-config", default=None,
-                        help=f"ablácia pre generovanie (default {DEFAULT_ABLATION!r})")
+    parser.add_argument(
+        "--gen-config", default=None, help=f"ablácia pre generovanie (default {DEFAULT_ABLATION!r})"
+    )
     parser.add_argument("--limit", type=int, default=None, help="len prvých N otázok")
-    parser.add_argument("--injection", action="store_true",
-                        help="prompt-injection útoky s obranou a bez nej (Ollama)")
+    parser.add_argument(
+        "--injection",
+        action="store_true",
+        help="prompt-injection útoky s obranou a bez nej (Ollama)",
+    )
     parser.add_argument("--gate", action="store_true", help="porovnaj s baseline")
     parser.add_argument("--update-baseline", action="store_true")
     args = parser.parse_args()
@@ -455,8 +502,10 @@ def main() -> int:
         print(f"→ retrieval: {ablation.name}")
         r = eval_retrieval(ablation, questions)
         s = r["summary"]
-        print(f"  R@5={_pct(s['recall@5'])} R@10={_pct(s['recall@10'])} MRR={_pct(s['mrr'])} "
-              f"nDCG@10={_pct(s['ndcg@10'])} p50={s['p50_ms']:.0f}ms")
+        print(
+            f"  R@5={_pct(s['recall@5'])} R@10={_pct(s['recall@10'])} MRR={_pct(s['mrr'])} "
+            f"nDCG@10={_pct(s['ndcg@10'])} p50={s['p50_ms']:.0f}ms"
+        )
         retrieval.append(r)
 
     settings = get_settings()
@@ -502,4 +551,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

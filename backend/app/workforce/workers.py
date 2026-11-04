@@ -46,8 +46,7 @@ def create_worker(name: str, pin: str, professions: list[str]) -> dict[str, Any]
     """Pracovník = používateľ s rolou member (bez použiteľného hesla) + PIN."""
     validate_pin(pin)
     email = f"w-{secrets.token_hex(6)}@pracovnik.local"
-    user = create_user(email, name, secrets.token_urlsafe(32), role="member",
-                       groups=[WORKER_GROUP])
+    user = create_user(email, name, secrets.token_urlsafe(32), role="member", groups=[WORKER_GROUP])
     store.insert_worker(user["id"], hash_password(pin), professions)
     row = store.get_worker(user["id"])
     assert row is not None

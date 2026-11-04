@@ -21,8 +21,18 @@ class KeywordEmbedder:
 
 
 def _src(n: int, text: str) -> Source:
-    return Source(n=n, chunk_id=f"c{n}", doc_id="d", filename="z.pdf", page_from=1, page_to=1,
-                  type="text", table_id=None, text=text, snippet=text[:50])
+    return Source(
+        n=n,
+        chunk_id=f"c{n}",
+        doc_id="d",
+        filename="z.pdf",
+        page_from=1,
+        page_to=1,
+        type="text",
+        table_id=None,
+        text=text,
+        snippet=text[:50],
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -31,8 +41,10 @@ def fake_embedder(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_split_sentences_keeps_abbreviations_and_ordinals() -> None:
-    text = ("Stavbyvedúcim je Ing. Peter Hronec [1]. Strop nad 2. NP sa betónoval 15. 6. 2026. "
-            "Firma Stavby Kráľ s.r.o. Žilina dodá dielo.\n- bod jeden\n- bod dva")
+    text = (
+        "Stavbyvedúcim je Ing. Peter Hronec [1]. Strop nad 2. NP sa betónoval 15. 6. 2026. "
+        "Firma Stavby Kráľ s.r.o. Žilina dodá dielo.\n- bod jeden\n- bod dva"
+    )
     assert split_sentences(text) == [
         "Stavbyvedúcim je Ing. Peter Hronec [1].",
         "Strop nad 2. NP sa betónoval 15. 6. 2026.",

@@ -118,7 +118,11 @@ class Settings(BaseSettings):
 
     def ensure_dirs(self) -> None:
         for d in (
-            self.data_dir, self.pdf_dir, self.parsed_dir, self.tables_dir, self.generated_dir
+            self.data_dir,
+            self.pdf_dir,
+            self.parsed_dir,
+            self.tables_dir,
+            self.generated_dir,
         ):
             d.mkdir(parents=True, exist_ok=True)
 

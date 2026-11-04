@@ -71,8 +71,13 @@ async def list_documents() -> list[dict[str, Any]]:
     allowed = await anyio.to_thread.run_sync(allowed_doc_ids)
     docs = [d for d in docs if allowed is None or d["id"] in allowed]
     return [
-        {"id": d["id"], "filename": d["filename"], "status": d["status"],
-         "pages": d["pages_count"], "uploaded_at": d["created_at"]}
+        {
+            "id": d["id"],
+            "filename": d["filename"],
+            "status": d["status"],
+            "pages": d["pages_count"],
+            "uploaded_at": d["created_at"],
+        }
         for d in docs
     ]
 
@@ -110,18 +115,25 @@ def _connections(topic: str, max_documents: int) -> dict[str, Any]:
         seen.add(r["chunk_id"])
         doc = by_doc.setdefault(
             r["doc_id"],
-            {"filename": names.get(r["doc_id"], r["doc_id"]), "doc_id": r["doc_id"],
-             "evidence": []},
+            {
+                "filename": names.get(r["doc_id"], r["doc_id"]),
+                "doc_id": r["doc_id"],
+                "evidence": [],
+            },
         )
         if len(doc["evidence"]) < 3:
             doc["evidence"].append(
-                {"page": r["page_from"], "section": r["section_path"],
-                 "snippet": redact_secrets(r["raw_text"])[:300]}
+                {
+                    "page": r["page_from"],
+                    "section": r["section_path"],
+                    "snippet": redact_secrets(r["raw_text"])[:300],
+                }
             )
     # len pojmy doložené povoleným úsekom — inak by štítok prezradil obsah cudzieho dokumentu
     visible_chunks = {f"chunk:{r['chunk_id']}" for r in rows}
     evidenced = {
-        e["dst"] for e in db.list_graph_edges()
+        e["dst"]
+        for e in db.list_graph_edges()
         if e["src"] in visible_chunks and e["dst"] in set(concept_ids)
     }
     concepts = [n["label"] for n in db.list_graph_nodes(types=[CONCEPT]) if n["id"] in evidenced]
@@ -196,8 +208,12 @@ def _document(document: str, max_chars: int) -> dict[str, Any]:
         "filename": doc["filename"],
         "pages": doc["pages_count"],
         "tables": [
-            {"caption": t["caption"], "page": t["page_no"], "rows": t["n_rows"],
-             "summary": t["summary"]}
+            {
+                "caption": t["caption"],
+                "page": t["page_no"],
+                "rows": t["n_rows"],
+                "summary": t["summary"],
+            }
             for t in db.list_tables(doc["id"])
         ],
         "text": text[:max_chars],

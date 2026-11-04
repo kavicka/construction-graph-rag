@@ -70,9 +70,31 @@ def inflected(q: str, name: str) -> int:
 
 
 COMMON_WORDS = {norm(p) for p in DEFAULT_PROFESSIONS} | {
-    "maly", "velky", "novy", "stary", "biely", "cierny", "dobry", "zly", "hora", "les",
-    "kovac", "kral", "pan", "pani", "sused", "mlynar", "rybar", "krajci", "sedlak",
-    "dnes", "zajtra", "stavba", "uloha", "robota", "prace",
+    "maly",
+    "velky",
+    "novy",
+    "stary",
+    "biely",
+    "cierny",
+    "dobry",
+    "zly",
+    "hora",
+    "les",
+    "kovac",
+    "kral",
+    "pan",
+    "pani",
+    "sused",
+    "mlynar",
+    "rybar",
+    "krajci",
+    "sedlak",
+    "dnes",
+    "zajtra",
+    "stavba",
+    "uloha",
+    "robota",
+    "prace",
 }
 
 
@@ -135,17 +157,24 @@ def match_workers(question: str, workers: list[WorkerRef]) -> Resolved:
         if len(parts) < 2:
             continue
         s_score, s_tok = hits[-1]
-        if s_score and s_tok is not None and (
-            (s_tok.capitalized and not s_tok.first)
-            or (s_score >= 2 and parts[-1] not in COMMON_WORDS)
+        if (
+            s_score
+            and s_tok is not None
+            and (
+                (s_tok.capitalized and not s_tok.first)
+                or (s_score >= 2 and parts[-1] not in COMMON_WORDS)
+            )
         ):
             surname.append(WorkerMatch(w, s_tok.norm))
             continue
         f_score, f_tok, f_idx = _best_at(q_tokens, parts[0])
         # samotné krstné meno: presný tvar, alebo skloňovaný s veľkým písmenom
-        if f_tok is not None and parts[0] not in COMMON_WORDS and (
-            f_score == 3 or (f_score == 2 and f_tok.capitalized and not f_tok.first)
-        ) and not _other_surname_follows(q_tokens, f_idx, parts[-1]):
+        if (
+            f_tok is not None
+            and parts[0] not in COMMON_WORDS
+            and (f_score == 3 or (f_score == 2 and f_tok.capitalized and not f_tok.first))
+            and not _other_surname_follows(q_tokens, f_idx, parts[-1])
+        ):
             first.append(WorkerMatch(w, f_tok.norm))
 
     res = Resolved()
@@ -174,8 +203,23 @@ def _dedup(ws: list[WorkerRef]) -> list[WorkerRef]:
     return list(seen.values())
 
 
-SITE_GENERIC = {"bytovy", "dom", "domy", "rodinny", "stavba", "objekt", "rekonstrukcia",
-                "ulica", "projekt", "areal", "budova", "novostavba", "hala", "byty", "bytov"}
+SITE_GENERIC = {
+    "bytovy",
+    "dom",
+    "domy",
+    "rodinny",
+    "stavba",
+    "objekt",
+    "rekonstrukcia",
+    "ulica",
+    "projekt",
+    "areal",
+    "budova",
+    "novostavba",
+    "hala",
+    "byty",
+    "bytov",
+}
 
 
 def match_sites(question: str, sites: list[SiteRef]) -> list[SiteRef]:
@@ -192,9 +236,33 @@ def match_sites(question: str, sites: list[SiteRef]) -> list[SiteRef]:
     return [s for sc, s in scored if sc == top]
 
 
-TASK_STOP = {"robi", "robil", "robila", "robia", "pracuje", "pracoval", "uloha", "ulohu",
-             "ulohe", "ulohy", "ulohach", "dnes", "zajtra", "kto", "ktory", "ktora", "stav",
-             "praca", "prace", "pracu", "stavba", "stavbe", "stavby", "termin", "terminu"}
+TASK_STOP = {
+    "robi",
+    "robil",
+    "robila",
+    "robia",
+    "pracuje",
+    "pracoval",
+    "uloha",
+    "ulohu",
+    "ulohe",
+    "ulohy",
+    "ulohach",
+    "dnes",
+    "zajtra",
+    "kto",
+    "ktory",
+    "ktora",
+    "stav",
+    "praca",
+    "prace",
+    "pracu",
+    "stavba",
+    "stavbe",
+    "stavby",
+    "termin",
+    "terminu",
+}
 
 
 # „pracovníci“ v otázke nie je názov úlohy („… vypíš PIN všetkých pracovníkov“)
@@ -212,9 +280,14 @@ def _related(a: str, b: str) -> bool:
 
 def match_tasks(question: str, tasks: list[TaskFact], exclude: set[str]) -> list[TaskFact]:
     """Úlohy, ktorých názov otázka spomína („kto robí na murovaní 2. NP“)."""
-    said = [t for t in tokens(question)
-            if len(t) >= 5 and t not in TASK_STOP and t not in exclude
-            and not t.startswith(PEOPLE_WORDS)]
+    said = [
+        t
+        for t in tokens(question)
+        if len(t) >= 5
+        and t not in TASK_STOP
+        and t not in exclude
+        and not t.startswith(PEOPLE_WORDS)
+    ]
     if not said:
         return []
     scored: list[tuple[int, TaskFact]] = []
@@ -229,8 +302,10 @@ def match_tasks(question: str, tasks: list[TaskFact], exclude: set[str]) -> list
     return [t for sc, t in scored if sc == top]
 
 
-NAME_RE = re.compile(r"\b([A-ZÁČĎÉÍĽĹŇÓÔŔŠŤÚÝŽ][a-záäčďéíĺľňóôŕšťúýž]+)"
-                     r"(?:\s+([A-ZÁČĎÉÍĽĹŇÓÔŔŠŤÚÝŽ][a-záäčďéíĺľňóôŕšťúýž]+))?")
+NAME_RE = re.compile(
+    r"\b([A-ZÁČĎÉÍĽĹŇÓÔŔŠŤÚÝŽ][a-záäčďéíĺľňóôŕšťúýž]+)"
+    r"(?:\s+([A-ZÁČĎÉÍĽĹŇÓÔŔŠŤÚÝŽ][a-záäčďéíĺľňóôŕšťúýž]+))?"
+)
 
 
 def unknown_person(question: str, known_tokens: set[str]) -> str | None:

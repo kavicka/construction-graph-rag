@@ -77,8 +77,11 @@ def _d(value: str | None) -> date | None:
 def term(task: TaskFact) -> str:
     start, end = _d(task.date_from), _d(task.date_to)
     if start and end:
-        return (fmt_day(start, weekday=False) if start == end else
-                f"{fmt_day(start, weekday=False)} – {fmt_day(end, weekday=False)}")
+        return (
+            fmt_day(start, weekday=False)
+            if start == end
+            else f"{fmt_day(start, weekday=False)} – {fmt_day(end, weekday=False)}"
+        )
     if end:
         return f"do {fmt_day(end, weekday=False)}"
     if start:
@@ -122,8 +125,14 @@ def names(ids: list[str] | tuple[str, ...], snap: Snapshot) -> list[str]:
     return sorted((by_id[i].name for i in ids if i in by_id), key=str.casefold)
 
 
-def task_line(task: TaskFact, ctx: Ctx, *, site: bool = True, people: bool = False,
-              coworkers_of: str | None = None) -> str:
+def task_line(
+    task: TaskFact,
+    ctx: Ctx,
+    *,
+    site: bool = True,
+    people: bool = False,
+    coworkers_of: str | None = None,
+) -> str:
     parts = [f"**{task.title}**"]
     if site:
         parts.append(task.site_name)
@@ -218,8 +227,9 @@ def _report_block(report: ReportFact | None, ctx: Ctx) -> list[str]:
     if report is None:
         return ["Denný výpis: zatiaľ nie je."]
     data = report.data
-    lines = [f"Denný výpis ({REPORT_STATUS.get(report.status, report.status)}): "
-             f"{attendance_text(data)}"]
+    lines = [
+        f"Denný výpis ({REPORT_STATUS.get(report.status, report.status)}): {attendance_text(data)}"
+    ]
     if data.absent:
         return lines
     by_id = ctx.snap.task_by_id
@@ -338,8 +348,9 @@ def hours_answer(ctx: Ctx) -> str:
     return "\n".join(lines)
 
 
-def _hours_of(user_id: str, rows: list[ReportFact], start: date,
-              end: date) -> tuple[float, int, list[date], list[ReportFact]]:
+def _hours_of(
+    user_id: str, rows: list[ReportFact], start: date, end: date
+) -> tuple[float, int, list[date], list[ReportFact]]:
     mine = [r for r in rows if r.user_id == user_id and r.submitted]
     counted = [r for r in mine if not r.data.absent and r.data.worked_hours is not None]
     total = round(sum(r.data.worked_hours or 0 for r in counted), 2)
@@ -348,25 +359,28 @@ def _hours_of(user_id: str, rows: list[ReportFact], start: date,
     return total, len(counted), missing, mine
 
 
-def _hours_detail(w: WorkerRef, rows: list[ReportFact], start: date, end: date,
-                  title: str) -> str:
+def _hours_detail(w: WorkerRef, rows: list[ReportFact], start: date, end: date, title: str) -> str:
     total, count, missing, mine = _hours_of(w.id, rows, start, end)
-    lines = [f"**{w.name} — {title}**: spolu **{hours(total)}** "
-             f"z {count} odovzdaných výpisov."]
+    lines = [f"**{w.name} — {title}**: spolu **{hours(total)}** z {count} odovzdaných výpisov."]
     for r in sorted(mine, key=lambda r: r.day):
         day = date.fromisoformat(r.day)
         if r.data.absent:
             lines.append(f"- {fmt_day(day)}: {attendance_text(r.data)}")
         elif r.data.worked_hours is not None:
-            lines.append(f"- {fmt_day(day)}: {hours(r.data.worked_hours)} "
-                         f"({hhmm(r.data.arrival)} – {hhmm(r.data.departure)})")
+            lines.append(
+                f"- {fmt_day(day)}: {hours(r.data.worked_hours)} "
+                f"({hhmm(r.data.arrival)} – {hhmm(r.data.departure)})"
+            )
     pending = [r for r in rows if r.user_id == w.id and not r.submitted]
     if pending:
-        lines.append("Neodovzdané (nezarátané): " +
-                     ", ".join(fmt_day(date.fromisoformat(r.day)) for r in pending))
+        lines.append(
+            "Neodovzdané (nezarátané): "
+            + ", ".join(fmt_day(date.fromisoformat(r.day)) for r in pending)
+        )
     if missing:
-        lines.append("Pracovné dni bez odovzdaného výpisu: " +
-                     ", ".join(fmt_day(d) for d in missing))
+        lines.append(
+            "Pracovné dni bez odovzdaného výpisu: " + ", ".join(fmt_day(d) for d in missing)
+        )
     return "\n".join(lines)
 
 
@@ -380,8 +394,9 @@ def absences(ctx: Ctx) -> str:
     lines = [f"**Neprítomnosť — {title}**"]
     found = False
     for w in ctx.subjects():
-        absent = sorted((r for r in rows if r.user_id == w.id and r.data.absent),
-                        key=lambda r: r.day)
+        absent = sorted(
+            (r for r in rows if r.user_id == w.id and r.data.absent), key=lambda r: r.day
+        )
         for r in absent:
             found = True
             reason = f" — {r.data.absence_reason}" if r.data.absence_reason else ""
@@ -446,17 +461,21 @@ def site_overview(ctx: Ctx) -> str:
             lines.append("Na tento deň nemá nikto naplánovanú úlohu.")
         late = sum(days_late(t, ctx.today) > 0 for t in open_tasks)
         in_progress = sum(t.status == "in_progress" for t in open_tasks)
-        summary = (f"Otvorené úlohy: {len(open_tasks)} (rozpracované {in_progress}, "
-                   f"na rade {len(open_tasks) - in_progress})")
+        summary = (
+            f"Otvorené úlohy: {len(open_tasks)} (rozpracované {in_progress}, "
+            f"na rade {len(open_tasks) - in_progress})"
+        )
         if late:
             summary += f", po termíne {late}"
         lines.append(summary)
         lines += [task_line(t, ctx, site=False, people=True) for t in open_tasks]
-        done = [t for t in site_tasks
-                if t.status == "done" and (_d(t.done_on) or ctx.today) >= recent]
+        done = [
+            t for t in site_tasks if t.status == "done" and (_d(t.done_on) or ctx.today) >= recent
+        ]
         if done:
-            lines.append(f"Hotové za posledných {DONE_RECENT_DAYS} dní: " +
-                         ", ".join(t.title for t in done))
+            lines.append(
+                f"Hotové za posledných {DONE_RECENT_DAYS} dní: " + ", ".join(t.title for t in done)
+            )
         blocks.append("\n".join(lines))
     return "\n\n".join(blocks)
 
@@ -467,24 +486,30 @@ def task_people(ctx: Ctx) -> str:
     lines = []
     for t in ctx.query.tasks:
         who = names(t.assignees, ctx.snap)
-        lines.append(f"- **{t.title}** ({t.site_name}): "
-                     f"{', '.join(who) if who else 'zatiaľ nikto nepridelený'} · "
-                     f"{status_label(t)} · {term(t)}")
+        lines.append(
+            f"- **{t.title}** ({t.site_name}): "
+            f"{', '.join(who) if who else 'zatiaľ nikto nepridelený'} · "
+            f"{status_label(t)} · {term(t)}"
+        )
     return "\n".join(lines)
 
 
 def overdue(ctx: Ctx) -> str:
-    late = sorted(((days_late(t, ctx.today), t) for t in ctx.visible_tasks()),
-                  key=lambda x: -x[0])
+    late = sorted(((days_late(t, ctx.today), t) for t in ctx.visible_tasks()), key=lambda x: -x[0])
     late = [(n, t) for n, t in late if n > 0]
     scope = _scope_label(ctx)
     if not late:
         return f"Žiadna otvorená úloha{scope} nie je po termíne."
     lines = [f"**Úlohy po termíne{scope}** ({len(late)})"]
     for _, t in late:
-        lines.append(task_line(t, ctx, people=not ctx.viewer.own_only,
-                               coworkers_of=ctx.viewer.user_id if ctx.viewer.own_only
-                               else None))
+        lines.append(
+            task_line(
+                t,
+                ctx,
+                people=not ctx.viewer.own_only,
+                coworkers_of=ctx.viewer.user_id if ctx.viewer.own_only else None,
+            )
+        )
     return "\n".join(lines)
 
 
@@ -505,9 +530,10 @@ def blocked(ctx: Ctx) -> str:
     lines = [f"**Úlohy čakajúce na inú úlohu** ({len(pairs)})"]
     for t, dep in pairs:
         who = names(t.assignees, ctx.snap)
-        lines.append(f"- **{t.title}** ({t.site_name}) čaká na **{dep.title}** "
-                     f"({status_label(dep)}, {term(dep)})" +
-                     (f" · {', '.join(who)}" if who else ""))
+        lines.append(
+            f"- **{t.title}** ({t.site_name}) čaká na **{dep.title}** "
+            f"({status_label(dep)}, {term(dep)})" + (f" · {', '.join(who)}" if who else "")
+        )
     return "\n".join(lines)
 
 
@@ -516,9 +542,11 @@ def problems(ctx: Ctx) -> str:
     end = min(period.end, ctx.today)
     rows = ctx.reports(period.start, end)
     ids = {w.id for w in ctx.subjects()}
-    site_task_ids = ({t.id for t in ctx.snap.tasks
-                      if t.site_id in {s.id for s in ctx.query.sites}}
-                     if ctx.query.sites else None)
+    site_task_ids = (
+        {t.id for t in ctx.snap.tasks if t.site_id in {s.id for s in ctx.query.sites}}
+        if ctx.query.sites
+        else None
+    )
     title = fmt_period(Period(period.start, end, period.explicit), ctx.today)
     lines = [f"**Nahlásené problémy — {title}**"]
     by_id = ctx.snap.worker_by_id

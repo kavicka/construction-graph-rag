@@ -75,17 +75,28 @@ def _meal_plan(path: Path) -> None:
     header = ["Číslo", "Název jídla", "Ingredience", "Macra"]
     page: Page = [
         ("h", "Obedy"),
-        ("table", [
-            header,
-            ["10", "Stir-fry s hovězím", "hovězí 150g, rýže 100g", "900 kcal 50b, 80s, 40t"],
-            ["11", "Kuřecí rizoto", "kuře 150g, rýže 120g", "829 kcal 74b, 84s, 17t"],
-            ["12", "Těstoviny s kuřecím", "těstoviny 120g, kuře 150g", "820 kcal 55b, 90s, 20t"],
-        ]),
+        (
+            "table",
+            [
+                header,
+                ["10", "Stir-fry s hovězím", "hovězí 150g, rýže 100g", "900 kcal 50b, 80s, 40t"],
+                ["11", "Kuřecí rizoto", "kuře 150g, rýže 120g", "829 kcal 74b, 84s, 17t"],
+                [
+                    "12",
+                    "Těstoviny s kuřecím",
+                    "těstoviny 120g, kuře 150g",
+                    "820 kcal 55b, 90s, 20t",
+                ],
+            ],
+        ),
         ("h", "Raňajky"),
-        ("table", [
-            header,
-            ["1", "Ovesná kaše", "vločky 80g, mléko 250ml", "447 kcal 30b, 60s, 12t"],
-            ["2", "Toasty se šunkou", "toast 4ks, šunka 80g", "477 kcal 25b, 55s, 18t"],
-        ]),
+        (
+            "table",
+            [
+                header,
+                ["1", "Ovesná kaše", "vločky 80g, mléko 250ml", "447 kcal 30b, 60s, 12t"],
+                ["2", "Toasty se šunkou", "toast 4ks, šunka 80g", "477 kcal 25b, 55s, 18t"],
+            ],
+        ),
     ]
     render_pages(path, "Jedálniček 2800 kcal", [page])

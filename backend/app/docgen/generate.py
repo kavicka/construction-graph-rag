@@ -35,6 +35,7 @@ from app.retrieve.pipeline import DATA_RULE, Source, format_source
 def settings_guard() -> bool:
     return get_settings().injection_guard
 
+
 logger = logging.getLogger(__name__)
 
 MIN_SECTIONS, MAX_SECTIONS = 2, 6
@@ -93,14 +94,10 @@ def _fallback_title(question: str) -> str:
     return (title[:1].upper() + title[1:])[:120] or "Dokument"
 
 
-def plan_outline(
-    question: str, doc_type: DocType, lang: Lang, sources: list[Source]
-) -> Outline:
+def plan_outline(question: str, doc_type: DocType, lang: Lang, sources: list[Source]) -> Outline:
     fixed = OUTLINES[lang][doc_type]
     label = DOC_TYPE_LABELS[lang][doc_type]
-    titles_only = "\n".join(
-        f"[{s.n}] {s.filename}: {s.snippet[:160]}" for s in sources[:10]
-    )
+    titles_only = "\n".join(f"[{s.n}] {s.filename}: {s.snippet[:160]}" for s in sources[:10])
     if lang == "sk":
         prompt = (
             f"Navrhni osnovu dokumentu typu „{label}“ podľa zadania používateľa.\n"
@@ -119,8 +116,11 @@ def plan_outline(
         )
     try:
         raw = generate_sync(
-            get_settings().answer_model, prompt,
-            json_schema=_Outline.model_json_schema(), num_ctx=4096, timeout=180,
+            get_settings().answer_model,
+            prompt,
+            json_schema=_Outline.model_json_schema(),
+            num_ctx=4096,
+            timeout=180,
         )
         parsed = _Outline.model_validate_json(raw)
     except (OllamaError, ValidationError) as exc:
@@ -193,9 +193,12 @@ def write_section(
         )
     try:
         body = generate_sync(
-            get_settings().answer_model, user,
+            get_settings().answer_model,
+            user,
             system=SECTION_SYSTEM[lang] + ("\n" + DATA_RULE if settings_guard() else ""),
-            temperature=0.3, num_ctx=8192, timeout=300,
+            temperature=0.3,
+            num_ctx=8192,
+            timeout=300,
         )
     except OllamaError as exc:
         logger.warning("sekcia %r zlyhala: %s", heading, exc)
@@ -211,9 +214,7 @@ def write_section(
 
 
 def slug_filename(title: str) -> str:
-    ascii_title = (
-        unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode().casefold()
-    )
+    ascii_title = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode().casefold()
     slug = re.sub(r"[^a-z0-9]+", "-", ascii_title).strip("-")[:60].rstrip("-")
     return f"{slug or 'dokument'}.pdf"
 
@@ -232,7 +233,11 @@ def save_document(
     from app.auth import current_scope
 
     db.insert_generated_document(
-        doc_id, chat_id, content.title, content.doc_type, rendered.pages,
+        doc_id,
+        chat_id,
+        content.title,
+        content.doc_type,
+        rendered.pages,
         json.dumps([s.to_json() for s in sources], ensure_ascii=False),
         current_scope().user_id,
     )
@@ -285,14 +290,23 @@ def export_answer_pdf(
     ]
     sources = [
         Source(
-            n=s["n"], chunk_id=s["chunk_id"], doc_id=s["doc_id"], filename=s["filename"],
-            page_from=s["page_from"], page_to=s["page_to"], type=s["type"],
-            table_id=s.get("table_id"), text="", snippet=s.get("snippet", ""),
+            n=s["n"],
+            chunk_id=s["chunk_id"],
+            doc_id=s["doc_id"],
+            filename=s["filename"],
+            page_from=s["page_from"],
+            page_to=s["page_to"],
+            type=s["type"],
+            table_id=s.get("table_id"),
+            text="",
+            snippet=s.get("snippet", ""),
         )
         for s in sources_json
     ]
     content = DocumentContent(
-        doc_type="report", lang=lang, title=_fallback_title(question),
+        doc_type="report",
+        lang=lang,
+        title=_fallback_title(question),
         sections=[DocSection(h, b) for h, b in sections],
     )
     return save_document(content, load_company(), sources, chat_id).to_json()

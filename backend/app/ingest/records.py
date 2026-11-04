@@ -29,19 +29,41 @@ logger = logging.getLogger(__name__)
 KCAL_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*(?:kcal|kkal)\b", re.IGNORECASE)
 MACRO_SHORT_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*([bst])\b", re.IGNORECASE)
 # všeobecné jednotky: "55 g bílkovin", "500ml", "0.5 %"
-UNIT_RE = re.compile(
-    r"(\d+(?:[.,]\d+)?)\s*(g|kg|mg|ml|l|%|ks)\b", re.IGNORECASE
-)
+UNIT_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*(g|kg|mg|ml|l|%|ks)\b", re.IGNORECASE)
 NAMEISH_HEADERS = (
-    "nazev", "nazov", "name", "jidlo", "jedlo", "polozka", "item", "produkt", "subdodavatel",
-    "vzorka", "sample", "objekt", "sensor", "claim",
+    "nazev",
+    "nazov",
+    "name",
+    "jidlo",
+    "jedlo",
+    "polozka",
+    "item",
+    "produkt",
+    "subdodavatel",
+    "vzorka",
+    "sample",
+    "objekt",
+    "sensor",
+    "claim",
 )
 # celá bunka je číslo: „1 742 300", „41.2", „0,5", „12 %"
 NUMERIC_CELL = re.compile(r"^\s*(-?\d{1,3}(?:[ \u00a0]\d{3})+|-?\d+)([.,]\d+)?\s*%?\s*$")
 HEADER_UNIT = re.compile(r"\(([^)]{1,15})\)\s*$")
 CODE_HEADERS = (
-    "ico", "dic", "ic_dph", "cislo", "por_c", "poradie", "id", "rok", "year", "no", "nr",
-    "number", "kod", "code",
+    "ico",
+    "dic",
+    "ic_dph",
+    "cislo",
+    "por_c",
+    "poradie",
+    "id",
+    "rok",
+    "year",
+    "no",
+    "nr",
+    "number",
+    "kod",
+    "code",
 )
 NUMERIC_HINT_HEADERS = {"kcal": "kcal", "macra": None, "makra": None, "energie": "kcal"}
 
@@ -195,8 +217,6 @@ def extract_records(doc_id: str) -> int:
         seen.add(dedup_key)
         unique.append(r)
     stored = db.replace_document_records(doc_id, unique)
-    db.replace_record_attrs(
-        doc_id, [(key, label, unit) for key, (label, unit) in registry.items()]
-    )
+    db.replace_record_attrs(doc_id, [(key, label, unit) for key, (label, unit) in registry.items()])
     logger.info("records doc %s: %s záznamov, atribúty %s", doc_id, stored, sorted(registry))
     return stored

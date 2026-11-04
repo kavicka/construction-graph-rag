@@ -75,7 +75,8 @@ def test_delete_document_everywhere(client: TestClient) -> None:
         ).json()[0]
         doc_id = doc["id"]
         replace_document_chunks(
-            doc_id, [Chunk(f"{doc_id}:t0", doc_id, "text", "text", 1, 1, "", "text", None)],
+            doc_id,
+            [Chunk(f"{doc_id}:t0", doc_id, "text", "text", 1, 1, "", "text", None)],
             [[1.0, 0.0]],
         )
         db.replace_chunk_boxes(doc_id, {f"{doc_id}:t0": [[1, 0, 0, 1, 1]]})

@@ -33,8 +33,16 @@ from app.workforce.runtime import is_worker, schedule
 router = APIRouter(prefix="/attendance")
 
 MAX_AUDIO_BYTES = 50 * 1024 * 1024
-AUDIO_EXT = {"audio/webm": "webm", "audio/ogg": "ogg", "audio/mp4": "m4a", "audio/mpeg": "mp3",
-             "audio/wav": "wav", "audio/x-wav": "wav", "audio/aac": "aac", "audio/x-m4a": "m4a"}
+AUDIO_EXT = {
+    "audio/webm": "webm",
+    "audio/ogg": "ogg",
+    "audio/mp4": "m4a",
+    "audio/mpeg": "mp3",
+    "audio/wav": "wav",
+    "audio/x-wav": "wav",
+    "audio/aac": "aac",
+    "audio/x-m4a": "m4a",
+}
 
 
 def _is_admin() -> bool:
@@ -125,25 +133,49 @@ def report_out(report: dict[str, Any]) -> ReportOut:
     open_count = sum(q["status"] == "open" for q in questions)
     # hotová úloha, o ktorej pracovník nehovoril, do jeho výpisu nepatrí (pýtame sa len na otvorené)
     mentioned = {e.task_id for e in data.tasks}
-    tasks = [t for t in dialog.report_tasks(report)
-             if t["status"] != "done" or t["id"] in mentioned]
+    tasks = [
+        t for t in dialog.report_tasks(report) if t["status"] != "done" or t["id"] in mentioned
+    ]
     return ReportOut(
-        id=report["id"], user_id=report["user_id"],
-        worker_name=worker["name"] if worker else "", day=report["day"],
-        status=report["status"], step=report["step"], error=report["error"],
-        transcript=report["transcript"], data=data.model_dump(),
-        tasks=[ReportTask(id=t["id"], title=t["title"], site_name=t["site_name"],
-                          description=t["description"], status=t["status"],
-                          progress=t["progress"]) for t in tasks],
+        id=report["id"],
+        user_id=report["user_id"],
+        worker_name=worker["name"] if worker else "",
+        day=report["day"],
+        status=report["status"],
+        step=report["step"],
+        error=report["error"],
+        transcript=report["transcript"],
+        data=data.model_dump(),
+        tasks=[
+            ReportTask(
+                id=t["id"],
+                title=t["title"],
+                site_name=t["site_name"],
+                description=t["description"],
+                status=t["status"],
+                progress=t["progress"],
+            )
+            for t in tasks
+        ],
         questions=[QuestionOut(**{k: q[k] for k in QuestionOut.model_fields}) for q in shown],
         open_questions=open_count,
-        worked_hours=data.worked_hours, reported_hours=data.reported_hours,
+        worked_hours=data.worked_hours,
+        reported_hours=data.reported_hours,
         can_submit=report["status"] == "ready",
-        submitted_at=report["submitted_at"], edited_by_owner=bool(report["edited_by_owner"]),
+        submitted_at=report["submitted_at"],
+        edited_by_owner=bool(report["edited_by_owner"]),
         pdf_url=f"/api/attendance/reports/{report['id']}/pdf" if report["pdf_path"] else None,
-        inputs=[InputOut(id=i["id"], kind=i["kind"], text=i["text"],
-                         question_id=i["question_id"], has_audio=bool(i["audio_path"]),
-                         created_at=i["created_at"]) for i in store.list_inputs(report["id"])],
+        inputs=[
+            InputOut(
+                id=i["id"],
+                kind=i["kind"],
+                text=i["text"],
+                question_id=i["question_id"],
+                has_audio=bool(i["audio_path"]),
+                created_at=i["created_at"],
+            )
+            for i in store.list_inputs(report["id"])
+        ],
         tts=speech.tts_available(),
     )
 
@@ -218,9 +250,7 @@ async def add_text(report_id: str, body: TextIn) -> ReportOut:
 async def _begin_answer(report_id: str, question_id: str, *, audio: bool = False) -> None:
     await run_in_threadpool(_report_for_access, report_id)
     try:
-        await run_in_threadpool(
-            lambda: dialog.begin_answer(report_id, question_id, audio=audio)
-        )
+        await run_in_threadpool(lambda: dialog.begin_answer(report_id, question_id, audio=audio))
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="otázka neexistuje") from exc
     except ReportLocked as exc:
@@ -264,8 +294,9 @@ async def question_speech(question_id: str) -> FileResponse:
         path = await run_in_threadpool(speech.synthesize, q["text"])
     except speech.SpeechError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    return FileResponse(path, media_type="audio/wav",
-                        headers={"Cache-Control": "private, max-age=86400"})
+    return FileResponse(
+        path, media_type="audio/wav", headers={"Cache-Control": "private, max-age=86400"}
+    )
 
 
 @router.post("/reports/{report_id}/submit")
@@ -276,10 +307,13 @@ async def submit(report_id: str) -> ReportOut:
     except ReportLocked as exc:
         raise _locked(exc) from exc
     except IncompleteReport as exc:
-        raise HTTPException(status_code=409, detail={
-            "message": "najprv odpovedz na všetky otázky",
-            "open": [g.key for g in exc.gaps],
-        }) from exc
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "najprv odpovedz na všetky otázky",
+                "open": [g.key for g in exc.gaps],
+            },
+        ) from exc
     return await _out(report_id)
 
 
@@ -294,7 +328,8 @@ async def report_pdf(report_id: str, download: bool = False) -> FileResponse:
     worker = await run_in_threadpool(store.get_worker, report["user_id"])
     slug = "".join(c if c.isalnum() else "-" for c in (worker["name"] if worker else "vypis"))
     return FileResponse(
-        report["pdf_path"], media_type="application/pdf",
+        report["pdf_path"],
+        media_type="application/pdf",
         filename=f"vypis-{slug.lower()}-{report['day']}.pdf",
         content_disposition_type="attachment" if download else "inline",
     )
@@ -355,22 +390,32 @@ def _day(day: str) -> DayOut:
     for w in workers:
         r = reports.get(w["id"])
         data = ReportData.model_validate_json(r["data_json"] or "{}") if r else ReportData()
-        rows.append(DayRow(
-            worker_id=w["id"], worker_name=w["name"], report_id=r["id"] if r else None,
-            status=r["status"] if r else "missing", absent=data.absent,
-            arrival=data.arrival, departure=data.departure, worked_hours=data.worked_hours,
-            problems=len(data.problems),
-            open_questions=len(store.list_questions(r["id"], status="open")) if r else 0,
-            pdf_url=f"/api/attendance/reports/{r['id']}/pdf" if r and r["pdf_path"] else None,
-        ))
+        rows.append(
+            DayRow(
+                worker_id=w["id"],
+                worker_name=w["name"],
+                report_id=r["id"] if r else None,
+                status=r["status"] if r else "missing",
+                absent=data.absent,
+                arrival=data.arrival,
+                departure=data.departure,
+                worked_hours=data.worked_hours,
+                problems=len(data.problems),
+                open_questions=len(store.list_questions(r["id"], status="open")) if r else 0,
+                pdf_url=f"/api/attendance/reports/{r['id']}/pdf" if r and r["pdf_path"] else None,
+            )
+        )
     summary = store.get_daily_summary(day)
     ctx = summary_context(day)
     return DayOut(
-        day=day, rows=rows,
+        day=day,
+        rows=rows,
         summary_url=f"/api/attendance/days/{day}/summary.pdf" if summary else None,
         summary_stale=summary_is_stale(day),
-        summary={k: ctx[k] for k in ("submitted_count", "worker_count", "total_hours",
-                                     "done_count", "missing")}
+        summary={
+            k: ctx[k]
+            for k in ("submitted_count", "worker_count", "total_hours", "done_count", "missing")
+        }
         | {"problems": len(ctx["problems"])},
     )
 
@@ -397,7 +442,9 @@ async def summary_pdf(day: date, download: bool = False) -> FileResponse:
     row = await run_in_threadpool(store.get_daily_summary, iso)
     assert row is not None
     return FileResponse(
-        row["pdf_path"], media_type="application/pdf", filename=f"denny-vypis-{iso}.pdf",
+        row["pdf_path"],
+        media_type="application/pdf",
+        filename=f"denny-vypis-{iso}.pdf",
         content_disposition_type="attachment" if download else "inline",
     )
 
@@ -445,14 +492,21 @@ def _ask(question: str) -> AskOut:
     decision = check_question(question)
     if decision.blocked:
         greeting = decision.reason in ("greeting", "thanks")
-        answer = reply_for(decision, question) if decision.verdict != "offtopic" or greeting \
+        answer = (
+            reply_for(decision, question)
+            if decision.verdict != "offtopic" or greeting
             else HELP_WORKER
+        )
     else:
         result = answer_firma(question, viewer_from_scope(), worker_context=True)
         answer = result.answer if result else HELP_WORKER
     answer = redact_secrets(answer)
-    return AskOut(question=question, answer=answer, speech_text=speech_text(answer),
-                  tts=speech.tts_available())
+    return AskOut(
+        question=question,
+        answer=answer,
+        speech_text=speech_text(answer),
+        tts=speech.tts_available(),
+    )
 
 
 @router.post("/ask")
@@ -464,13 +518,21 @@ def _ask_vocabulary() -> str:
     """Slovník pre Whisper: stavby a úlohy, ktoré pýtajúci vidí, a mená kolegov z nich."""
     viewer = viewer_from_scope()
     snap = qa_data.snapshot()
-    tasks = [t for t in snap.tasks if t.status in ("todo", "in_progress")
-             and (not viewer.own_only or viewer.user_id in t.assignees)]
-    people = {a for t in tasks for a in t.assignees} if viewer.own_only else {
-        w.id for w in snap.workers if w.active}
+    tasks = [
+        t
+        for t in snap.tasks
+        if t.status in ("todo", "in_progress")
+        and (not viewer.own_only or viewer.user_id in t.assignees)
+    ]
+    people = (
+        {a for t in tasks for a in t.assignees}
+        if viewer.own_only
+        else {w.id for w in snap.workers if w.active}
+    )
     names = [w.name for w in snap.workers if w.id in people]
-    return speech.vocabulary_prompt([t.site_name for t in tasks][:12],
-                                    [t.title for t in tasks][:12], names[:12])
+    return speech.vocabulary_prompt(
+        [t.site_name for t in tasks][:12], [t.title for t in tasks][:12], names[:12]
+    )
 
 
 @router.post("/ask/audio")
@@ -492,8 +554,9 @@ async def ask_audio(file: UploadFile) -> AskOut:
         except speech.SpeechError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
     if not text.strip():
-        raise HTTPException(status_code=422,
-                            detail="nahrávke som nerozumel — skús to znova alebo otázku napíš")
+        raise HTTPException(
+            status_code=422, detail="nahrávke som nerozumel — skús to znova alebo otázku napíš"
+        )
     return await run_in_threadpool(_ask, text.strip()[:500])
 
 
@@ -509,5 +572,6 @@ async def ask_speech(body: SpeechIn) -> FileResponse:
         path = await run_in_threadpool(speech.synthesize, redact_secrets(body.text))
     except speech.SpeechError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    return FileResponse(path, media_type="audio/wav",
-                        headers={"Cache-Control": "private, max-age=86400"})
+    return FileResponse(
+        path, media_type="audio/wav", headers={"Cache-Control": "private, max-age=86400"}
+    )

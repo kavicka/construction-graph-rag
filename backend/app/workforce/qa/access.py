@@ -16,9 +16,7 @@ from app.workforce.runtime import is_worker
 MEMBER_DENIED = (
     "Firemné údaje o úlohách, dochádzke a odpracovaných hodinách sú dostupné len majiteľovi."
 )
-OTHERS_DENIED = (
-    "Môžeš sa pýtať len na svoje úlohy, dochádzku a hodiny — údaje kolegov nevidíš."
-)
+OTHERS_DENIED = "Môžeš sa pýtať len na svoje úlohy, dochádzku a hodiny — údaje kolegov nevidíš."
 ADMIN_ONLY_INTENTS = {"missing_reports"}
 
 
@@ -68,6 +66,5 @@ def authorize(query: FirmaQuery, viewer: Viewer, snap: Snapshot) -> FirmaQuery |
     tasks = [t for t in query.tasks if me.id in t.assignees]
     intents = query.intents
     if query.tasks and not tasks:
-        intents = list(dict.fromkeys(
-            "worker_tasks" if i == "task_people" else i for i in intents))
+        intents = list(dict.fromkeys("worker_tasks" if i == "task_people" else i for i in intents))
     return replace(query, workers=[me], ambiguous=[], tasks=tasks, intents=intents)

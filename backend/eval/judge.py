@@ -42,7 +42,9 @@ def judge_faithfulness(answer: str, sources_text: str) -> float | None:
         raw = generate_sync(
             get_settings().answer_model,
             JUDGE_PROMPT.format(sources=sources_text[:12000], answer=answer[:3000]),
-            json_schema=_Verdict.model_json_schema(), temperature=0.0, num_ctx=8192,
+            json_schema=_Verdict.model_json_schema(),
+            temperature=0.0,
+            num_ctx=8192,
             timeout=180,
         )
         verdict = _Verdict.model_validate_json(raw)

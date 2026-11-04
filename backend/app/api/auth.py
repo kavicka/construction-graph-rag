@@ -39,8 +39,13 @@ class MeOut(BaseModel):
 
 
 def _user_out(u: dict) -> UserOut:  # type: ignore[type-arg]
-    return UserOut(id=u["id"], email=u["email"], name=u["name"], role=u["role"],
-                   groups=json.loads(u["groups_json"] or "[]"))
+    return UserOut(
+        id=u["id"],
+        email=u["email"],
+        name=u["name"],
+        role=u["role"],
+        groups=json.loads(u["groups_json"] or "[]"),
+    )
 
 
 class LoginIn(BaseModel):
@@ -59,7 +64,11 @@ async def login(body: LoginIn, response: Response) -> UserOut:
     token = await run_in_threadpool(create_session, user["id"])
     settings = get_settings()
     response.set_cookie(
-        SESSION_COOKIE, token, httponly=True, samesite="lax", secure=settings.cookie_secure,
+        SESSION_COOKIE,
+        token,
+        httponly=True,
+        samesite="lax",
+        secure=settings.cookie_secure,
         max_age=settings.session_ttl_hours * 3600,
     )
     return _user_out(user)
@@ -123,8 +132,12 @@ async def edit_user(user_id: str, body: UserUpdate) -> UserOut:
     if user_id == current_scope().user_id and body.role != "admin":
         raise HTTPException(status_code=409, detail="sám sebe admin práva neodoberieš")
     await run_in_threadpool(
-        lambda: db.update_user(user_id, role=body.role, name=body.name,
-                               groups_json=json.dumps(sorted(set(body.groups))))
+        lambda: db.update_user(
+            user_id,
+            role=body.role,
+            name=body.name,
+            groups_json=json.dumps(sorted(set(body.groups))),
+        )
     )
     if body.password:
         await run_in_threadpool(set_password, user_id, body.password)

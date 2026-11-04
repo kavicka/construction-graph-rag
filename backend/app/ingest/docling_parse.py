@@ -52,8 +52,12 @@ def _get_converter() -> Any:
 
     return DocumentConverter(
         allowed_formats=[
-            InputFormat.PDF, InputFormat.DOCX, InputFormat.PPTX, InputFormat.XLSX,
-            InputFormat.HTML, InputFormat.MD,
+            InputFormat.PDF,
+            InputFormat.DOCX,
+            InputFormat.PPTX,
+            InputFormat.XLSX,
+            InputFormat.HTML,
+            InputFormat.MD,
         ],
         format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=opts)},
     )
@@ -105,7 +109,9 @@ def _headings_before_tables(document: Any) -> dict[str, str]:
 
         is_heading = label in heading_labels and bool(text)
         is_card_title = (
-            page in card_pages and bool(text) and len(text) <= 45
+            page in card_pages
+            and bool(text)
+            and len(text) <= 45
             and not isinstance(item, TableItem)
         )
         if (is_heading or is_card_title) and page is not None:

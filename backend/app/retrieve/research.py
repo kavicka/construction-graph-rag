@@ -81,8 +81,12 @@ def decompose(question: str, *, research: bool = False) -> list[str]:
     prompt = f"{instruction}\nZachovaj jazyk otázky.\n\nOtázka: {question}"
     try:
         raw = generate_sync(
-            get_settings().answer_model, prompt,
-            json_schema=_Plan.model_json_schema(), temperature=0.1, num_ctx=4096, timeout=90,
+            get_settings().answer_model,
+            prompt,
+            json_schema=_Plan.model_json_schema(),
+            temperature=0.1,
+            num_ctx=4096,
+            timeout=90,
         )
         questions = [q.strip() for q in _Plan.model_validate_json(raw).questions if q.strip()]
     except (OllamaError, ValidationError) as exc:
@@ -133,7 +137,10 @@ def answer_subquestion(question: str, sources: list[Source]) -> str:
         return generate_sync(
             get_settings().answer_model,
             f"Zdroje:\n{_sources_block(sources)}\n\nPodotázka: {question}",
-            system=_with_data_rule(FINDING_SYSTEM), temperature=0.2, num_ctx=8192, timeout=180,
+            system=_with_data_rule(FINDING_SYSTEM),
+            temperature=0.2,
+            num_ctx=8192,
+            timeout=180,
         ).strip()
     except OllamaError as exc:
         logger.warning("zistenie k podotázke zlyhalo: %s", exc)
@@ -158,8 +165,10 @@ def synthesis_messages(
         f"Pôvodná otázka: {question}\n\nZistenia k podotázkam:\n{notes}\n\n"
         f"Zdroje:\n{_sources_block(sources)}"
     )
-    return [{"role": "system", "content": _with_data_rule(SYNTHESIS_SYSTEM)},
-            {"role": "user", "content": user}]
+    return [
+        {"role": "system", "content": _with_data_rule(SYNTHESIS_SYSTEM)},
+        {"role": "user", "content": user},
+    ]
 
 
 def sections_from_markdown(markdown: str) -> list[tuple[str, str]]:

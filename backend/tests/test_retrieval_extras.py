@@ -71,20 +71,25 @@ def test_needs_rewrite(question: str, expected: bool) -> None:
 
 def test_rewrite_question_guards(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        memory, "generate_sync",
+        memory,
+        "generate_sync",
         lambda *a, **k: '{"refers_to": "Agátová", "question": "Aká je zmluvná pokuta Agátová?"}',
     )
     assert rewrite_question("A pokuta?", HISTORY) == "Aká je zmluvná pokuta Agátová?"
     # model odpovedal namiesto prepisu / zlyhal / otázku nezmenil → spojenie
     # s predchádzajúcou otázkou, aby retrieval vedel, o čom je reč
     fallback = "Aká je cena diela Agátová? A pokuta?"
-    monkeypatch.setattr(memory, "generate_sync",
-                        lambda *a, **k: json.dumps({"refers_to": "", "question": "x" * 400}))
+    monkeypatch.setattr(
+        memory,
+        "generate_sync",
+        lambda *a, **k: json.dumps({"refers_to": "", "question": "x" * 400}),
+    )
     assert rewrite_question("A pokuta?", HISTORY) == fallback
     monkeypatch.setattr(memory, "generate_sync", lambda *a, **k: "nie json")
     assert rewrite_question("A pokuta?", HISTORY) == fallback
-    monkeypatch.setattr(memory, "generate_sync",
-                        lambda *a, **k: '{"refers_to": "", "question": "A pokuta ?"}')
+    monkeypatch.setattr(
+        memory, "generate_sync", lambda *a, **k: '{"refers_to": "", "question": "A pokuta ?"}'
+    )
     assert rewrite_question("A pokuta?", HISTORY) == fallback
 
 
@@ -94,14 +99,16 @@ def test_openai_compatible_provider(monkeypatch: pytest.MonkeyPatch) -> None:
 
     seen: dict[str, Any] = {}
 
-    def fake_post(url: str, json: dict[str, Any], headers: dict[str, str], timeout: float
-                  ) -> httpx.Response:
+    def fake_post(
+        url: str, json: dict[str, Any], headers: dict[str, str], timeout: float
+    ) -> httpx.Response:
         seen.update(url=url, body=json, headers=headers)
         return httpx.Response(
             200,
-            json={"choices": [{"message": {"content": ' {"ok": true} '},
-                               "finish_reason": "stop"}],
-                  "usage": {"prompt_tokens": 11, "completion_tokens": 3}},
+            json={
+                "choices": [{"message": {"content": ' {"ok": true} '}, "finish_reason": "stop"}],
+                "usage": {"prompt_tokens": 11, "completion_tokens": 3},
+            },
             request=httpx.Request("POST", url),
         )
 
@@ -111,8 +118,9 @@ def test_openai_compatible_provider(monkeypatch: pytest.MonkeyPatch) -> None:
     get_settings.cache_clear()
     monkeypatch.setattr(ollama_client.httpx, "post", fake_post)
 
-    out = ollama_client.generate_sync("gpt-test", "ahoj", system="sys",
-                                      json_schema={"type": "object"})
+    out = ollama_client.generate_sync(
+        "gpt-test", "ahoj", system="sys", json_schema={"type": "object"}
+    )
     assert out == '{"ok": true}'
     assert seen["url"] == "https://llm.example/v1/chat/completions"
     assert seen["headers"]["Authorization"] == "Bearer test-key"
@@ -125,10 +133,14 @@ def test_tool_result_message_shape(monkeypatch: pytest.MonkeyPatch) -> None:
 
     call = ToolCall(id="call_1", name="search_docs", arguments={})
     assert tool_result_message(call, "x") == {
-        "role": "tool", "tool_name": "search_docs", "content": "x",
+        "role": "tool",
+        "tool_name": "search_docs",
+        "content": "x",
     }
     monkeypatch.setenv("RAG_LLM_PROVIDER", "openai")
     get_settings.cache_clear()
     assert tool_result_message(call, "x") == {
-        "role": "tool", "tool_call_id": "call_1", "content": "x",
+        "role": "tool",
+        "tool_call_id": "call_1",
+        "content": "x",
     }

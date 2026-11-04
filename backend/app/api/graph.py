@@ -64,21 +64,27 @@ def _build_nx() -> nx.MultiDiGraph:
     return g
 
 
-def _graph_payload(
-    types: list[str] | None, doc_id: str | None, limit: int
-) -> GraphOut:
+def _graph_payload(types: list[str] | None, doc_id: str | None, limit: int) -> GraphOut:
     g = _build_nx()
     allowed_docs = allowed_doc_ids()
     if allowed_docs is not None:
         # uzly cudzích dokumentov preč; zdieľané pojmy ostanú, len ak ich niečo povolené drží
-        hidden = {n for n, d in g.nodes(data=True)
-                  if d.get("doc_id") is not None and d["doc_id"] not in allowed_docs}
+        hidden = {
+            n
+            for n, d in g.nodes(data=True)
+            if d.get("doc_id") is not None and d["doc_id"] not in allowed_docs
+        }
         g.remove_nodes_from(hidden)
         # zdieľané uzly ostanú, len ak na ne ukazuje povolený dokumentový uzol
-        anchored = {nbr for n, d in g.nodes(data=True) if d.get("doc_id") is not None
-                    for nbr in list(g.successors(n)) + list(g.predecessors(n))}
-        g.remove_nodes_from([n for n in list(g.nodes)
-                             if g.nodes[n].get("doc_id") is None and n not in anchored])
+        anchored = {
+            nbr
+            for n, d in g.nodes(data=True)
+            if d.get("doc_id") is not None
+            for nbr in list(g.successors(n)) + list(g.predecessors(n))
+        }
+        g.remove_nodes_from(
+            [n for n in list(g.nodes) if g.nodes[n].get("doc_id") is None and n not in anchored]
+        )
 
     if doc_id:
         doc_nodes = {n for n, d in g.nodes(data=True) if d.get("doc_id") == doc_id}
@@ -137,7 +143,8 @@ def _node_detail(node_id: str) -> NodeDetail | None:
         # zdieľaný pojem: existuje pre používateľa, len ak ho dokladá povolený úsek
         linked = {
             (db.get_graph_node(e["src"]) or {}).get("doc_id")
-            for e in db.node_edges(node_id) if e["src"].startswith(("chunk:", "doc:", "table:"))
+            for e in db.node_edges(node_id)
+            if e["src"].startswith(("chunk:", "doc:", "table:"))
         }
         if not linked & allowed_docs:
             return None
@@ -149,8 +156,9 @@ def _node_detail(node_id: str) -> NodeDetail | None:
         n = db.get_graph_node(nid)
         if n and (allowed_docs is None or n["doc_id"] is None or n["doc_id"] in allowed_docs):
             neighbors.append(
-                GraphNode(id=n["id"], type=n["type"], label=n["label"],
-                          doc_id=n["doc_id"], degree=0)
+                GraphNode(
+                    id=n["id"], type=n["type"], label=n["label"], doc_id=n["doc_id"], degree=0
+                )
             )
 
     evidence: list[EvidenceOut] = []
@@ -209,11 +217,19 @@ def _communities(summaries: bool) -> list[CommunityOut]:
     for c in detect_communities():  # už obmedzené na povolené dokumenty
         if summaries:
             summarize_community(c)
-        out.append(CommunityOut(
-            key=c.key, title=c.title, summary=c.summary, concepts=c.concepts, size=c.size,
-            documents=[{"doc_id": d, "filename": names.get(d, d), "chunks": n}
-                       for d, n in c.documents.items()],
-        ))
+        out.append(
+            CommunityOut(
+                key=c.key,
+                title=c.title,
+                summary=c.summary,
+                concepts=c.concepts,
+                size=c.size,
+                documents=[
+                    {"doc_id": d, "filename": names.get(d, d), "chunks": n}
+                    for d, n in c.documents.items()
+                ],
+            )
+        )
     return out
 
 

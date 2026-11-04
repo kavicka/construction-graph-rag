@@ -78,13 +78,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # stateless: každý MCP request beží v úlohe svojho HTTP requestu → nesie prístupové
     # práva TOHO requestu (nie toho, kto session otvoril)
     mcp_endpoint.app = mcp.streamable_http_app(
-        streamable_http_path="/mcp", transport_security=mcp_transport_security(),
+        streamable_http_path="/mcp",
+        transport_security=mcp_transport_security(),
         stateless_http=True,
     )
     stop_inbox = asyncio.Event()
-    inbox_task = (
-        asyncio.create_task(watch_inbox(stop_inbox)) if get_settings().inbox_sync else None
-    )
+    inbox_task = asyncio.create_task(watch_inbox(stop_inbox)) if get_settings().inbox_sync else None
     scheduler_task = asyncio.create_task(scheduler_loop(stop_inbox))
     async with mcp.session_manager.run():
         yield
@@ -97,8 +96,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 PUBLIC_PATHS = {
-    "/api/auth/login", "/api/auth/me", "/api/health",
-    "/api/auth/workers", "/api/auth/pin",  # prihlásenie pracovníka PIN-om
+    "/api/auth/login",
+    "/api/auth/me",
+    "/api/health",
+    "/api/auth/workers",
+    "/api/auth/pin",  # prihlásenie pracovníka PIN-om
 }
 
 
@@ -125,7 +127,7 @@ class AuthMiddleware:
         path = scope.get("path", "")
         root = scope.get("root_path", "")
         if root and path.startswith(root):
-            path = path[len(root):]  # --root-path / reverse proxy prefix
+            path = path[len(root) :]  # --root-path / reverse proxy prefix
         request = Request(scope)
         if (path.startswith("/api/") or path == "/mcp") and not _host_allowed(
             request.headers.get("host", "")
@@ -138,9 +140,7 @@ class AuthMiddleware:
 
         auth_header = request.headers.get("authorization", "")
         bearer = auth_header[7:] if auth_header.lower().startswith("bearer ") else None
-        access = await run_in_threadpool(
-            resolve_token, request.cookies.get(SESSION_COOKIE), bearer
-        )
+        access = await run_in_threadpool(resolve_token, request.cookies.get(SESSION_COOKIE), bearer)
         if access is None and path not in PUBLIC_PATHS:
             await JSONResponse({"detail": "prihlás sa"}, status_code=401)(scope, receive, send)
             return

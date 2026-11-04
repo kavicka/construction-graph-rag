@@ -101,8 +101,11 @@ def rewrite_question(question: str, history: list[dict[str, Any]]) -> str:
     rewritten = question
     try:
         raw = generate_sync(
-            get_settings().answer_model, prompt,
-            json_schema=_Rewrite.model_json_schema(), temperature=0.0, num_ctx=4096,
+            get_settings().answer_model,
+            prompt,
+            json_schema=_Rewrite.model_json_schema(),
+            temperature=0.0,
+            num_ctx=4096,
             timeout=60,
         )
         candidate = _Rewrite.model_validate_json(raw).question.strip()

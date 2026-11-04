@@ -137,9 +137,21 @@ CREATE TABLE IF NOT EXISTS wf_daily_summaries (
 """
 
 DEFAULT_PROFESSIONS = [
-    "murár", "tesár", "železiar", "betonár", "elektrikár", "inštalatér", "kúrenár",
-    "obkladač", "maliar", "sadrokartonista", "pokrývač", "izolatér", "zvárač",
-    "strojník", "pomocný robotník",
+    "murár",
+    "tesár",
+    "železiar",
+    "betonár",
+    "elektrikár",
+    "inštalatér",
+    "kúrenár",
+    "obkladač",
+    "maliar",
+    "sadrokartonista",
+    "pokrývač",
+    "izolatér",
+    "zvárač",
+    "strojník",
+    "pomocný robotník",
 ]
 
 TASK_STATUSES = ("todo", "in_progress", "done", "cancelled")
@@ -195,9 +207,7 @@ def worker_ids() -> set[str]:
         return {r[0] for r in conn.execute("SELECT user_id FROM wf_workers").fetchall()}
 
 
-def update_worker(
-    user_id: str, *, name: str, professions: list[str], active: bool
-) -> None:
+def update_worker(user_id: str, *, name: str, professions: list[str], active: bool) -> None:
     with get_conn() as conn:
         conn.execute("UPDATE users SET name = ? WHERE id = ?", (name, user_id))
         conn.execute(
@@ -300,8 +310,19 @@ def delete_site(site_id: str) -> None:
 # --- úlohy ------------------------------------------------------------------------------
 
 TASK_FIELDS = (
-    "site_id", "title", "description", "work_type", "date_from", "date_to", "depends_on",
-    "status", "progress", "done_on", "source_id", "source_quote", "source_page",
+    "site_id",
+    "title",
+    "description",
+    "work_type",
+    "date_from",
+    "date_to",
+    "depends_on",
+    "status",
+    "progress",
+    "done_on",
+    "source_id",
+    "source_quote",
+    "source_page",
 )
 
 
@@ -418,12 +439,17 @@ def list_sources(site_id: str | None = None) -> list[dict[str, Any]]:
         query += " WHERE site_id = ?"
         params.append(site_id)
     with get_conn() as conn:
-        return _rows(conn.execute(query + " ORDER BY created_at DESC, rowid DESC",
-                                  params).fetchall())
+        return _rows(
+            conn.execute(query + " ORDER BY created_at DESC, rowid DESC", params).fetchall()
+        )
 
 
 def set_source_status(
-    source_id: str, status: str, *, progress: float | None = None, error: str | None = None,
+    source_id: str,
+    status: str,
+    *,
+    progress: float | None = None,
+    error: str | None = None,
     doc_date: str | None = None,
 ) -> None:
     with get_conn() as conn:
@@ -452,8 +478,15 @@ def replace_drafts(source_id: str, drafts: list[dict[str, Any]]) -> None:
             """INSERT INTO wf_task_drafts (id, source_id, kind, target_task_id, data_json,
                  decision, position) VALUES (?, ?, ?, ?, ?, ?, ?)""",
             [
-                (new_id(), source_id, d["kind"], d.get("target_task_id"),
-                 json.dumps(d["data"], ensure_ascii=False), d.get("decision", "pending"), i)
+                (
+                    new_id(),
+                    source_id,
+                    d["kind"],
+                    d.get("target_task_id"),
+                    json.dumps(d["data"], ensure_ascii=False),
+                    d.get("decision", "pending"),
+                    i,
+                )
                 for i, d in enumerate(drafts)
             ],
         )
@@ -524,8 +557,15 @@ def list_reports(*, day: str | None = None, user_id: str | None = None) -> list[
 
 
 REPORT_FIELDS = (
-    "status", "step", "error", "transcript", "data_json", "pdf_path", "pdf_pages",
-    "submitted_at", "edited_by_owner",
+    "status",
+    "step",
+    "error",
+    "transcript",
+    "data_json",
+    "pdf_path",
+    "pdf_pages",
+    "submitted_at",
+    "edited_by_owner",
 )
 
 
@@ -542,7 +582,11 @@ def update_report(report_id: str, **fields: Any) -> None:
 
 
 def insert_input(
-    report_id: str, kind: str, text: str, *, question_id: str | None = None,
+    report_id: str,
+    kind: str,
+    text: str,
+    *,
+    question_id: str | None = None,
     audio_path: str | None = None,
 ) -> str:
     input_id = new_id()
@@ -562,9 +606,11 @@ def set_input_text(input_id: str, text: str) -> None:
 
 def list_inputs(report_id: str) -> list[dict[str, Any]]:
     with get_conn() as conn:
-        return _rows(conn.execute(
-            "SELECT * FROM wf_report_inputs WHERE report_id = ? ORDER BY rowid", (report_id,)
-        ).fetchall())
+        return _rows(
+            conn.execute(
+                "SELECT * FROM wf_report_inputs WHERE report_id = ? ORDER BY rowid", (report_id,)
+            ).fetchall()
+        )
 
 
 def get_input(input_id: str) -> dict[str, Any] | None:
@@ -575,10 +621,13 @@ def get_input(input_id: str) -> dict[str, Any] | None:
 
 def expired_audio_inputs(before_iso: str) -> list[dict[str, Any]]:
     with get_conn() as conn:
-        return _rows(conn.execute(
-            """SELECT * FROM wf_report_inputs WHERE audio_path IS NOT NULL
-               AND created_at < ?""", (before_iso,)
-        ).fetchall())
+        return _rows(
+            conn.execute(
+                """SELECT * FROM wf_report_inputs WHERE audio_path IS NOT NULL
+               AND created_at < ?""",
+                (before_iso,),
+            ).fetchall()
+        )
 
 
 def clear_input_audio(input_id: str) -> None:
@@ -602,7 +651,13 @@ def get_question(question_id: str) -> dict[str, Any] | None:
 
 
 def insert_question(
-    report_id: str, *, key: str, kind: str, task_id: str | None, detail: str, text: str,
+    report_id: str,
+    *,
+    key: str,
+    kind: str,
+    task_id: str | None,
+    detail: str,
+    text: str,
     position: int,
 ) -> str:
     qid = new_id()
@@ -640,8 +695,13 @@ def task_history(task_id: str) -> list[dict[str, Any]]:
                ORDER BY r.day DESC""",
             (task_id,),
         ).fetchall()
-    return [{**{k: r[k] for k in ("report_id", "day", "worker_name")},
-             "entry": json.loads(r["entry_json"])} for r in rows]
+    return [
+        {
+            **{k: r[k] for k in ("report_id", "day", "worker_name")},
+            "entry": json.loads(r["entry_json"]),
+        }
+        for r in rows
+    ]
 
 
 def get_daily_summary(day: str) -> dict[str, Any] | None:

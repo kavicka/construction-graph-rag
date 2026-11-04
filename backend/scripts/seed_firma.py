@@ -41,7 +41,9 @@ line-height:1.5;color:#111} h1{font-size:15pt;margin:0 0 4mm} .meta{color:#555;f
 table{border-collapse:collapse;width:100%;margin:3mm 0} td,th{border:1px solid #999;
 padding:4px 6px;font-size:9.5pt;text-align:left} th{background:#eee}</style>"""
 
-ZAPIS_AGATOVA = CSS + """
+ZAPIS_AGATOVA = (
+    CSS
+    + """
 <h1>Zápis z kontrolného dňa č. 14 — Bytový dom Agátová</h1>
 <p class="meta">Dátum: 6. 10. 2026 · Miesto: stavenisko Agátová 22 · Prítomní: Ing. Lucia
 Šimková (technický dozor), Ing. Peter Hronec (stavbyvedúci, Stavby Kráľ), Ing. Juraj Bielik
@@ -62,8 +64,11 @@ prístup a uzamykateľný sklad káblov do 9. 10. 2026.</p>
 deň bude 20. 10. 2026 o 9:00.</p>
 <p>Zapísal: Ing. Peter Hronec</p>
 """
+)
 
-HARMONOGRAM_SENEC = CSS + """
+HARMONOGRAM_SENEC = (
+    CSS
+    + """
 <h1>Harmonogram prác — Logistická hala Senec (október – november 2026)</h1>
 <p class="meta">Vypracovala: Ing. Mária Kováčová, stavbyvedúca · Aktualizácia 5. 10. 2026</p>
 <table>
@@ -83,6 +88,7 @@ HARMONOGRAM_SENEC = CSS + """
 </table>
 <p>Upozornenie: v areáli platí obmedzenie hlučných prác po 18:00.</p>
 """
+)
 
 
 def env_value(key: str) -> str:
@@ -114,8 +120,10 @@ def main() -> None:
     parser.add_argument("--api", default="http://localhost:8000")
     args = parser.parse_args()
     client = httpx.Client(base_url=f"{args.api}/api", timeout=120)
-    resp = client.post("/auth/login", json={"email": env_value("RAG_ADMIN_EMAIL"),
-                                            "password": env_value("RAG_ADMIN_PASSWORD")})
+    resp = client.post(
+        "/auth/login",
+        json={"email": env_value("RAG_ADMIN_EMAIL"), "password": env_value("RAG_ADMIN_PASSWORD")},
+    )
     resp.raise_for_status()
 
     existing = {w["name"]: w for w in client.get("/workers").json()}
@@ -124,8 +132,9 @@ def main() -> None:
         if name in existing:
             continue
         pin = f"{secrets.randbelow(10**4):04d}"
-        client.post("/workers", json={"name": name, "pin": pin, "professions": professions}
-                    ).raise_for_status()
+        client.post(
+            "/workers", json={"name": name, "pin": pin, "professions": professions}
+        ).raise_for_status()
         pins.append(f"{name}: {pin}")
     if pins:
         pin_file = DATA / "workforce" / "piny-pracovnikov.txt"
@@ -138,8 +147,9 @@ def main() -> None:
     sites = {s["name"]: s for s in client.get("/sites").json()}
     for name, address, active in SITES:
         if name not in sites:
-            sites[name] = client.post("/sites", json={"name": name, "address": address,
-                                                      "active": active}).json()
+            sites[name] = client.post(
+                "/sites", json={"name": name, "address": address, "active": active}
+            ).json()
     print("stavby:", ", ".join(sites))
 
     docs_dir = DATA / "seed-docs"
@@ -156,21 +166,27 @@ def main() -> None:
         imports.insert(0, (DATA / "pdfs" / f"{protokol['id']}.pdf", "Bytový dom Agátová"))
     done = {s["filename"] for s in client.get("/task-imports").json()}
     for path, site in imports:
-        filename = "protokol-kontroly-kvality-agatova.pdf" if path.parent.name == "pdfs" \
-            else path.name
+        filename = (
+            "protokol-kontroly-kvality-agatova.pdf" if path.parent.name == "pdfs" else path.name
+        )
         if filename in done:
             continue
         print(f"import {filename} → {site}")
-        src = client.post("/task-imports", data={"site_id": sites[site]["id"]},
-                          files={"file": (filename, path.read_bytes(), "application/pdf")})
+        src = client.post(
+            "/task-imports",
+            data={"site_id": sites[site]["id"]},
+            files={"file": (filename, path.read_bytes(), "application/pdf")},
+        )
         src.raise_for_status()
         detail = wait_review(client, src.json()["id"])
         workers = {w["id"]: w["name"] for w in client.get("/workers").json()}
         for d in detail["drafts"]:
             x = d["data"]
             who = ", ".join(workers.get(a, "?") for a in x.get("assignees", [])) or "—"
-            print(f"  [{x.get('confidence')}] {x['title']} | {x.get('date_from')}–"
-                  f"{x.get('date_to')} | {who} | {'; '.join(x.get('issues', []))}")
+            print(
+                f"  [{x.get('confidence')}] {x['title']} | {x.get('date_from')}–"
+                f"{x.get('date_to')} | {who} | {'; '.join(x.get('issues', []))}"
+            )
 
 
 if __name__ == "__main__":

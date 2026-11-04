@@ -74,7 +74,9 @@ def resolve_same_as(new_node_ids: list[str]) -> int:
                     continue
                 matched.add(pair)
                 db.upsert_graph_edge(
-                    pair[0], pair[1], SAME_AS,
+                    pair[0],
+                    pair[1],
+                    SAME_AS,
                     weight=score / 100.0,
                     props_json=json.dumps({"method": "fuzzy"}),
                 )
@@ -95,7 +97,9 @@ def resolve_same_as(new_node_ids: list[str]) -> int:
                 if sim >= EMB_THRESHOLD:
                     matched.add(pair)
                     db.upsert_graph_edge(
-                        pair[0], pair[1], SAME_AS,
+                        pair[0],
+                        pair[1],
+                        SAME_AS,
                         weight=sim,
                         props_json=json.dumps({"method": "embedding"}),
                     )

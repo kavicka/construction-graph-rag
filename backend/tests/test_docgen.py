@@ -28,8 +28,15 @@ from app.retrieve.router import route_query
 
 def _src(n: int, filename: str = "zmluva.pdf") -> Source:
     return Source(
-        n=n, chunk_id=f"c{n}", doc_id="d1", filename=filename, page_from=n, page_to=n,
-        type="text", table_id=None, text=f"Zdroj {n}: cena diela 12 400 EUR.",
+        n=n,
+        chunk_id=f"c{n}",
+        doc_id="d1",
+        filename=filename,
+        page_from=n,
+        page_to=n,
+        type="text",
+        table_id=None,
+        text=f"Zdroj {n}: cena diela 12 400 EUR.",
         snippet=f"snippet {n}",
     )
 
@@ -108,7 +115,9 @@ def test_page_counter_css() -> None:
 
 def test_build_html_uses_app_theme(ready_db: None) -> None:
     company = CompanySettings(
-        name="Firma <b>s.r.o.</b>", ico="12345678", footer_text="OR OS Žilina",
+        name="Firma <b>s.r.o.</b>",
+        ico="12345678",
+        footer_text="OR OS Žilina",
     )
     content = build_content(
         Outline("Názov", "Podnadpis", ["A", "B"]), "report", "sk", ["Prvá [1].", "Druhá."]
@@ -137,9 +146,13 @@ def test_fetcher_sandbox(tmp_path: Path) -> None:
     allowed.mkdir()
     (allowed / "logo.png").write_bytes(b"x")
     fetcher = _make_fetcher([allowed])
-    for url in ("http://example.com/x.png", "https://example.com/x.png",
-                "file:///etc/hosts", (tmp_path / "secret.txt").as_uri(),
-                (allowed / ".." / "secret.txt").as_uri()):
+    for url in (
+        "http://example.com/x.png",
+        "https://example.com/x.png",
+        "file:///etc/hosts",
+        (tmp_path / "secret.txt").as_uri(),
+        (allowed / ".." / "secret.txt").as_uri(),
+    ):
         with pytest.raises(ValueError):
             fetcher.fetch(url)
     assert fetcher.fetch((allowed / "logo.png").as_uri()) is not None
@@ -157,9 +170,12 @@ def test_render_ignores_blocked_resources(tmp_path: Path) -> None:
 
 def test_outline_uses_llm_json(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        generate, "generate_sync",
-        lambda *a, **k: '{"title": "Prehľad zmlúv 2027", "subtitle": "Kľúčové termíny",'
-        ' "sections": ["Úvod", "Termíny", "Riziká"]}',
+        generate,
+        "generate_sync",
+        lambda *a, **k: (
+            '{"title": "Prehľad zmlúv 2027", "subtitle": "Kľúčové termíny",'
+            ' "sections": ["Úvod", "Termíny", "Riziká"]}'
+        ),
     )
     free = plan_outline("vygeneruj dokument", "free", "sk", [_src(1)])
     assert free.title == "Prehľad zmlúv 2027"
@@ -187,9 +203,7 @@ def test_outline_ollama_down(monkeypatch: pytest.MonkeyPatch) -> None:
     outline = plan_outline("priprav ponuku pre obec", "offer", "sk", [])
     assert outline.title == "Priprav ponuku pre obec"
     assert outline.headings == OUTLINES["sk"]["offer"]
-    body = write_section(
-        "q", "Úvod", outline, "offer", "sk", [], CompanySettings()
-    )
+    body = write_section("q", "Úvod", outline, "offer", "sk", [], CompanySettings())
     assert "Podklady" in body
 
 

@@ -52,8 +52,18 @@ def test_sanitize_answer_removes_images() -> None:
 
 
 def _src(text: str) -> Source:
-    return Source(n=1, chunk_id="c", doc_id="d", filename="a.pdf", page_from=1, page_to=1,
-                  type="text", table_id=None, text=text, snippet="")
+    return Source(
+        n=1,
+        chunk_id="c",
+        doc_id="d",
+        filename="a.pdf",
+        page_from=1,
+        page_to=1,
+        type="text",
+        table_id=None,
+        text=text,
+        snippet="",
+    )
 
 
 def test_prompt_format_toggles_with_guard(monkeypatch: pytest.MonkeyPatch) -> None:

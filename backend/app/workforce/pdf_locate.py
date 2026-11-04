@@ -48,11 +48,15 @@ def locate_quote(pdf_path: Path, page_no: int, quote: str) -> list[list[float]] 
                 left, bottom, right, top = textpage.get_rect(i)
                 x0, x1 = left / width, right / width
                 y0, y1 = (height - top) / height, (height - bottom) / height  # PDF má počiatok dole
-                boxes.append([
-                    float(page_no),
-                    round(max(0.0, x0), 4), round(max(0.0, y0), 4),
-                    round(min(1.0, x1), 4), round(min(1.0, y1), 4),
-                ])
+                boxes.append(
+                    [
+                        float(page_no),
+                        round(max(0.0, x0), 4),
+                        round(max(0.0, y0), 4),
+                        round(min(1.0, x1), 4),
+                        round(min(1.0, y1), 4),
+                    ]
+                )
             return boxes or None
         finally:
             pdf.close()

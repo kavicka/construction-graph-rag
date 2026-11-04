@@ -53,18 +53,22 @@ class SqliteSpanExporter(SpanExporter):
             ctx = s.get_span_context()
             if ctx is None:
                 continue
-            attrs = {k: v if not isinstance(v, tuple) else list(v)
-                     for k, v in (s.attributes or {}).items()}
-            rows.append((
-                format(ctx.trace_id, "032x"),
-                format(ctx.span_id, "016x"),
-                format(s.parent.span_id, "016x") if s.parent else None,
-                s.name,
-                s.start_time or 0,
-                s.end_time or 0,
-                s.status.status_code.name,
-                json.dumps(attrs, ensure_ascii=False, default=str),
-            ))
+            attrs = {
+                k: v if not isinstance(v, tuple) else list(v)
+                for k, v in (s.attributes or {}).items()
+            }
+            rows.append(
+                (
+                    format(ctx.trace_id, "032x"),
+                    format(ctx.span_id, "016x"),
+                    format(s.parent.span_id, "016x") if s.parent else None,
+                    s.name,
+                    s.start_time or 0,
+                    s.end_time or 0,
+                    s.status.status_code.name,
+                    json.dumps(attrs, ensure_ascii=False, default=str),
+                )
+            )
         try:
             db.insert_spans(rows)
         except Exception:
@@ -84,9 +88,7 @@ def _provider() -> TracerProvider:
     if settings.otlp_endpoint:
         from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 
-        headers = dict(
-            h.split("=", 1) for h in settings.otlp_headers.split(",") if "=" in h
-        )
+        headers = dict(h.split("=", 1) for h in settings.otlp_headers.split(",") if "=" in h)
         provider.add_span_processor(
             BatchSpanProcessor(OTLPSpanExporter(endpoint=settings.otlp_endpoint, headers=headers))
         )

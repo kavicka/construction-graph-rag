@@ -70,9 +70,12 @@ def _index_document(doc_id: str) -> int:
 async def _run_ingest(doc_id: str) -> None:
     async with _semaphore:
         doc = db.get_document(doc_id)
-        root, ctx = start_root("rag.ingest", rag__doc_id=doc_id,
-                               rag__question=doc["filename"] if doc else doc_id,
-                               rag__mode="ingest")
+        root, ctx = start_root(
+            "rag.ingest",
+            rag__doc_id=doc_id,
+            rag__question=doc["filename"] if doc else doc_id,
+            rag__mode="ingest",
+        )
         token = attach(ctx)
         try:
             db.set_document_status(doc_id, "parsing", progress=0.1)

@@ -23,9 +23,44 @@ CITE = re.compile(r"\[(\d+(?:\s*,\s*\d+)*)\]")
 BOUNDARY = re.compile(r"[.!?…]\s+(?=[A-ZÁČĎÉÍĽĹŇÓÔŔŠŤÚÝŽ0-9\-•*\[])")
 # bodka za týmito slovami nekončí vetu („Ing. Peter Hronec“, „č. 3“, „s.r.o. Žilina“)
 ABBREVIATIONS = {
-    "ing", "mgr", "bc", "dr", "phdr", "judr", "mudr", "doc", "prof", "napr", "tzn", "resp",
-    "cca", "č", "str", "ods", "písm", "kap", "obr", "tab", "max", "min", "s.r.o", "a.s",
-    "spol", "t", "j", "vs", "e.g", "i.e", "mr", "mrs", "ms", "no", "p", "pp", "approx", "st",
+    "ing",
+    "mgr",
+    "bc",
+    "dr",
+    "phdr",
+    "judr",
+    "mudr",
+    "doc",
+    "prof",
+    "napr",
+    "tzn",
+    "resp",
+    "cca",
+    "č",
+    "str",
+    "ods",
+    "písm",
+    "kap",
+    "obr",
+    "tab",
+    "max",
+    "min",
+    "s.r.o",
+    "a.s",
+    "spol",
+    "t",
+    "j",
+    "vs",
+    "e.g",
+    "i.e",
+    "mr",
+    "mrs",
+    "ms",
+    "no",
+    "p",
+    "pp",
+    "approx",
+    "st",
 }
 SUPPORT_THRESHOLD = 0.65  # bge-m3: podporené vety ≥ 0.78, nepodporené ≤ 0.56 (eval korpus)
 MIN_FACT_CHARS = 25
@@ -101,9 +136,9 @@ def verify_sentences(answer: str, sources: list[Source]) -> list[SentenceCheck]:
         if not cited:
             checks.append(SentenceCheck(bare, "uncited", None, cites))
             continue
-        source_sentences = [
-            s for src in cited for s in split_sentences(src.text) if len(s) >= 10
-        ][:200]
+        source_sentences = [s for src in cited for s in split_sentences(src.text) if len(s) >= 10][
+            :200
+        ]
         if not source_sentences:
             checks.append(SentenceCheck(bare, "weak", None, cites))
             continue

@@ -21,8 +21,13 @@ def meal_records() -> None:
         "d1",
         [
             {
-                "id": f"r{i}", "table_id": "t1", "page_no": 5, "category": cat,
-                "name": name, "attrs_json": json.dumps(attrs), "raw_text": name,
+                "id": f"r{i}",
+                "table_id": "t1",
+                "page_no": 5,
+                "category": cat,
+                "name": name,
+                "attrs_json": json.dumps(attrs),
+                "raw_text": name,
             }
             for i, (cat, name, attrs) in enumerate(rows)
         ],

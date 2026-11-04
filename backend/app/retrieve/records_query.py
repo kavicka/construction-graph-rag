@@ -90,9 +90,7 @@ def load_hits(categories: list[str], doc_ids: list[str] | None = None) -> list[R
 def run_filter(plan: QueryPlan) -> tuple[list[RecordHit], list[RecordHit]]:
     """→ (vyhovujúce, najbližšie-nevyhovujúce pre poctivú odpoveď pri nule)."""
     candidates = load_hits(plan.categories, plan.doc_ids)
-    if plan.doc_ids and not any(
-        c.attr in h.attrs for h in candidates for c in plan.constraints
-    ):
+    if plan.doc_ids and not any(c.attr in h.attrs for h in candidates for c in plan.constraints):
         # dokument z otázky ten atribút nemá (napr. „Agátová" → zmluva) → celá knižnica
         candidates = load_hits(plan.categories)
     matched = [h for h in candidates if _passes(h.attrs, plan.constraints)]
@@ -203,9 +201,7 @@ def build_filter_context(
     sources = hits_to_sources(matched or nearest)
     table_n = {s.table_id: s.n for s in sources}
 
-    lines = [
-        "PRESNÉ výsledky filtra (spočítané kódom — NEPREPOČÍTAVAJ, NEPRIDÁVAJ položky):"
-    ]
+    lines = ["PRESNÉ výsledky filtra (spočítané kódom — NEPREPOČÍTAVAJ, NEPRIDÁVAJ položky):"]
     conds = "; ".join(f"{c.attr} {c.op} {c.value:g}" for c in plan.constraints)
     if conds:
         lines.append(f"Podmienky: {conds}")

@@ -55,9 +55,7 @@ def test_expand_via_graph_crosses_documents(two_docs: None) -> None:
     )
 
 
-def test_pipeline_flag_controls_expansion(
-    two_docs: None, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_pipeline_flag_controls_expansion(two_docs: None, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("RAG_GRAPH_EXPANSION", "false")
     get_settings.cache_clear()
     without = retrieve_sources("prietok chladiaceho média", k=4)

@@ -58,8 +58,9 @@ _VERB_RE = re.compile(
     re.IGNORECASE,
 )
 # „PIN 4821“, „PIN: 4821“
-_PIN_RE = re.compile(r"(?<![\w-])(?P<label>pin\w{0,3})(?P<mid>[ \t:=]+)(?P<val>\d{4,8})\b",
-                     re.IGNORECASE)
+_PIN_RE = re.compile(
+    r"(?<![\w-])(?P<label>pin\w{0,3})(?P<mid>[ \t:=]+)(?P<val>\d{4,8})\b", re.IGNORECASE
+)
 _TRAIL = ".,;:!?)]}…"
 
 
@@ -67,9 +68,7 @@ def _looks_secret(value: str) -> bool:
     core = value.strip("\"'„“”" + _TRAIL)
     if len(core) < 3 or core == MASK:
         return False
-    return bool(
-        re.search(r"\d", core) or re.search(r"[^\w]", core) or re.search(r"\w[A-Z]", core)
-    )
+    return bool(re.search(r"\d", core) or re.search(r"[^\w]", core) or re.search(r"\w[A-Z]", core))
 
 
 def _mask_value(m: re.Match[str], *, strict: bool) -> str:
@@ -77,7 +76,7 @@ def _mask_value(m: re.Match[str], *, strict: bool) -> str:
     if value.strip("\"'„“”") == MASK or (strict and not _looks_secret(value)):
         return m.group(0)
     core = value.rstrip(_TRAIL)
-    tail = value[len(core):]
+    tail = value[len(core) :]
     return f"{m.group('label')}{m.group('mid')}{MASK}{tail}"
 
 
@@ -119,7 +118,7 @@ class SecretStreamFilter:
             cut = min(cut, last_label.start() - 1)
         if cut < 0:
             return ""
-        head, self._buf = self._buf[: cut + 1], self._buf[cut + 1:]
+        head, self._buf = self._buf[: cut + 1], self._buf[cut + 1 :]
         return redact_secrets(head)
 
     def flush(self) -> str:

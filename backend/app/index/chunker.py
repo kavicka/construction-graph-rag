@@ -60,11 +60,15 @@ def item_boxes(document: Any, items: list[Any]) -> list[list[float]]:
                 continue
             w, h = page.size.width, page.size.height
             bb = prov.bbox.to_top_left_origin(page_height=h)
-            boxes.append([
-                float(prov.page_no),
-                round(max(0.0, bb.l / w), 4), round(max(0.0, bb.t / h), 4),
-                round(min(1.0, bb.r / w), 4), round(min(1.0, bb.b / h), 4),
-            ])
+            boxes.append(
+                [
+                    float(prov.page_no),
+                    round(max(0.0, bb.l / w), 4),
+                    round(max(0.0, bb.t / h), 4),
+                    round(min(1.0, bb.r / w), 4),
+                    round(min(1.0, bb.b / h), 4),
+                ]
+            )
             if len(boxes) >= MAX_BOXES_PER_CHUNK:
                 return boxes
     return boxes
@@ -100,9 +104,7 @@ def chunk_text_items(doc_id: str, document: Any) -> list[Chunk]:
         items = ch.meta.doc_items
         if items and all(isinstance(it, TableItem) for it in items):
             continue  # tabuľky idú vetvou sumárov
-        pages = sorted(
-            {prov.page_no for it in items for prov in getattr(it, "prov", [])}
-        ) or [1]
+        pages = sorted({prov.page_no for it in items for prov in getattr(it, "prov", [])}) or [1]
         headings = ch.meta.headings or []
         text = chunker.contextualize(chunk=ch)
         if not text.strip():
@@ -162,7 +164,8 @@ def contextualize_chunks(doc_id: str, document: Any, chunks: list[Chunk]) -> int
                 context = generate_sync(
                     settings.answer_model,
                     CONTEXT_PROMPT.format(document=head, chunk=chunk.raw_text[:2000]),
-                    temperature=0.0, num_ctx=8192,
+                    temperature=0.0,
+                    num_ctx=8192,
                 ).strip()
             except OllamaError:
                 logger.warning("kontext chunku %s zlyhal — chunk ostáva bez neho", chunk.chunk_id)
@@ -182,15 +185,11 @@ def _fallback_summary(caption: str | None, markdown: str, n_rows: int, n_cols: i
 
 def summarize_table(caption: str | None, markdown: str, n_rows: int, n_cols: int) -> str:
     settings = get_settings()
-    prompt = SUMMARY_PROMPT.format(
-        caption=caption or "", table_md=markdown[:MAX_TABLE_MD_CHARS]
-    )
+    prompt = SUMMARY_PROMPT.format(caption=caption or "", table_md=markdown[:MAX_TABLE_MD_CHARS])
     try:
         # sumáre generuje answer model — 1.7b dával generické nerozlíšiteľné sumáre,
         # kvalita embedovaného sumáru priamo určuje, či retrieval tabuľku nájde
-        summary = generate_sync(
-            settings.answer_model, prompt, system=SUMMARY_SYSTEM, num_ctx=8192
-        )
+        summary = generate_sync(settings.answer_model, prompt, system=SUMMARY_SYSTEM, num_ctx=8192)
         if summary:
             return summary
     except OllamaError:

@@ -75,8 +75,16 @@ ATTR_HINTS: dict[str, tuple[str, ...]] = {
     "t": ("tuk", "fat"),
 }
 COMPOSE_HINTS = (
-    "spolu", "dokopy", "celkovo", "zmestil", "zmestim", "total", "kombin",
-    "vyber mi aj", "potom mi vyber", "este",
+    "spolu",
+    "dokopy",
+    "celkovo",
+    "zmestil",
+    "zmestim",
+    "total",
+    "kombin",
+    "vyber mi aj",
+    "potom mi vyber",
+    "este",
 )
 MAXIMIZE_HINTS: dict[str, tuple[str, ...]] = {
     "b": ("najviac bielkov", "nejvic bilkov", "most protein"),
@@ -202,8 +210,10 @@ def _llm_fallback(question: str) -> QueryPlan | None:
     )
     try:
         raw = generate_sync(
-            settings.extract_model, prompt,
-            json_schema=_LlmPlan.model_json_schema(), num_ctx=2048,
+            settings.extract_model,
+            prompt,
+            json_schema=_LlmPlan.model_json_schema(),
+            num_ctx=2048,
         )
         parsed = _LlmPlan.model_validate_json(raw)
     except (OllamaError, ValidationError) as exc:
@@ -250,7 +260,8 @@ def route_query(question: str) -> QueryPlan:
     compose = (
         len(categories) >= 2
         or any(h in qn for h in COMPOSE_HINTS)
-        or len({c.attr for c in constraints if c.op == "<="}) > 1 and len(categories) >= 1
+        or len({c.attr for c in constraints if c.op == "<="}) > 1
+        and len(categories) >= 1
     )
     return QueryPlan(
         mode="compose" if compose else "filter",

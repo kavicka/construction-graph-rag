@@ -58,18 +58,28 @@ def _start(client: TestClient, worker: str) -> dict[str, Any]:
 def test_full_dialog(client: TestClient, fake_llm: FakeLLM, setup: dict[str, str]) -> None:
     report = _start(client, setup["jano"])
     rid = report["id"]
-    fake_llm.push("_Extracted", {
-        "arrival": "07:30", "departure": "04:00",
-        "tasks": [
-            {"ref": "T1", "status": "in_progress", "progress": 50, "hours": 5,
-             "note": "murovanie priečok"},
-            {"ref": "T2", "status": "done", "hours": 3},  # okná nespomenul → celé sa zahodí
-            {"ref": "T9", "status": "done"},  # neexistujúca úloha
-        ],
-        "summary": "Murovanie priečok.",
-    })
-    assert client.post(f"/api/attendance/reports/{rid}/text", json={"text": MAIN}).status_code \
-        == 202
+    fake_llm.push(
+        "_Extracted",
+        {
+            "arrival": "07:30",
+            "departure": "04:00",
+            "tasks": [
+                {
+                    "ref": "T1",
+                    "status": "in_progress",
+                    "progress": 50,
+                    "hours": 5,
+                    "note": "murovanie priečok",
+                },
+                {"ref": "T2", "status": "done", "hours": 3},  # okná nespomenul → celé sa zahodí
+                {"ref": "T9", "status": "done"},  # neexistujúca úloha
+            ],
+            "summary": "Murovanie priečok.",
+        },
+    )
+    assert (
+        client.post(f"/api/attendance/reports/{rid}/text", json={"text": MAIN}).status_code == 202
+    )
     report = wait_done(client, rid)
     data = report["data"]
     assert (data["arrival"], data["departure"]) == ("07:30", "16:00")
@@ -84,12 +94,16 @@ def test_full_dialog(client: TestClient, fake_llm: FakeLLM, setup: dict[str, str
     # odovzdanie s otvorenými otázkami → 409
     resp = client.post(f"/api/attendance/reports/{rid}/submit")
     assert resp.status_code == 409 and set(resp.json()["detail"]["open"]) == {
-        "break", f"task:{setup['t2']}", "problems"}
+        "break",
+        f"task:{setup['t2']}",
+        "problems",
+    }
 
     # prestávka — deterministicky
     q = open_question(report, "break")
-    client.post(f"/api/attendance/reports/{rid}/questions/{q['id']}/text",
-                json={"text": "pol hodiny"})
+    client.post(
+        f"/api/attendance/reports/{rid}/questions/{q['id']}/text", json={"text": "pol hodiny"}
+    )
     report = wait_done(client, rid)
     assert report["data"]["break_minutes"] == 30
 
@@ -97,28 +111,32 @@ def test_full_dialog(client: TestClient, fake_llm: FakeLLM, setup: dict[str, str
     q = open_question(report, "task")
     assert q["detail"] == "status" and q["mode"] == "open"
     fake_llm.push("_XTaskAnswer", {"status": None})
-    client.post(f"/api/attendance/reports/{rid}/questions/{q['id']}/text",
-                json={"text": "no robil som tam niečo"})
+    client.post(
+        f"/api/attendance/reports/{rid}/questions/{q['id']}/text",
+        json={"text": "no robil som tam niečo"},
+    )
     report = wait_done(client, rid)
     q1 = open_question(report, "task")
     assert q1["attempts"] == 1 and q1["mode"] == "open"
     fake_llm.push("_XTaskAnswer", {"status": None})
-    client.post(f"/api/attendance/reports/{rid}/questions/{q['id']}/text",
-                json={"text": "neviem"})
+    client.post(f"/api/attendance/reports/{rid}/questions/{q['id']}/text", json={"text": "neviem"})
     report = wait_done(client, rid)
     q2 = open_question(report, "task")
     assert q2["attempts"] == 2 and q2["mode"] == "choices"
     assert "vyber" in q2["text"].lower()
-    client.post(f"/api/attendance/reports/{rid}/questions/{q['id']}/choice",
-                json={"status": "done", "hours": 1})
+    client.post(
+        f"/api/attendance/reports/{rid}/questions/{q['id']}/choice",
+        json={"status": "done", "hours": 1},
+    )
     report = wait_done(client, rid)
 
     # problémy cez LLM
     q = open_question(report, "problems")
-    fake_llm.push("_XProblems", {"has_problems": True,
-                                 "problems": ["Chýbalo lepidlo na obklad."]})
-    client.post(f"/api/attendance/reports/{rid}/questions/{q['id']}/text",
-                json={"text": "chýbalo lepidlo na obklad"})
+    fake_llm.push("_XProblems", {"has_problems": True, "problems": ["Chýbalo lepidlo na obklad."]})
+    client.post(
+        f"/api/attendance/reports/{rid}/questions/{q['id']}/text",
+        json={"text": "chýbalo lepidlo na obklad"},
+    )
     report = wait_done(client, rid)
     assert report["data"]["problems"] == ["Chýbalo lepidlo na obklad."]
 
@@ -126,13 +144,15 @@ def test_full_dialog(client: TestClient, fake_llm: FakeLLM, setup: dict[str, str
     assert report["worked_hours"] == 8 and report["reported_hours"] == 6
     q = open_question(report, "hours")
     assert "8 h" in q["text"] and "6 h" in q["text"]
-    fake_llm.push("_XHoursFix", {"extra_work": [
-        {"description": "Upratovanie staveniska", "hours": 2}]})
-    client.post(f"/api/attendance/reports/{rid}/questions/{q['id']}/text",
-                json={"text": "ešte dve hodiny som upratoval stavenisko"})
+    fake_llm.push(
+        "_XHoursFix", {"extra_work": [{"description": "Upratovanie staveniska", "hours": 2}]}
+    )
+    client.post(
+        f"/api/attendance/reports/{rid}/questions/{q['id']}/text",
+        json={"text": "ešte dve hodiny som upratoval stavenisko"},
+    )
     report = wait_done(client, rid)
-    assert report["data"]["extra_work"] == [{"description": "Upratovanie staveniska",
-                                             "hours": 2.0}]
+    assert report["data"]["extra_work"] == [{"description": "Upratovanie staveniska", "hours": 2.0}]
     assert report["status"] == "ready" and report["can_submit"] is True
 
     resp = client.post(f"/api/attendance/reports/{rid}/submit")
@@ -145,8 +165,10 @@ def test_full_dialog(client: TestClient, fake_llm: FakeLLM, setup: dict[str, str
     assert t1_row and t1_row["status"] == "in_progress" and t1_row["progress"] == 50
     assert t2_row and t2_row["status"] == "done" and t2_row["done_on"] == TODAY
     assert client.post(f"/api/attendance/reports/{rid}/submit").status_code == 409
-    assert client.post(f"/api/attendance/reports/{rid}/text",
-                       json={"text": "ešte niečo"}).status_code == 409
+    assert (
+        client.post(f"/api/attendance/reports/{rid}/text", json={"text": "ešte niečo"}).status_code
+        == 409
+    )
 
     answered = [q for q in report["questions"] if q["status"] == "answered"]
     assert {q["kind"] for q in answered} >= {"break", "problems", "hours"}
@@ -164,30 +186,35 @@ def test_full_dialog(client: TestClient, fake_llm: FakeLLM, setup: dict[str, str
     assert client.get(f"/api/attendance/days/{TODAY}").json()["summary_stale"] is False
 
 
-def test_hallucinated_times_dropped(client: TestClient, fake_llm: FakeLLM,
-                                    setup: dict[str, str]) -> None:
+def test_hallucinated_times_dropped(
+    client: TestClient, fake_llm: FakeLLM, setup: dict[str, str]
+) -> None:
     rid = _start(client, setup["jano"])["id"]
     # „pol ôsmej“ = 7:30; LLM tvrdí 8:30 a odchod, ktorý nezaznel
-    fake_llm.push("_Extracted", {"arrival": "08:30", "departure": "17:00",
-                                 "break_minutes": 45})
-    client.post(f"/api/attendance/reports/{rid}/text",
-                json={"text": "Prišiel som o pol ôsmej a murovali sme."})
+    fake_llm.push("_Extracted", {"arrival": "08:30", "departure": "17:00", "break_minutes": 45})
+    client.post(
+        f"/api/attendance/reports/{rid}/text",
+        json={"text": "Prišiel som o pol ôsmej a murovali sme."},
+    )
     report = wait_done(client, rid)
     # 8:30 je klasický posun „pol ôsmej“ o hodinu → opravené na čas, ktorý v texte je
     assert report["data"]["arrival"] == "07:30"
     assert report["data"]["departure"] is None  # odchod vôbec nezaznel
     assert report["data"]["break_minutes"] is None
     q = open_question(report, "departure")
-    client.post(f"/api/attendance/reports/{rid}/questions/{q['id']}/text",
-                json={"text": "o pol štvrtej"})
+    client.post(
+        f"/api/attendance/reports/{rid}/questions/{q['id']}/text", json={"text": "o pol štvrtej"}
+    )
     assert wait_done(client, rid)["data"]["departure"] == "15:30"
 
 
 def test_absence_day(client: TestClient, fake_llm: FakeLLM, setup: dict[str, str]) -> None:
     rid = _start(client, setup["jano"])["id"]
     fake_llm.push("_Extracted", {"absent": True, "absence_reason": "Bol som u lekára."})
-    client.post(f"/api/attendance/reports/{rid}/text",
-                json={"text": "Dnes som nebol v práci, bol som u lekára."})
+    client.post(
+        f"/api/attendance/reports/{rid}/text",
+        json={"text": "Dnes som nebol v práci, bol som u lekára."},
+    )
     report = wait_done(client, rid)
     assert report["status"] == "ready" and report["data"]["absent"] is True
     assert client.post(f"/api/attendance/reports/{rid}/submit").status_code == 200
@@ -195,8 +222,13 @@ def test_absence_day(client: TestClient, fake_llm: FakeLLM, setup: dict[str, str
     assert day["rows"][0]["absent"] is True
 
 
-def test_audio_input_and_speech(client: TestClient, fake_llm: FakeLLM, setup: dict[str, str],
-                                monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_audio_input_and_speech(
+    client: TestClient,
+    fake_llm: FakeLLM,
+    setup: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
     prompts: list[str | None] = []
 
     def fake_transcribe(path: Path, prompt: str | None = None) -> str:
@@ -207,8 +239,10 @@ def test_audio_input_and_speech(client: TestClient, fake_llm: FakeLLM, setup: di
     monkeypatch.setattr("app.workforce.speech.transcribe", fake_transcribe)
     rid = _start(client, setup["jano"])["id"]
     fake_llm.push("_Extracted", {"arrival": "07:00"})
-    resp = client.post(f"/api/attendance/reports/{rid}/audio",
-                       files={"file": ("vypis.webm", b"\x1aE\xdf\xa3fake", "audio/webm")})
+    resp = client.post(
+        f"/api/attendance/reports/{rid}/audio",
+        files={"file": ("vypis.webm", b"\x1aE\xdf\xa3fake", "audio/webm")},
+    )
     assert resp.status_code == 202
     report = wait_done(client, rid)
     assert report["transcript"] == "Prišiel som o siedmej."
@@ -231,33 +265,39 @@ def test_audio_input_and_speech(client: TestClient, fake_llm: FakeLLM, setup: di
     q = open_question(report, "departure")
     speech = client.get(f"/api/attendance/questions/{q['id']}/speech")
     assert speech.status_code == 200 and speech.headers["content-type"] == "audio/wav"
-    empty = client.post(f"/api/attendance/reports/{rid}/audio",
-                        files={"file": ("x.webm", b"", "audio/webm")})
+    empty = client.post(
+        f"/api/attendance/reports/{rid}/audio", files={"file": ("x.webm", b"", "audio/webm")}
+    )
     assert empty.status_code == 422
 
     # retencia: staré nahrávky preč, prepis ostáva
     from datetime import UTC, datetime, timedelta
+
     assert cleanup_audio(datetime.now(UTC) + timedelta(days=31)) == 1
     assert client.get(f"/api/attendance/inputs/{audio_input['id']}/audio").status_code == 404
     assert store.get_report(rid)["transcript"]  # type: ignore[index]
 
 
-def test_stt_failure_keeps_report(client: TestClient, fake_llm: FakeLLM,
-                                  setup: dict[str, str], monkeypatch: pytest.MonkeyPatch) -> None:
+def test_stt_failure_keeps_report(
+    client: TestClient, fake_llm: FakeLLM, setup: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
     def broken(path: Path, prompt: str | None = None) -> str:
         return ""
 
     monkeypatch.setattr("app.workforce.speech.transcribe", broken)
     rid = _start(client, setup["jano"])["id"]
-    client.post(f"/api/attendance/reports/{rid}/audio",
-                files={"file": ("ticho.webm", b"\x1aE\xdf\xa3", "audio/webm")})
+    client.post(
+        f"/api/attendance/reports/{rid}/audio",
+        files={"file": ("ticho.webm", b"\x1aE\xdf\xa3", "audio/webm")},
+    )
     report = wait_done(client, rid)
     assert report["error"] and "reč" in report["error"]
     assert report["status"] in ("draft", "questioning")
 
 
-def test_owner_edit_and_worker_isolation(secured: None, client: TestClient,
-                                         fake_llm: FakeLLM) -> None:
+def test_owner_edit_and_worker_isolation(
+    secured: None, client: TestClient, fake_llm: FakeLLM
+) -> None:
     login_admin(client)
     site = make_site(client)
     jano = make_worker(client, "Jano", pin="1111")
@@ -271,22 +311,34 @@ def test_owner_edit_and_worker_isolation(secured: None, client: TestClient,
     assert mine["user_id"] == jano  # worker_id pracovník nemôže podvrhnúť
     assert client.get(f"/api/attendance/reports/{fero_report['id']}").status_code == 404
     assert client.get(f"/api/attendance/days/{TODAY}").status_code == 403
-    assert client.put(f"/api/attendance/reports/{mine['id']}",
-                      json={"data": {}}).status_code == 403
+    assert client.put(f"/api/attendance/reports/{mine['id']}", json={"data": {}}).status_code == 403
     client.post("/api/auth/logout")
 
     login_admin(client)
-    edited = client.put(f"/api/attendance/reports/{mine['id']}", json={"data": {
-        "arrival": "07:00", "departure": "15:30", "break_minutes": 30,
-        "tasks": [{"task_id": store.list_tasks(site_id=site)[0]["id"], "status": "done",
-                   "hours": 8}],
-        "problems_answered": True,
-    }}).json()
+    edited = client.put(
+        f"/api/attendance/reports/{mine['id']}",
+        json={
+            "data": {
+                "arrival": "07:00",
+                "departure": "15:30",
+                "break_minutes": 30,
+                "tasks": [
+                    {
+                        "task_id": store.list_tasks(site_id=site)[0]["id"],
+                        "status": "done",
+                        "hours": 8,
+                    }
+                ],
+                "problems_answered": True,
+            }
+        },
+    ).json()
     assert edited["edited_by_owner"] is True and edited["worked_hours"] == 8
 
 
-def test_daily_tick(client: TestClient, monkeypatch: pytest.MonkeyPatch,
-                    setup: dict[str, str]) -> None:
+def test_daily_tick(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, setup: dict[str, str]
+) -> None:
     from datetime import datetime
 
     from app.workforce.config import get_workforce_settings
@@ -307,17 +359,23 @@ def test_vague_task_answer_keeps_note_and_counts_attempt(
     client: TestClient, fake_llm: FakeLLM, setup: dict[str, str]
 ) -> None:
     rid = _start(client, setup["jano"])["id"]
-    fake_llm.push("_Extracted", {"tasks": [
-        {"ref": "T1", "status": "in_progress", "hours": 3, "note": "debnenie"}]})
-    client.post(f"/api/attendance/reports/{rid}/text",
-                json={"text": "Tri hodiny som pripravoval debnenie na murovanie priečok."})
+    fake_llm.push(
+        "_Extracted",
+        {"tasks": [{"ref": "T1", "status": "in_progress", "hours": 3, "note": "debnenie"}]},
+    )
+    client.post(
+        f"/api/attendance/reports/{rid}/text",
+        json={"text": "Tri hodiny som pripravoval debnenie na murovanie priečok."},
+    )
     report = wait_done(client, rid)
     q = next(q for q in report["questions"] if q["task_id"] == setup["t1"])
     assert q["detail"] == "progress"
     # LLM z nejasnej odpovede vyrobí len poznámku — to nie je odpoveď
     fake_llm.push("_XTaskAnswer", {"status": "in_progress", "note": "Urobil niečo."})
-    client.post(f"/api/attendance/reports/{rid}/questions/{q['id']}/text",
-                json={"text": "no robil som tam niečo"})
+    client.post(
+        f"/api/attendance/reports/{rid}/questions/{q['id']}/text",
+        json={"text": "no robil som tam niečo"},
+    )
     report = wait_done(client, rid)
     after = next(x for x in report["questions"] if x["id"] == q["id"])
     assert after["attempts"] == 1 and after["status"] == "open"
@@ -346,8 +404,10 @@ def test_absence_fallback_and_escape_hatch(
     # LLM zlyhá → deterministická záloha spozná neprítomnosť
     rid = _start(client, setup["jano"])["id"]
     fake_llm.push("_Extracted", None)
-    client.post(f"/api/attendance/reports/{rid}/text",
-                json={"text": "Dnes som nebol v práci, bol som u lekára."})
+    client.post(
+        f"/api/attendance/reports/{rid}/text",
+        json={"text": "Dnes som nebol v práci, bol som u lekára."},
+    )
     report = wait_done(client, rid)
     assert report["data"]["absent"] is True and report["data"]["absence_reason"] == "Lekár"
     assert report["status"] == "ready"
@@ -361,8 +421,10 @@ def test_absence_choice_on_time_question(
     client.post(f"/api/attendance/reports/{rid}/text", json={"text": "hmm"})
     report = wait_done(client, rid)
     q = open_question(report, "arrival")
-    client.post(f"/api/attendance/reports/{rid}/questions/{q['id']}/choice",
-                json={"absence_reason": "Dovolenka"})
+    client.post(
+        f"/api/attendance/reports/{rid}/questions/{q['id']}/choice",
+        json={"absence_reason": "Dovolenka"},
+    )
     report = wait_done(client, rid)
     assert report["data"]["absent"] is True and report["status"] == "ready"
 
@@ -379,10 +441,14 @@ def test_two_times_fallback_and_done_task_not_asked(
     # úloha uzavretá dnes (napr. majiteľom) sa v dnešnom výpise nepýta
     store.update_task(setup["t2"], {"status": "done", "progress": 100, "done_on": TODAY})
     rid = _start_any(client, setup["jano"])
-    fake_llm.push("_Extracted", {"arrival": "07:00", "departure": "15:30", "break_minutes": 30,
-                                 "problems_mentioned": True})
-    client.post(f"/api/attendance/reports/{rid}/text", json={
-        "text": "Od siedmej do pol štvrtej, prestávka pol hodiny, žiadne problémy."})
+    fake_llm.push(
+        "_Extracted",
+        {"arrival": "07:00", "departure": "15:30", "break_minutes": 30, "problems_mentioned": True},
+    )
+    client.post(
+        f"/api/attendance/reports/{rid}/text",
+        json={"text": "Od siedmej do pol štvrtej, prestávka pol hodiny, žiadne problémy."},
+    )
     report = wait_done(client, rid)
     asked = {q["task_id"] for q in report["questions"] if q["status"] == "open"}
     assert setup["t2"] not in asked and setup["t1"] in asked
@@ -395,9 +461,14 @@ def _start_any(client: TestClient, worker: str) -> str:
 def test_summary_sentences_with_invented_numbers_dropped() -> None:
     from app.workforce.extract import clean_summary
 
-    said = ("Začal som o pol siedmej. Viazali sme výstuž stropu nad 4. podlažím, osem hodín, "
-            "je hotová na 70%. Skončil som o pol piatej.")
-    llm = ("Dnes sme viazali výstuž stropu nad 4. podlažím, práca bola na 70 % hotová. "
-           "Pracoval som 8 hodín, začal som o 7:30, skončil o 17:30.")
+    said = (
+        "Začal som o pol siedmej. Viazali sme výstuž stropu nad 4. podlažím, osem hodín, "
+        "je hotová na 70%. Skončil som o pol piatej."
+    )
+    llm = (
+        "Dnes sme viazali výstuž stropu nad 4. podlažím, práca bola na 70 % hotová. "
+        "Pracoval som 8 hodín, začal som o 7:30, skončil o 17:30."
+    )
     assert clean_summary(llm, said) == (
-        "Dnes sme viazali výstuž stropu nad 4. podlažím, práca bola na 70 % hotová.")
+        "Dnes sme viazali výstuž stropu nad 4. podlažím, práca bola na 70 % hotová."
+    )

@@ -11,12 +11,33 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 REFUSAL_HINTS = (
-    "nenachadza", "nenašiel", "nenasiel", "neuvadza", "neobsahuj", "nie je uveden",
-    "nie su uveden", "nemam informac", "nie je k dispozic", "chyba informac",
-    "nie je informac", "nie su informac", "neposkytuj", "neuvedene", "nemozno urcit",
-    "nemozem urcit", "nie je mozne urcit",
-    "not mention", "not contain", "no information", "not provided", "not specified",
-    "does not say", "not available", "cannot find", "isn't mentioned", "is not mentioned",
+    "nenachadza",
+    "nenašiel",
+    "nenasiel",
+    "neuvadza",
+    "neobsahuj",
+    "nie je uveden",
+    "nie su uveden",
+    "nemam informac",
+    "nie je k dispozic",
+    "chyba informac",
+    "nie je informac",
+    "nie su informac",
+    "neposkytuj",
+    "neuvedene",
+    "nemozno urcit",
+    "nemozem urcit",
+    "nie je mozne urcit",
+    "not mention",
+    "not contain",
+    "no information",
+    "not provided",
+    "not specified",
+    "does not say",
+    "not available",
+    "cannot find",
+    "isn't mentioned",
+    "is not mentioned",
 )
 CITATION = re.compile(r"\[(\d+(?:\s*,\s*\d+)*)\]")
 
@@ -68,7 +89,8 @@ def is_refusal(answer: str) -> bool:
 
 def _relevant(chunk: RetrievedChunk, gold: Sequence[tuple[str, int]]) -> set[tuple[str, int]]:
     return {
-        (doc, page) for doc, page in gold
+        (doc, page)
+        for doc, page in gold
         if chunk.filename == doc and chunk.page_from <= page <= chunk.page_to
     }
 

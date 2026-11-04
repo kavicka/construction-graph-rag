@@ -28,12 +28,30 @@ from app.workforce.qa.entities import (
 logger = logging.getLogger(__name__)
 
 Intent = Literal[
-    "worker_day", "worker_tasks", "attendance", "hours", "absences", "missing_reports",
-    "site_overview", "task_people", "overdue", "blocked", "problems",
+    "worker_day",
+    "worker_tasks",
+    "attendance",
+    "hours",
+    "absences",
+    "missing_reports",
+    "site_overview",
+    "task_people",
+    "overdue",
+    "blocked",
+    "problems",
 ]
 INTENTS: tuple[Intent, ...] = (
-    "missing_reports", "attendance", "hours", "absences", "worker_day", "worker_tasks",
-    "task_people", "site_overview", "overdue", "blocked", "problems",
+    "missing_reports",
+    "attendance",
+    "hours",
+    "absences",
+    "worker_day",
+    "worker_tasks",
+    "task_people",
+    "site_overview",
+    "overdue",
+    "blocked",
+    "problems",
 )
 
 DOC_MARKER = re.compile(
@@ -59,7 +77,8 @@ STRONG = re.compile(
 # meno hľadá v pôvodnom texte s „ý“ alebo v spojení, kde sloveso nedáva zmysel
 REPORT_NOUN = re.compile(r"\bvýpis\w*|\bvypis(y|u|om|och|ov)\b")
 REPORT_NOUN_NORM = re.compile(
-    r"\b(denn\w*|dnesn\w*|neodovzd\w*|odovzd\w*|bez|nema\w*|chyba\w*) vypis\w*")
+    r"\b(denn\w*|dnesn\w*|neodovzd\w*|odovzd\w*|bez|nema\w*|chyba\w*) vypis\w*"
+)
 WEAK = re.compile(
     r"\bproblem\w*|\bhodin\w*|\bstav\w*|\btermin\w*|\bhotov\w*|\brozpracovan\w*|"
     r"\bpostup\w*|\bco sa (robi|deje)|\bako (to )?(ide|vyzera|pokracuje)|\brobi\w*|"
@@ -72,47 +91,90 @@ SITE_WEAK = re.compile(
     r"\bstav (prac|stavby|uloh)|\bprehlad\w*|\bhotov\w*|\brozpracovan\w*|\bmesk\w*|"
     r"\bkto (dnes |zajtra |teraz )?(robi|pracuje|je na|bude|robil|pracoval)\b"
 )
-SELF_REF = re.compile(
-    r"\b(ja|mna|mne|mnou|moj\w*|mam|robim|som|budem|pracujem|mojich|moje)\b"
-)
+SELF_REF = re.compile(r"\b(ja|mna|mne|mnou|moj\w*|mam|robim|som|budem|pracujem|mojich|moje)\b")
 
 RULES: list[tuple[Intent, re.Pattern[str]]] = [
-    ("missing_reports", re.compile(
-        r"\bneodovzd\w*|\b(bez|nema\w*|chyba\w*) (denn\w* |dnesn\w* )?vypis\w*|"
-        r"\bkto (este )?nema\w* (denn\w* |dnesn\w* )?vypis")),
-    ("problems", re.compile(
-        r"\bproblem\w*|\bnahlasil\w*|\bnahlasen\w*|\bkomplikac\w*|\bzavad\w*|\bprekazk\w*")),
-    ("hours", re.compile(
-        r"\bkolko hodin\b|\bodpracova\w*|\bodrobil\w*|\bnadcas\w*|\bhodin\w* (spolu|celkom)")),
-    ("absences", re.compile(
-        r"\bchybal\w*|\bkto (dnes |este |zajtra )?(chyba|chybaju)\b|\babsenc\w*|"
-        r"\bneprisiel\b|\bneprisl\w*|\bnebol\w* v praci|"
-        r"\bnepracoval\w*|\bdovolenk\w*|\bpn\b|\bpracovn\w* neschop\w*|\bneprit\w*")),
-    ("attendance", re.compile(
-        r"\bdochadz\w*|\bprichod\w*|\bodchod\w*|\bprestavk\w*|"
-        r"\b(kedy|o kolkej) (dnes |vcera )?(prisiel|prisla|prisli|odisiel|odisla|zacal\w*|"
-        r"skoncil\w*)\b|\b(prisiel|prisla|prisli|odisiel|odisla)\b")),
-    ("overdue", re.compile(
-        r"\bpo termine\b|\bmeska\w*|\bmeskaj\w*|\boneskor\w*|\bomeskan\w*|\bnestiha\w*|"
-        r"\bzaostava\w*")),
-    ("blocked", re.compile(
-        r"\bcaka\w* na\b|\bblokovan\w*|\bzavisl\w*|\bnemoze (sa )?zacat")),
-    ("task_people", re.compile(
-        r"\bkto (dnes |zajtra |teraz |vsetko )?(robi|pracuje|ma na starosti|je pridelen\w*|"
-        r"robil|pracoval) (na|s|pri)\b|\bs kym\b|\bkto (je|su) (na|pri) (ulohe|ulohu)")),
-    ("worker_tasks", re.compile(
-        r"\buloh\w*|\bpridelen\w*|\bma na starosti\b|\btermin\w*|\bdokedy\b")),
-    ("worker_day", re.compile(
-        r"\bco (dnes |zajtra |teraz |vcera |pozajtra |v \w+ |cez \w+ )?(robi|robil\w*|"
-        r"bude robit|ma robit|mam robit|robim|robia|robit)\b|\bkde (je|bude|robi|pracuje|"
-        r"robil|pracoval)\b|\bna com (robi|pracuje|robil)")),
-    ("site_overview", re.compile(
-        r"\bkto (dnes |zajtra |teraz |vcera )?(robi|pracuje|je na|bude|robil|pracoval)\b|"
-        r"\bco sa (robi|deje|bude robit|robilo)\b|\bako (to )?(ide|vyzera|pokracuje)\b|"
-        r"\bstav\w* (stavby|stavieb|prac)\b|\bprehlad\w*")),
+    (
+        "missing_reports",
+        re.compile(
+            r"\bneodovzd\w*|\b(bez|nema\w*|chyba\w*) (denn\w* |dnesn\w* )?vypis\w*|"
+            r"\bkto (este )?nema\w* (denn\w* |dnesn\w* )?vypis"
+        ),
+    ),
+    (
+        "problems",
+        re.compile(
+            r"\bproblem\w*|\bnahlasil\w*|\bnahlasen\w*|\bkomplikac\w*|\bzavad\w*|\bprekazk\w*"
+        ),
+    ),
+    (
+        "hours",
+        re.compile(
+            r"\bkolko hodin\b|\bodpracova\w*|\bodrobil\w*|\bnadcas\w*|\bhodin\w* (spolu|celkom)"
+        ),
+    ),
+    (
+        "absences",
+        re.compile(
+            r"\bchybal\w*|\bkto (dnes |este |zajtra )?(chyba|chybaju)\b|\babsenc\w*|"
+            r"\bneprisiel\b|\bneprisl\w*|\bnebol\w* v praci|"
+            r"\bnepracoval\w*|\bdovolenk\w*|\bpn\b|\bpracovn\w* neschop\w*|\bneprit\w*"
+        ),
+    ),
+    (
+        "attendance",
+        re.compile(
+            r"\bdochadz\w*|\bprichod\w*|\bodchod\w*|\bprestavk\w*|"
+            r"\b(kedy|o kolkej) (dnes |vcera )?(prisiel|prisla|prisli|odisiel|odisla|zacal\w*|"
+            r"skoncil\w*)\b|\b(prisiel|prisla|prisli|odisiel|odisla)\b"
+        ),
+    ),
+    (
+        "overdue",
+        re.compile(
+            r"\bpo termine\b|\bmeska\w*|\bmeskaj\w*|\boneskor\w*|\bomeskan\w*|\bnestiha\w*|"
+            r"\bzaostava\w*"
+        ),
+    ),
+    ("blocked", re.compile(r"\bcaka\w* na\b|\bblokovan\w*|\bzavisl\w*|\bnemoze (sa )?zacat")),
+    (
+        "task_people",
+        re.compile(
+            r"\bkto (dnes |zajtra |teraz |vsetko )?(robi|pracuje|ma na starosti|je pridelen\w*|"
+            r"robil|pracoval) (na|s|pri)\b|\bs kym\b|\bkto (je|su) (na|pri) (ulohe|ulohu)"
+        ),
+    ),
+    (
+        "worker_tasks",
+        re.compile(r"\buloh\w*|\bpridelen\w*|\bma na starosti\b|\btermin\w*|\bdokedy\b"),
+    ),
+    (
+        "worker_day",
+        re.compile(
+            r"\bco (dnes |zajtra |teraz |vcera |pozajtra |v \w+ |cez \w+ )?(robi|robil\w*|"
+            r"bude robit|ma robit|mam robit|robim|robia|robit)\b|\bkde (je|bude|robi|pracuje|"
+            r"robil|pracoval)\b|\bna com (robi|pracuje|robil)"
+        ),
+    ),
+    (
+        "site_overview",
+        re.compile(
+            r"\bkto (dnes |zajtra |teraz |vcera )?(robi|pracuje|je na|bude|robil|pracoval)\b|"
+            r"\bco sa (robi|deje|bude robit|robilo)\b|\bako (to )?(ide|vyzera|pokracuje)\b|"
+            r"\bstav\w* (stavby|stavieb|prac)\b|\bprehlad\w*"
+        ),
+    ),
 ]
-SPECIFIC = {"overdue", "blocked", "task_people", "problems", "hours", "absences",
-            "attendance", "missing_reports"}
+SPECIFIC = {
+    "overdue",
+    "blocked",
+    "task_people",
+    "problems",
+    "hours",
+    "absences",
+    "attendance",
+    "missing_reports",
+}
 
 
 @dataclass
@@ -128,8 +190,7 @@ class FirmaQuery:
     via_llm: bool = False
 
 
-def _rule_intents(qn: str, *, has_worker: bool, has_tasks: bool,
-                  has_sites: bool) -> list[Intent]:
+def _rule_intents(qn: str, *, has_worker: bool, has_tasks: bool, has_sites: bool) -> list[Intent]:
     found: list[Intent] = [intent for intent, rx in RULES if rx.search(qn)]
     if found and any(i in SPECIFIC for i in found):
         # „ktoré úlohy meškajú“ — slovo úloha je tu len podmet, typ určuje „meškajú“
@@ -178,10 +239,14 @@ Otázka: {question}"""
 
 def llm_intents(question: str) -> list[Intent]:
     try:
-        raw = generate_sync(get_settings().answer_model,
-                            INTENT_PROMPT.format(question=question[:500]),
-                            json_schema=_LlmIntent.model_json_schema(), num_ctx=2048,
-                            temperature=0.0, timeout=30.0)
+        raw = generate_sync(
+            get_settings().answer_model,
+            INTENT_PROMPT.format(question=question[:500]),
+            json_schema=_LlmIntent.model_json_schema(),
+            num_ctx=2048,
+            temperature=0.0,
+            timeout=30.0,
+        )
         parsed = _LlmIntent.model_validate_json(raw)
     except (OllamaError, ValidationError) as exc:
         logger.warning("firma: LLM typ otázky zlyhal: %s", exc)
@@ -189,8 +254,9 @@ def llm_intents(question: str) -> list[Intent]:
     return [i for i in INTENTS if i in parsed.intents][:2]
 
 
-def detect(question: str, snap: Snapshot, today: date, *,
-           worker_context: bool = False) -> FirmaQuery | None:
+def detect(
+    question: str, snap: Snapshot, today: date, *, worker_context: bool = False
+) -> FirmaQuery | None:
     """None = nie je to otázka na firemné údaje (pokračuje do dokumentov).
 
     `worker_context` — mobil pracovníka: firemné údaje sú jediná doména, takže sa skúša
@@ -201,8 +267,9 @@ def detect(question: str, snap: Snapshot, today: date, *,
     exclude = resolved.name_tokens | {t for s in sites for t in tokens(s.name)}
     tasks = match_tasks(question, snap.tasks, exclude)
     period = resolve_period(qn, today)
-    strong = bool(STRONG.search(qn) or REPORT_NOUN.search(question.casefold())
-                  or REPORT_NOUN_NORM.search(qn))
+    strong = bool(
+        STRONG.search(qn) or REPORT_NOUN.search(question.casefold()) or REPORT_NOUN_NORM.search(qn)
+    )
     weak = bool(WEAK.search(qn))
     self_ref = bool(SELF_REF.search(qn))
     has_worker = bool(resolved.workers or resolved.ambiguous)
@@ -211,17 +278,25 @@ def detect(question: str, snap: Snapshot, today: date, *,
         if not (strong or weak or period):
             return None  # „Aký telefón má Mikuš?“ — to je otázka na dokumenty
     elif worker_context:
-        if not (strong or weak or period or self_ref) or (DOC_MARKER.search(qn)
-                                                           and not self_ref):
+        if not (strong or weak or period or self_ref) or (DOC_MARKER.search(qn) and not self_ref):
             return None  # „Aká je cena betónu?“, „termín podľa zmluvy“ — len nápoveda
     elif DOC_MARKER.search(qn) or not (strong or (sites and SITE_WEAK.search(qn))):
         return None
 
-    intents = _rule_intents(qn, has_worker=has_worker or (worker_context and self_ref),
-                            has_tasks=bool(tasks), has_sites=bool(sites))
+    intents = _rule_intents(
+        qn,
+        has_worker=has_worker or (worker_context and self_ref),
+        has_tasks=bool(tasks),
+        has_sites=bool(sites),
+    )
     query = FirmaQuery(
-        intents=intents, workers=resolved.workers, sites=sites, tasks=tasks, period=period,
-        self_ref=self_ref, ambiguous=resolved.ambiguous,
+        intents=intents,
+        workers=resolved.workers,
+        sites=sites,
+        tasks=tasks,
+        period=period,
+        self_ref=self_ref,
+        ambiguous=resolved.ambiguous,
     )
     if not intents:
         query.intents = llm_intents(question)

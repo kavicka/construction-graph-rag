@@ -13,23 +13,72 @@ from functools import lru_cache
 from rapidfuzz import fuzz, process
 
 CARDINALS: dict[str, int] = {
-    "nula": 0, "jeden": 1, "jedna": 1, "jedno": 1, "jednu": 1, "dva": 2, "dve": 2,
-    "dvoch": 2, "tri": 3, "troch": 3, "styri": 4, "styroch": 4, "pat": 5, "piatich": 5,
-    "sest": 6, "siestich": 6, "sedem": 7, "osem": 8, "devat": 9, "desat": 10,
-    "jedenast": 11, "dvanast": 12, "trinast": 13, "strnast": 14, "patnast": 15,
-    "sestnast": 16, "sedemnast": 17, "osemnast": 18, "devatnast": 19, "dvadsat": 20,
-    "tridsat": 30, "styridsat": 40, "patdesiat": 50, "sestdesiat": 60,
-    "sedemdesiat": 70, "osemdesiat": 80, "devatdesiat": 90, "sto": 100,
+    "nula": 0,
+    "jeden": 1,
+    "jedna": 1,
+    "jedno": 1,
+    "jednu": 1,
+    "dva": 2,
+    "dve": 2,
+    "dvoch": 2,
+    "tri": 3,
+    "troch": 3,
+    "styri": 4,
+    "styroch": 4,
+    "pat": 5,
+    "piatich": 5,
+    "sest": 6,
+    "siestich": 6,
+    "sedem": 7,
+    "osem": 8,
+    "devat": 9,
+    "desat": 10,
+    "jedenast": 11,
+    "dvanast": 12,
+    "trinast": 13,
+    "strnast": 14,
+    "patnast": 15,
+    "sestnast": 16,
+    "sedemnast": 17,
+    "osemnast": 18,
+    "devatnast": 19,
+    "dvadsat": 20,
+    "tridsat": 30,
+    "styridsat": 40,
+    "patdesiat": 50,
+    "sestdesiat": 60,
+    "sedemdesiat": 70,
+    "osemdesiat": 80,
+    "devatdesiat": 90,
+    "sto": 100,
 }
-TENS = {"dvadsat": 20, "tridsat": 30, "styridsat": 40, "patdesiat": 50, "sestdesiat": 60,
-        "sedemdesiat": 70, "osemdesiat": 80, "devatdesiat": 90}
+TENS = {
+    "dvadsat": 20,
+    "tridsat": 30,
+    "styridsat": 40,
+    "patdesiat": 50,
+    "sestdesiat": 60,
+    "sedemdesiat": 70,
+    "osemdesiat": 80,
+    "devatdesiat": 90,
+}
 UNITS = {k: v for k, v in CARDINALS.items() if 1 <= v <= 9}
 
 # „o siedmej“, „pol ôsmej“ — genitív radovej číslovky = hodina
 ORDINALS: dict[str, int] = {
-    "jednej": 1, "prvej": 1, "druhej": 2, "tretej": 3, "stvrtej": 4, "piatej": 5,
-    "siestej": 6, "siedmej": 7, "osmej": 8, "deviatej": 9, "desiatej": 10,
-    "jedenastej": 11, "dvanastej": 12,
+    "jednej": 1,
+    "prvej": 1,
+    "druhej": 2,
+    "tretej": 3,
+    "stvrtej": 4,
+    "piatej": 5,
+    "siestej": 6,
+    "siedmej": 7,
+    "osmej": 8,
+    "deviatej": 9,
+    "desiatej": 10,
+    "jedenastej": 11,
+    "dvanastej": 12,
 }
 ORDINAL_FUZZY_MIN = 85
 
@@ -50,7 +99,8 @@ FRACTION_WORDS: list[tuple[re.Pattern[str], float]] = [
 NUM_RE = re.compile(r"\d+(?:[.,]\d+)?")
 # Whisper zlepí predložku s číslovkou: „Opol 7“ = „o pol 7“
 STT_FIXES = [
-    (re.compile(r"\bopol\b"), "o pol"), (re.compile(r"\bodpol\b"), "od pol"),
+    (re.compile(r"\bopol\b"), "o pol"),
+    (re.compile(r"\bodpol\b"), "od pol"),
     (re.compile(r"\bpolu\b"), "pol"),  # „od polu ôsmej“
     (re.compile(r"\b(stvrti|ctvrt|ctvrti)\b"), "stvrt"),  # „o štvrti na sedem“, čeština
     (re.compile(r"\bctvrte\b"), "stvrte"),
@@ -75,8 +125,9 @@ def _ordinal(token: str) -> int | None:
         return ORDINALS[token]
     if len(token) < 4:
         return None
-    match = process.extractOne(token, ORDINALS.keys(), scorer=fuzz.ratio,
-                               score_cutoff=ORDINAL_FUZZY_MIN)
+    match = process.extractOne(
+        token, ORDINALS.keys(), scorer=fuzz.ratio, score_cutoff=ORDINAL_FUZZY_MIN
+    )
     return ORDINALS[match[0]] if match else None
 
 
@@ -94,8 +145,8 @@ def _word_number(tokens: list[str], i: int) -> tuple[float, int] | None:
     else:
         # zložené jedným slovom: „dvadsatpat“
         for ten, tv in TENS.items():
-            if tok.startswith(ten) and tok[len(ten):] in UNITS:
-                return float(tv + UNITS[tok[len(ten):]]), 1
+            if tok.startswith(ten) and tok[len(ten) :] in UNITS:
+                return float(tv + UNITS[tok[len(ten) :]]), 1
         return None
     # „dve a pol“ / „5 a pol“
     if i + used + 1 < len(tokens) and tokens[i + used] == "a" and tokens[i + used + 1] == "pol":

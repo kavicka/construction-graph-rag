@@ -135,15 +135,23 @@ async def _file_response(doc_id: str, *, pdf_only: bool) -> FileResponse:
     if not path.exists():
         raise HTTPException(status_code=404, detail="súbor chýba na disku")
     if row["format"] == "pdf":
-        return FileResponse(path, media_type="application/pdf", filename=row["filename"],
-                            content_disposition_type="inline")
+        return FileResponse(
+            path,
+            media_type="application/pdf",
+            filename=row["filename"],
+            content_disposition_type="inline",
+        )
     # HTML/MD/Office od používateľa nesmú bežať v origine appky (XSS → admin session):
     # stiahnutie + sandbox CSP + bez MIME sniffingu
     return FileResponse(
-        path, media_type=media_type(row["format"]), filename=row["filename"],
+        path,
+        media_type=media_type(row["format"]),
+        filename=row["filename"],
         content_disposition_type="attachment",
-        headers={"Content-Security-Policy": "sandbox; default-src 'none'",
-                 "X-Content-Type-Options": "nosniff"},
+        headers={
+            "Content-Security-Policy": "sandbox; default-src 'none'",
+            "X-Content-Type-Options": "nosniff",
+        },
     )
 
 
@@ -179,9 +187,13 @@ async def get_chunk(chunk_id: str) -> ChunkOut:
     row = rows[0]
     doc = await run_in_threadpool(ensure_document, row["doc_id"])
     return ChunkOut(
-        chunk_id=row["chunk_id"], doc_id=row["doc_id"],
+        chunk_id=row["chunk_id"],
+        doc_id=row["doc_id"],
         filename=doc["filename"] if doc else row["doc_id"],
         format=doc["format"] if doc else "pdf",
-        page_from=row["page_from"], page_to=row["page_to"],
-        section_path=row["section_path"], type=row["type"], text=redact_secrets(row["raw_text"]),
+        page_from=row["page_from"],
+        page_to=row["page_to"],
+        section_path=row["section_path"],
+        type=row["type"],
+        text=redact_secrets(row["raw_text"]),
     )

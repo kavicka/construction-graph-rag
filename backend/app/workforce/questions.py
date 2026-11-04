@@ -31,8 +31,9 @@ def question_text(
     match gap.kind:
         case "absence":
             return (
-                "Vyber dôvod neprítomnosti." if choices else
-                "Z akého dôvodu dnes nebola práca? Dovolenka, choroba alebo niečo iné?"
+                "Vyber dôvod neprítomnosti."
+                if choices
+                else "Z akého dôvodu dnes nebola práca? Dovolenka, choroba alebo niečo iné?"
             )
         case "arrival":
             if choices:
@@ -103,8 +104,7 @@ def question_text(
             total = data.reported_hours
             if choices:
                 return (
-                    f"Rozdeľ odpracovaných {_fmt_hours(worked)} h medzi úlohy "
-                    "(súčet musí sedieť)."
+                    f"Rozdeľ odpracovaných {_fmt_hours(worked)} h medzi úlohy (súčet musí sedieť)."
                 )
             if total > worked:
                 return (

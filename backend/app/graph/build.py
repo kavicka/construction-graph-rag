@@ -54,9 +54,7 @@ def build_document_graph(doc_id: str) -> dict[str, int]:
             ensure_ascii=False,
         )
         db.upsert_graph_node(cid, gs.CHUNK, label, doc_id=doc_id, props_json=props)
-        db.upsert_graph_edge(
-            gs.page_node_id(doc_id, row["page_from"]), cid, gs.CONTAINS
-        )
+        db.upsert_graph_edge(gs.page_node_id(doc_id, row["page_from"]), cid, gs.CONTAINS)
         if prev_chunk_node is not None:
             db.upsert_graph_edge(prev_chunk_node, cid, gs.NEXT)
         prev_chunk_node = cid
@@ -70,7 +68,10 @@ def build_document_graph(doc_id: str) -> dict[str, int]:
         for key, qlabel, unit in extract_quantities(text):
             qid = gs.quantity_node_id(key)
             db.upsert_graph_node(
-                qid, gs.QUANTITY, qlabel, norm_key=key,
+                qid,
+                gs.QUANTITY,
+                qlabel,
+                norm_key=key,
                 props_json=json.dumps({"unit": unit}),
             )
             db.upsert_graph_edge(cid, qid, gs.MEASURES, evidence_chunk_id=chunk_ref)
@@ -79,7 +80,10 @@ def build_document_graph(doc_id: str) -> dict[str, int]:
         for key, rlabel, rtype in extract_references(text):
             rid = gs.reference_node_id(key)
             db.upsert_graph_node(
-                rid, gs.REFERENCE, rlabel, norm_key=key,
+                rid,
+                gs.REFERENCE,
+                rlabel,
+                norm_key=key,
                 props_json=json.dumps({"ref_type": rtype}),
             )
             db.upsert_graph_edge(doc_node, rid, gs.CITES, evidence_chunk_id=chunk_ref)
@@ -91,7 +95,10 @@ def build_document_graph(doc_id: str) -> dict[str, int]:
                 continue
             con_id = gs.concept_node_id(key)
             db.upsert_graph_node(
-                con_id, gs.CONCEPT, concept.name, norm_key=key,
+                con_id,
+                gs.CONCEPT,
+                concept.name,
+                norm_key=key,
                 props_json=json.dumps({"concept_type": concept.type}, ensure_ascii=False),
             )
             edge_type = gs.DEFINES if concept.defined_here else gs.MENTIONS
@@ -119,7 +126,10 @@ def build_document_graph(doc_id: str) -> dict[str, int]:
             for key, qlabel, unit in extract_quantities(head):
                 qid = gs.quantity_node_id(key)
                 db.upsert_graph_node(
-                    qid, gs.QUANTITY, qlabel, norm_key=key,
+                    qid,
+                    gs.QUANTITY,
+                    qlabel,
+                    norm_key=key,
                     props_json=json.dumps({"unit": unit}),
                 )
                 db.upsert_graph_edge(tid, qid, gs.MEASURES)

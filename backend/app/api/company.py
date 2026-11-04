@@ -29,13 +29,27 @@ def preview_content(company: CompanySettings) -> tuple[DocumentContent, list[Sou
     name = company.name or "Vaša firma"
     sources = [
         Source(
-            n=1, chunk_id="preview:1", doc_id="preview", filename="zmluva-o-dielo.pdf",
-            page_from=3, page_to=3, type="text", table_id=None, text="",
+            n=1,
+            chunk_id="preview:1",
+            doc_id="preview",
+            filename="zmluva-o-dielo.pdf",
+            page_from=3,
+            page_to=3,
+            type="text",
+            table_id=None,
+            text="",
             snippet="Zhotoviteľ sa zaväzuje dokončiť dielo do 30. 6. 2027.",
         ),
         Source(
-            n=2, chunk_id="preview:2", doc_id="preview", filename="rozpocet-2027.pdf",
-            page_from=1, page_to=2, type="table_summary", table_id=None, text="",
+            n=2,
+            chunk_id="preview:2",
+            doc_id="preview",
+            filename="rozpocet-2027.pdf",
+            page_from=1,
+            page_to=2,
+            type="table_summary",
+            table_id=None,
+            text="",
             snippet="Celkový rozpočet projektu je 248 500 EUR bez DPH.",
         ),
     ]

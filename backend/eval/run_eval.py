@@ -107,8 +107,10 @@ def main() -> int:
     args = parser.parse_args()
 
     health = httpx.get(f"{BASE}/health", timeout=5).json()
-    print(f"profil={health['ram_profile']} embed={health['embedding_model']} "
-          f"ollama={'OK' if health['ollama']['up'] else 'DOWN'}")
+    print(
+        f"profil={health['ram_profile']} embed={health['embedding_model']} "
+        f"ollama={'OK' if health['ollama']['up'] else 'DOWN'}"
+    )
 
     if not args.skip_upload:
         print("→ upload korpusu…")
@@ -133,16 +135,17 @@ def main() -> int:
         "hit_rate": sum(r["hit"] for r in results) / n,
         "substring_rate": sum(r["substrings"] for r in results) / n,
         "citation_rate": sum(r["cited"] for r in results) / n,
-        "relational_cross_doc": sum(
-            1 for r in results if r["cross_doc"]
-        ) / max(1, sum(1 for r in results if r["cross_doc"] is not None)),
+        "relational_cross_doc": sum(1 for r in results if r["cross_doc"])
+        / max(1, sum(1 for r in results if r["cross_doc"] is not None)),
         "avg_latency_s": round(sum(r["latency_s"] for r in results) / n, 1),
         "graph_expansion": True,
     }
-    print(f"\nhit@8={summary['hit_rate']:.0%}  čísla={summary['substring_rate']:.0%}  "
-          f"citácie={summary['citation_rate']:.0%}  "
-          f"relačné-crossdoc={summary['relational_cross_doc']:.0%}  "
-          f"latencia={summary['avg_latency_s']}s")
+    print(
+        f"\nhit@8={summary['hit_rate']:.0%}  čísla={summary['substring_rate']:.0%}  "
+        f"citácie={summary['citation_rate']:.0%}  "
+        f"relačné-crossdoc={summary['relational_cross_doc']:.0%}  "
+        f"latencia={summary['avg_latency_s']}s"
+    )
 
     RESULTS_PATH.write_text(
         json.dumps({"summary": summary, "results": results}, ensure_ascii=False, indent=1),

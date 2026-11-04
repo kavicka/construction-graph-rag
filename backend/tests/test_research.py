@@ -19,8 +19,18 @@ from tests.test_chat_api import _parse_sse
 
 
 def _src(cid: str, filename: str = "z.pdf") -> Source:
-    return Source(n=0, chunk_id=cid, doc_id="d", filename=filename, page_from=1, page_to=1,
-                  type="text", table_id=None, text=f"text {cid}", snippet=f"snip {cid}")
+    return Source(
+        n=0,
+        chunk_id=cid,
+        doc_id="d",
+        filename=filename,
+        page_from=1,
+        page_to=1,
+        type="text",
+        table_id=None,
+        text=f"text {cid}",
+        snippet=f"snip {cid}",
+    )
 
 
 @pytest.mark.parametrize(
@@ -47,13 +57,22 @@ def test_research_trigger_and_routing() -> None:
 
 
 def test_decompose_uses_llm_then_falls_back(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(research, "generate_sync", lambda *a, **k: json.dumps(
-        {"questions": ["Kto je stavbyvedúci Agátová?", "Aká je pokuta Agátová?"]}))
+    monkeypatch.setattr(
+        research,
+        "generate_sync",
+        lambda *a, **k: json.dumps(
+            {"questions": ["Kto je stavbyvedúci Agátová?", "Aká je pokuta Agátová?"]}
+        ),
+    )
     assert decompose("Kto je stavbyvedúci a aká je pokuta?") == [
-        "Kto je stavbyvedúci Agátová?", "Aká je pokuta Agátová?"]
+        "Kto je stavbyvedúci Agátová?",
+        "Aká je pokuta Agátová?",
+    ]
     monkeypatch.setattr(research, "generate_sync", lambda *a, **k: "zlý json")
     assert decompose("Kto je stavbyvedúci na Agátovej a aká je pokuta?") == [
-        "Kto je stavbyvedúci na Agátovej?", "Aká je pokuta?"]
+        "Kto je stavbyvedúci na Agátovej?",
+        "Aká je pokuta?",
+    ]
 
 
 def test_merge_sources_round_robin_dedupe() -> None:
@@ -65,7 +84,9 @@ def test_merge_sources_round_robin_dedupe() -> None:
 def test_sections_from_markdown() -> None:
     md = "Úvodná veta.\n## Zhrnutie\nText [1].\n\n## Zistenia\n- bod [2]\n## Prázdna\n"
     assert sections_from_markdown(md) == [
-        ("Odpoveď", "Úvodná veta."), ("Zhrnutie", "Text [1]."), ("Zistenia", "- bod [2]"),
+        ("Odpoveď", "Úvodná veta."),
+        ("Zhrnutie", "Text [1]."),
+        ("Zistenia", "- bod [2]"),
     ]
 
 
@@ -76,22 +97,25 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
             return json.dumps({"questions": ["Aká je cena?", "Aký je termín?", "Kto dozoruje?"]})
         return "Cena je 12.4 EUR [1]."
 
-    async def fake_stream(model: str, messages: list[dict[str, str]], **kw: object
-                          ) -> AsyncIterator[str]:
+    async def fake_stream(
+        model: str, messages: list[dict[str, str]], **kw: object
+    ) -> AsyncIterator[str]:
         for tok in ["## Zhrnutie\n", "Cena je 12.4 EUR [1].\n", "## Súvislosti\nNič [2]."]:
             yield tok
 
     monkeypatch.setattr("app.retrieve.research.generate_sync", fake_generate)
     monkeypatch.setattr("app.retrieve.orchestrator.chat_stream", fake_stream)
-    monkeypatch.setattr("app.retrieve.research.retrieve_sources",
-                        lambda q, k: [_src(f"{q[:4]}-1"), _src("shared")])
+    monkeypatch.setattr(
+        "app.retrieve.research.retrieve_sources", lambda q, k: [_src(f"{q[:4]}-1"), _src("shared")]
+    )
     return TestClient(app)
 
 
 def test_research_flow_and_pdf_export(client: TestClient) -> None:
     with client:
-        events = _parse_sse(client.post(
-            "/api/chat", json={"message": "Zhrň projekt", "mode": "research"}).text)
+        events = _parse_sse(
+            client.post("/api/chat", json={"message": "Zhrň projekt", "mode": "research"}).text
+        )
         assert events[0] == {"type": "plan", "mode": "research"}
         tools = [e["tool"] for e in events if e["type"] == "step"]
         assert tools.count("subquestion") == 3
@@ -114,13 +138,19 @@ def test_research_flow_and_pdf_export(client: TestClient) -> None:
 def test_compound_lookup_retrieves_per_subquestion(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr("app.retrieve.research.generate_sync", lambda *a, **k: json.dumps(
-        {"questions": ["Kto je stavbyvedúci?", "Aká je pokuta?"]}))
+    monkeypatch.setattr(
+        "app.retrieve.research.generate_sync",
+        lambda *a, **k: json.dumps({"questions": ["Kto je stavbyvedúci?", "Aká je pokuta?"]}),
+    )
     with client:
-        events = _parse_sse(client.post(
-            "/api/chat", json={"message": "Kto je stavbyvedúci a aká je pokuta?"}).text)
+        events = _parse_sse(
+            client.post("/api/chat", json={"message": "Kto je stavbyvedúci a aká je pokuta?"}).text
+        )
         step = next(e for e in events if e["type"] == "step")
-        assert step == {"type": "step", "tool": "decompose",
-                        "summary": "Kto je stavbyvedúci? · Aká je pokuta?"}
+        assert step == {
+            "type": "step",
+            "tool": "decompose",
+            "summary": "Kto je stavbyvedúci? · Aká je pokuta?",
+        }
         sources = next(e for e in events if e["type"] == "sources")["sources"]
         assert {s["chunk_id"] for s in sources} == {"Kto -1", "Aká -1", "shared"}

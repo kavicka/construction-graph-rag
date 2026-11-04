@@ -113,7 +113,13 @@ def test_chat_generates_branded_document(
         assert events[0] == {"type": "plan", "mode": "generate"}
         assert types[-1] == "done"
         assert [e["tool"] for e in events if e["type"] == "step"] == [
-            "retrieve", "outline", "section", "section", "section", "section", "render",
+            "retrieve",
+            "outline",
+            "section",
+            "section",
+            "section",
+            "section",
+            "render",
         ]
         assert calls == ["outline"] + ["section"] * 4
 
@@ -184,9 +190,12 @@ def test_feedback_roundtrip(client: TestClient) -> None:
         done = next(e for e in events if e["type"] == "done")
         message_id = done["message_id"]
 
-        assert client.put(
-            f"/api/messages/{message_id}/feedback", json={"rating": -1, "comment": "zlé číslo"}
-        ).status_code == 204
+        assert (
+            client.put(
+                f"/api/messages/{message_id}/feedback", json={"rating": -1, "comment": "zlé číslo"}
+            ).status_code
+            == 204
+        )
         msgs = client.get(f"/api/chats/{done['chat_id']}").json()
         assert msgs[-1]["rating"] == -1
 
@@ -204,9 +213,10 @@ def test_feedback_roundtrip(client: TestClient) -> None:
         assert client.get("/api/feedback").json() == []
         # feedback len na odpovede asistenta
         user_msg = client.get(f"/api/chats/{done['chat_id']}").json()[0]["id"]
-        assert client.put(
-            f"/api/messages/{user_msg}/feedback", json={"rating": 1}
-        ).status_code == 404
-        assert client.put(
-            f"/api/messages/{message_id}/feedback", json={"rating": 5}
-        ).status_code == 422
+        assert (
+            client.put(f"/api/messages/{user_msg}/feedback", json={"rating": 1}).status_code == 404
+        )
+        assert (
+            client.put(f"/api/messages/{message_id}/feedback", json={"rating": 5}).status_code
+            == 422
+        )

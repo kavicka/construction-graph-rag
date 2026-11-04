@@ -100,8 +100,13 @@ def meals() -> None:
         "d1",
         [
             {
-                "id": f"r{i}", "table_id": tid, "page_no": 14, "category": cat,
-                "name": name, "attrs_json": json.dumps(attrs), "raw_text": name,
+                "id": f"r{i}",
+                "table_id": tid,
+                "page_no": 14,
+                "category": cat,
+                "name": name,
+                "attrs_json": json.dumps(attrs),
+                "raw_text": name,
             }
             for i, (tid, cat, name, attrs) in enumerate(data)
         ],

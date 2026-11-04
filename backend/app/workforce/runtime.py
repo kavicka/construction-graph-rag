@@ -93,8 +93,9 @@ class WorkerGuard:
             user_id = current_scope().user_id
             allowed = path in WORKER_ALLOWED_PATHS or path.startswith(WORKER_ALLOWED_PREFIXES)
             if user_id and not allowed and await run_in_threadpool(is_worker, user_id):
-                response = JSONResponse({"detail": "pracovník má prístup len k dochádzke"},
-                                        status_code=403)
+                response = JSONResponse(
+                    {"detail": "pracovník má prístup len k dochádzke"}, status_code=403
+                )
                 await response(scope, receive, send)
                 return
         await self.app(scope, receive, send)

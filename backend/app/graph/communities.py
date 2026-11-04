@@ -39,8 +39,20 @@ MIN_COMMUNITY_CONCEPTS = 3
 HUB_DOC_SHARE = 0.35
 # typy z extrakcie, ktoré malý model občas vráti ako „koncept“ — nenesú tému
 GENERIC_LABELS = {
-    "zariadenie", "zariadenia", "metoda", "metody", "material", "materialy", "koncept",
-    "device", "devices", "method", "methods", "materials", "concept", "concepts",
+    "zariadenie",
+    "zariadenia",
+    "metoda",
+    "metody",
+    "material",
+    "materialy",
+    "koncept",
+    "device",
+    "devices",
+    "method",
+    "methods",
+    "materials",
+    "concept",
+    "concepts",
 }
 TOP_CONCEPTS = 10
 REPRESENTATIVE_CHUNKS = 4
@@ -77,7 +89,8 @@ def is_global_query(question: str) -> bool:
 
 def detect_communities() -> list[Community]:
     nodes = {
-        n["id"]: n for n in db.list_graph_nodes(types=[CONCEPT])
+        n["id"]: n
+        for n in db.list_graph_nodes(types=[CONCEPT])
         if (n["norm_key"] or "").replace("_", " ") not in GENERIC_LABELS
     }
     chunk_concepts: dict[str, set[str]] = defaultdict(set)
@@ -112,7 +125,8 @@ def detect_communities() -> list[Community]:
     chunk_docs = {cid: cid.split(":", 1)[0] for cid in chunk_concepts}
     n_docs = max(1, len(set(chunk_docs.values())))
     hubs = [
-        c for c, chunks in concept_chunks.items()
+        c
+        for c, chunks in concept_chunks.items()
         if len({chunk_docs[x] for x in chunks}) > max(2, HUB_DOC_SHARE * n_docs)
     ]
     g.remove_nodes_from(hubs)
@@ -136,9 +150,9 @@ def detect_communities() -> list[Community]:
         # kľúč cache = pojmy + dokumenty, z ktorých súhrn vznikol: rovnaká množina pojmov
         # u iného používateľa (iné povolené dokumenty) nesmie dostať cudzí súhrn
         scope_docs = "|".join(sorted(documents))
-        key = hashlib.sha256(
-            ("|".join(sorted(members)) + "#" + scope_docs).encode()
-        ).hexdigest()[:12]
+        key = hashlib.sha256(("|".join(sorted(members)) + "#" + scope_docs).encode()).hexdigest()[
+            :12
+        ]
         communities.append(
             Community(
                 key=key,
@@ -179,8 +193,12 @@ def summarize_community(community: Community) -> Community:
     )
     try:
         raw = generate_sync(
-            get_settings().answer_model, prompt, json_schema=_Summary.model_json_schema(),
-            temperature=0.2, num_ctx=8192, timeout=180,
+            get_settings().answer_model,
+            prompt,
+            json_schema=_Summary.model_json_schema(),
+            temperature=0.2,
+            num_ctx=8192,
+            timeout=180,
         )
         parsed = _Summary.model_validate_json(raw)
         community.title, community.summary = parsed.title.strip(), parsed.summary.strip()
@@ -221,9 +239,7 @@ pojmov naprieč dokumentmi) so súhrnmi a ukážkové zdroje. Pravidlá:
 - Nevymýšľaj nič, čo nie je v súhrnoch ani zdrojoch. Píš v jazyku otázky."""
 
 
-def global_context(
-    question: str, top: list[Community]
-) -> tuple[list[Any], list[dict[str, str]]]:
+def global_context(question: str, top: list[Community]) -> tuple[list[Any], list[dict[str, str]]]:
     """Zdroje (1–2 reprezentatívne úseky na tému) + správy pre LLM."""
     from app.retrieve.pipeline import Source
 
@@ -238,26 +254,28 @@ def global_context(
             row = rows.get(chunk_id)
             if row is None:
                 continue
-            sources.append(Source(
-                n=len(sources) + 1, chunk_id=chunk_id, doc_id=row["doc_id"],
-                filename=names.get(row["doc_id"], row["doc_id"]), page_from=row["page_from"],
-                page_to=row["page_to"], type=row["type"], table_id=row["table_id"],
-                text=guard_source_text(redact_secrets(row["raw_text"])[:1200])[0],
-                snippet=redact_secrets(row["raw_text"])[:200],
-                boxes=boxes.get(chunk_id, []),
-            ))
+            sources.append(
+                Source(
+                    n=len(sources) + 1,
+                    chunk_id=chunk_id,
+                    doc_id=row["doc_id"],
+                    filename=names.get(row["doc_id"], row["doc_id"]),
+                    page_from=row["page_from"],
+                    page_to=row["page_to"],
+                    type=row["type"],
+                    table_id=row["table_id"],
+                    text=guard_source_text(redact_secrets(row["raw_text"])[:1200])[0],
+                    snippet=redact_secrets(row["raw_text"])[:200],
+                    boxes=boxes.get(chunk_id, []),
+                )
+            )
             refs.append(len(sources))
         docs = ", ".join(names.get(d, d) for d in list(theme.documents)[:5])
         theme_lines.append(
             f"### {theme.title}\nSúhrn: {theme.summary}\nDokumenty: {docs}\n"
             f"Ukážkové zdroje: {', '.join(f'[{n}]' for n in refs) or '—'}"
         )
-    blocks = "\n\n".join(
-        f"[{s.n}] ({s.filename}, str. {s.page_from}):\n{s.text}" for s in sources
-    )
-    user = (
-        "Témy:\n\n" + "\n\n".join(theme_lines)
-        + f"\n\nZdroje:\n{blocks}\n\nOtázka: {question}"
-    )
+    blocks = "\n\n".join(f"[{s.n}] ({s.filename}, str. {s.page_from}):\n{s.text}" for s in sources)
+    user = "Témy:\n\n" + "\n\n".join(theme_lines) + f"\n\nZdroje:\n{blocks}\n\nOtázka: {question}"
     messages = [{"role": "system", "content": GLOBAL_SYSTEM}, {"role": "user", "content": user}]
     return sources, messages

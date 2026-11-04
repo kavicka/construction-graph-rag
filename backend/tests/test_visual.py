@@ -36,11 +36,20 @@ def test_maxsim() -> None:
 
 def _pdf(tmp: Path) -> Path:
     path = tmp / "v.pdf"
-    render_pages(path, "Vizuál", [
-        [("p", "Krátky text strany jeden.")],
-        [("table", [[f"stĺpec {i}" for i in range(6)]] + [[str(r * c) for c in range(6)]
-                                                          for r in range(30)])],
-    ])
+    render_pages(
+        path,
+        "Vizuál",
+        [
+            [("p", "Krátky text strany jeden.")],
+            [
+                (
+                    "table",
+                    [[f"stĺpec {i}" for i in range(6)]]
+                    + [[str(r * c) for c in range(6)] for r in range(30)],
+                )
+            ],
+        ],
+    )
     return path
 
 
@@ -59,14 +68,19 @@ def test_rank_chunks_adds_visual_pages(tmp_path: Path, monkeypatch: pytest.Monke
     get_settings().ensure_dirs()
     db.init_db()
     db.insert_document("d1", "v.pdf", "sha")
-    replace_document_chunks("d1", [
-        Chunk("d1:t0", "d1", "úvod", "úvod", 1, 1, "", "text", None),
-        Chunk("d1:t1", "d1", "čísla", "čísla", 2, 2, "", "text", None),
-    ], [[0.0, 1.0], [0.0, 1.0]])
+    replace_document_chunks(
+        "d1",
+        [
+            Chunk("d1:t0", "d1", "úvod", "úvod", 1, 1, "", "text", None),
+            Chunk("d1:t1", "d1", "čísla", "čísla", 2, 2, "", "text", None),
+        ],
+        [[0.0, 1.0], [0.0, 1.0]],
+    )
     index_pages("d1", _pdf(tmp_path), FakeVisual())
     monkeypatch.setattr("app.index.visual.get_visual_embedder", FakeVisual)
-    rows = rank_chunks("tabuľka", k=1, cfg=RetrievalConfig(dense=False, fts=False, graph=False,
-                                                         visual=True))
+    rows = rank_chunks(
+        "tabuľka", k=1, cfg=RetrievalConfig(dense=False, fts=False, graph=False, visual=True)
+    )
     assert [r["chunk_id"] for r in rows] == ["d1:t1"]
 
 

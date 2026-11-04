@@ -51,9 +51,14 @@ class TaskFact:
 
     def as_dict(self) -> dict[str, Any]:
         """Tvar, ktorý čaká `tasks.is_active_on`."""
-        return {"id": self.id, "status": self.status, "done_on": self.done_on,
-                "date_from": self.date_from, "date_to": self.date_to,
-                "depends_on": self.depends_on}
+        return {
+            "id": self.id,
+            "status": self.status,
+            "done_on": self.done_on,
+            "date_from": self.date_from,
+            "date_to": self.date_to,
+            "depends_on": self.depends_on,
+        }
 
 
 @dataclass(frozen=True)
@@ -123,10 +128,18 @@ def sites() -> list[SiteRef]:
 def tasks() -> list[TaskFact]:
     return [
         TaskFact(
-            id=r["id"], site_id=r["site_id"], site_name=r["site_name"], title=r["title"],
-            description=r["description"] or "", status=r["status"], progress=r["progress"],
-            date_from=r["date_from"], date_to=r["date_to"], done_on=r["done_on"],
-            depends_on=r["depends_on"], assignees=tuple(json.loads(r["assignees"] or "[]")),
+            id=r["id"],
+            site_id=r["site_id"],
+            site_name=r["site_name"],
+            title=r["title"],
+            description=r["description"] or "",
+            status=r["status"],
+            progress=r["progress"],
+            date_from=r["date_from"],
+            date_to=r["date_to"],
+            done_on=r["done_on"],
+            depends_on=r["depends_on"],
+            assignees=tuple(json.loads(r["assignees"] or "[]")),
         )
         for r in _query(TASKS_SQL)
     ]
@@ -135,11 +148,15 @@ def tasks() -> list[TaskFact]:
 def reports(start: date, end: date) -> list[ReportFact]:
     out = []
     for r in _query(REPORTS_SQL, (start.isoformat(), end.isoformat())):
-        out.append(ReportFact(
-            user_id=r["user_id"], day=r["day"], status=r["status"],
-            submitted_at=r["submitted_at"],
-            data=ReportData.model_validate_json(r["data_json"] or "{}"),
-        ))
+        out.append(
+            ReportFact(
+                user_id=r["user_id"],
+                day=r["day"],
+                status=r["status"],
+                submitted_at=r["submitted_at"],
+                data=ReportData.model_validate_json(r["data_json"] or "{}"),
+            )
+        )
     return out
 
 

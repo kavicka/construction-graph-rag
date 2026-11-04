@@ -37,9 +37,7 @@ def test_upload_dedupe_same_content(client: TestClient) -> None:
 
 def test_upload_rejects_non_pdf(client: TestClient) -> None:
     with client:
-        resp = client.post(
-            "/api/documents", files=[("files", ("x.txt", b"nie pdf", "text/plain"))]
-        )
+        resp = client.post("/api/documents", files=[("files", ("x.txt", b"nie pdf", "text/plain"))])
         assert resp.status_code == 415
 
 

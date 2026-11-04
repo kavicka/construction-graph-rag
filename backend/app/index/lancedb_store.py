@@ -50,9 +50,7 @@ def _get_or_create_table(dim: int) -> Any:
     return db.create_table(CHUNKS_TABLE, schema=_schema(dim))
 
 
-def replace_document_chunks(
-    doc_id: str, chunks: list[Chunk], vectors: list[list[float]]
-) -> int:
+def replace_document_chunks(doc_id: str, chunks: list[Chunk], vectors: list[list[float]]) -> int:
     """Idempotentné — pri re-ingeste sa staré chunky dokumentu zmažú."""
     assert len(chunks) == len(vectors)
     if not vectors:

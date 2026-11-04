@@ -41,9 +41,26 @@ def to_wav16k(src: Path, dst: Path) -> float:
     """→ dĺžka v sekundách. ffmpeg zvládne všetko, čo nahrá prehliadač alebo telefón."""
     try:
         subprocess.run(
-            ["ffmpeg", "-y", "-loglevel", "error", "-i", str(src), "-t", str(MAX_AUDIO_SECONDS),
-             "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", str(dst)],
-            check=True, capture_output=True, timeout=120,
+            [
+                "ffmpeg",
+                "-y",
+                "-loglevel",
+                "error",
+                "-i",
+                str(src),
+                "-t",
+                str(MAX_AUDIO_SECONDS),
+                "-ar",
+                "16000",
+                "-ac",
+                "1",
+                "-c:a",
+                "pcm_s16le",
+                str(dst),
+            ],
+            check=True,
+            capture_output=True,
+            timeout=120,
         )
     except FileNotFoundError as exc:
         raise SpeechError("ffmpeg nie je nainštalovaný (brew install ffmpeg)") from exc

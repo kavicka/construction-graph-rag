@@ -48,14 +48,29 @@ def _login(client: TestClient, email: str, password: str) -> None:
 def _seed_docs() -> None:
     """A = stavba, B = financie (najlepšia zhoda na 'prietok'), C = všetci."""
     for doc_id, access, vec in (
-        ("A", ["stavba"], [0.6, 0.4]), ("B", ["financie"], [1.0, 0.0]), ("C", ["*"], [0.5, 0.5])
+        ("A", ["stavba"], [0.6, 0.4]),
+        ("B", ["financie"], [1.0, 0.0]),
+        ("C", ["*"], [0.5, 0.5]),
     ):
         db.insert_document(doc_id, f"{doc_id}.pdf", f"sha-{doc_id}")
         db.set_document_status(doc_id, "done", progress=1.0)
         db.set_document_access(doc_id, json.dumps(access))
         replace_document_chunks(
-            doc_id, [Chunk(f"{doc_id}:t0", doc_id, f"prietok {doc_id}", f"prietok {doc_id}",
-                           1, 1, "", "text", None)], [vec],
+            doc_id,
+            [
+                Chunk(
+                    f"{doc_id}:t0",
+                    doc_id,
+                    f"prietok {doc_id}",
+                    f"prietok {doc_id}",
+                    1,
+                    1,
+                    "",
+                    "text",
+                    None,
+                )
+            ],
+            [vec],
         )
 
 
@@ -70,16 +85,29 @@ def test_login_roles_and_document_acl(secured: None) -> None:
         assert admin.get("/api/auth/me").json()["user"]["role"] == "admin"
 
         _seed_docs()
-        created = admin.post("/api/users", json={
-            "email": "alica@firma.sk", "name": "Alica", "password": "alica-heslo-1",
-            "groups": ["stavba"]})
+        created = admin.post(
+            "/api/users",
+            json={
+                "email": "alica@firma.sk",
+                "name": "Alica",
+                "password": "alica-heslo-1",
+                "groups": ["stavba"],
+            },
+        )
         assert created.status_code == 201
-        assert admin.post("/api/users", json={
-            "email": "alica@firma.sk", "name": "X", "password": "alica-heslo-1"}
-        ).status_code == 409
-        assert admin.post("/api/users", json={
-            "email": "kratke@firma.sk", "name": "X", "password": "kratke"}
-        ).status_code == 422
+        assert (
+            admin.post(
+                "/api/users",
+                json={"email": "alica@firma.sk", "name": "X", "password": "alica-heslo-1"},
+            ).status_code
+            == 409
+        )
+        assert (
+            admin.post(
+                "/api/users", json={"email": "kratke@firma.sk", "name": "X", "password": "kratke"}
+            ).status_code
+            == 422
+        )
         assert {d["id"] for d in admin.get("/api/documents").json()} == {"A", "B", "C"}
 
     with TestClient(app) as alica:
@@ -102,17 +130,16 @@ def test_login_roles_and_document_acl(secured: None) -> None:
 
     with TestClient(app) as script:
         bearer = {"Authorization": f"Bearer {token}"}
-        assert {d["id"] for d in script.get("/api/documents", headers=bearer).json()} == {
-            "A", "C"}
-        assert script.get("/api/documents", headers={"Authorization": "Bearer zly"}
-                          ).status_code == 401
+        assert {d["id"] for d in script.get("/api/documents", headers=bearer).json()} == {"A", "C"}
+        assert (
+            script.get("/api/documents", headers={"Authorization": "Bearer zly"}).status_code == 401
+        )
 
 
 def test_retrieval_prefilters_by_access(secured: None) -> None:
     with TestClient(app):  # lifespan → init_db + bootstrap admin
         _seed_docs()
-    member = AccessScope(user_id="u1", email="m@x.sk", role="member",
-                         groups=frozenset({"stavba"}))
+    member = AccessScope(user_id="u1", email="m@x.sk", role="member", groups=frozenset({"stavba"}))
     token = set_scope(member)
     try:
         sources = retrieve_sources("prietok", k=3)
@@ -131,8 +158,9 @@ def test_chats_are_private(secured: None, monkeypatch: pytest.MonkeyPatch) -> No
     with TestClient(app) as admin:
         _login(admin, *ADMIN)
         for email in ("jan@firma.sk", "eva@firma.sk"):
-            admin.post("/api/users", json={"email": email, "name": email,
-                                           "password": "dlhe-heslo-123"})
+            admin.post(
+                "/api/users", json={"email": email, "name": email, "password": "dlhe-heslo-123"}
+            )
     with TestClient(app) as jan:
         _login(jan, "jan@firma.sk", "dlhe-heslo-123")
         events = _parse_sse(jan.post("/api/chat", json={"message": "Aký bol prietok?"}).text)
@@ -143,41 +171,57 @@ def test_chats_are_private(secured: None, monkeypatch: pytest.MonkeyPatch) -> No
         _login(eva, "eva@firma.sk", "dlhe-heslo-123")
         assert eva.get("/api/chats").json() == []
         assert eva.get(f"/api/chats/{chat_id}").status_code == 404
-        assert eva.post("/api/chat", json={"message": "x", "chat_id": chat_id}
-                        ).status_code == 404
-        assert eva.put(f"/api/messages/{message_id}/feedback", json={"rating": -1}
-                       ).status_code == 404
+        assert eva.post("/api/chat", json={"message": "x", "chat_id": chat_id}).status_code == 404
+        assert (
+            eva.put(f"/api/messages/{message_id}/feedback", json={"rating": -1}).status_code == 404
+        )
 
 
 def test_admin_can_reset_password_and_revokes_sessions(secured: None) -> None:
     with TestClient(app) as admin:
         _login(admin, *ADMIN)
-        uid = admin.post("/api/users", json={
-            "email": "eva@firma.sk", "name": "Eva", "password": "povodne-heslo-1",
-            "groups": ["stavba"]}).json()["id"]
+        uid = admin.post(
+            "/api/users",
+            json={
+                "email": "eva@firma.sk",
+                "name": "Eva",
+                "password": "povodne-heslo-1",
+                "groups": ["stavba"],
+            },
+        ).json()["id"]
     with TestClient(app) as eva:
         _login(eva, "eva@firma.sk", "povodne-heslo-1")
         assert eva.get("/api/documents").status_code == 200
         with TestClient(app) as admin2:
             _login(admin2, *ADMIN)
-            short = admin2.put(f"/api/users/{uid}", json={
-                "name": "Eva", "role": "member", "groups": ["stavba"], "password": "kratke"})
+            short = admin2.put(
+                f"/api/users/{uid}",
+                json={"name": "Eva", "role": "member", "groups": ["stavba"], "password": "kratke"},
+            )
             assert short.status_code == 422
-            ok = admin2.put(f"/api/users/{uid}", json={
-                "name": "Eva N.", "role": "member", "groups": ["stavba", "financie"],
-                "password": "nove-heslo-12345"})
+            ok = admin2.put(
+                f"/api/users/{uid}",
+                json={
+                    "name": "Eva N.",
+                    "role": "member",
+                    "groups": ["stavba", "financie"],
+                    "password": "nove-heslo-12345",
+                },
+            )
             assert ok.status_code == 200
             assert ok.json()["groups"] == ["financie", "stavba"] and ok.json()["name"] == "Eva N."
         assert eva.get("/api/documents").status_code == 401  # stará session zrušená
-        old = eva.post("/api/auth/login", json={"email": "eva@firma.sk",
-                                                 "password": "povodne-heslo-1"})
+        old = eva.post(
+            "/api/auth/login", json={"email": "eva@firma.sk", "password": "povodne-heslo-1"}
+        )
         assert old.status_code == 401
         _login(eva, "eva@firma.sk", "nove-heslo-12345")
     with TestClient(app) as admin3:
         _login(admin3, *ADMIN)
         # bez hesla v tele sa heslo nemení
-        keep = admin3.put(f"/api/users/{uid}", json={"name": "Eva N.", "role": "member",
-                                                     "groups": []})
+        keep = admin3.put(
+            f"/api/users/{uid}", json={"name": "Eva N.", "role": "member", "groups": []}
+        )
         assert keep.status_code == 200
     with TestClient(app) as eva2:
         _login(eva2, "eva@firma.sk", "nove-heslo-12345")

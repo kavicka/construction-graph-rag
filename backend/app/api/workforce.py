@@ -62,8 +62,14 @@ async def pin_login(body: PinLoginIn, response: Response) -> WorkerPublic:
         left = f" ({_attempts_left(result.attempts_left)})" if result.attempts_left else ""
         raise HTTPException(status_code=401, detail=f"nesprávny PIN{left}")
     token, max_age = await run_in_threadpool(create_worker_session, body.worker_id)
-    response.set_cookie(SESSION_COOKIE, token, httponly=True, samesite="lax",
-                        secure=get_settings().cookie_secure, max_age=max_age)
+    response.set_cookie(
+        SESSION_COOKIE,
+        token,
+        httponly=True,
+        samesite="lax",
+        secure=get_settings().cookie_secure,
+        max_age=max_age,
+    )
     row = await run_in_threadpool(store.get_worker, body.worker_id)
     assert row is not None
     return WorkerPublic(id=row["id"], name=row["name"])
@@ -111,8 +117,9 @@ async def list_workers() -> list[WorkerOut]:
 async def add_worker(body: WorkerIn) -> WorkerOut:
     require_admin()
     try:
-        out = await run_in_threadpool(create_worker, body.name.strip(), body.pin,
-                                      _clean_list(body.professions))
+        out = await run_in_threadpool(
+            create_worker, body.name.strip(), body.pin, _clean_list(body.professions)
+        )
     except PinError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     invalidate_worker_cache()
@@ -125,9 +132,12 @@ async def edit_worker(worker_id: str, body: WorkerUpdate) -> WorkerOut:
     if await run_in_threadpool(store.get_worker, worker_id) is None:
         raise HTTPException(status_code=404, detail="pracovník neexistuje")
     await run_in_threadpool(
-        lambda: store.update_worker(worker_id, name=body.name.strip(),
-                                    professions=_clean_list(body.professions),
-                                    active=body.active)
+        lambda: store.update_worker(
+            worker_id,
+            name=body.name.strip(),
+            professions=_clean_list(body.professions),
+            active=body.active,
+        )
     )
     row = await run_in_threadpool(store.get_worker, worker_id)
     assert row is not None
@@ -192,8 +202,9 @@ class SiteIn(BaseModel):
 
 
 def _site_out(row: dict[str, Any]) -> SiteOut:
-    return SiteOut(id=row["id"], name=row["name"], address=row["address"],
-                   active=bool(row["active"]))
+    return SiteOut(
+        id=row["id"], name=row["name"], address=row["address"], active=bool(row["active"])
+    )
 
 
 @router.get("/sites")
@@ -215,8 +226,9 @@ async def edit_site(site_id: str, body: SiteIn) -> SiteOut:
     if await run_in_threadpool(store.get_site, site_id) is None:
         raise HTTPException(status_code=404, detail="stavba neexistuje")
     await run_in_threadpool(
-        lambda: store.update_site(site_id, name=body.name.strip(),
-                                  address=body.address.strip(), active=body.active)
+        lambda: store.update_site(
+            site_id, name=body.name.strip(), address=body.address.strip(), active=body.active
+        )
     )
     row = await run_in_threadpool(store.get_site, site_id)
     assert row is not None
@@ -282,15 +294,20 @@ class AssigneesIn(BaseModel):
     user_ids: list[str] = Field(max_length=30)
 
 
-def _task_out(row: dict[str, Any], by_id: dict[str, dict[str, Any]],
-              sources: dict[str, dict[str, Any]]) -> TaskOut:
+def _task_out(
+    row: dict[str, Any], by_id: dict[str, dict[str, Any]], sources: dict[str, dict[str, Any]]
+) -> TaskOut:
     dep = by_id.get(row["depends_on"] or "") if row.get("depends_on") else None
     if row.get("depends_on") and dep is None:
         dep = store.get_task(row["depends_on"])
     src = sources.get(row["source_id"] or "")
     return TaskOut(
-        **{k: row[k] for k in TaskOut.model_fields if k in row and k not in (
-            "depends_on_title", "blocked", "source_doc_id", "source_filename")},
+        **{
+            k: row[k]
+            for k in TaskOut.model_fields
+            if k in row
+            and k not in ("depends_on_title", "blocked", "source_doc_id", "source_filename")
+        },
         depends_on_title=dep["title"] if dep else None,
         blocked=bool(dep and dep["status"] not in ("done", "cancelled")),
         source_doc_id=src["doc_id"] if src else None,
@@ -329,18 +346,23 @@ async def _validate_task(body: TaskIn, task_id: str | None = None) -> None:
 def _task_fields(body: TaskIn) -> dict[str, Any]:
     done = body.status == "done"
     return {
-        "site_id": body.site_id, "title": body.title.strip(),
-        "description": body.description.strip(), "work_type": body.work_type,
+        "site_id": body.site_id,
+        "title": body.title.strip(),
+        "description": body.description.strip(),
+        "work_type": body.work_type,
         "date_from": body.date_from.isoformat() if body.date_from else None,
         "date_to": body.date_to.isoformat() if body.date_to else None,
-        "depends_on": body.depends_on, "status": body.status,
+        "depends_on": body.depends_on,
+        "status": body.status,
         "progress": 100 if done else body.progress,
     }
 
 
 @router.get("/tasks")
 async def list_tasks(
-    site_id: str | None = None, date_from: date | None = None, date_to: date | None = None,
+    site_id: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
     include_done: bool = False,
 ) -> list[TaskOut]:
     require_admin()
@@ -447,9 +469,12 @@ async def my_board() -> MyBoardOut:
 
     def load() -> MyBoardOut:
         rows = [
-            t for t in store.list_tasks(user_id=user_id)
-            if t["status"] != "cancelled" and not (
-                t["status"] == "done" and t["done_on"]
+            t
+            for t in store.list_tasks(user_id=user_id)
+            if t["status"] != "cancelled"
+            and not (
+                t["status"] == "done"
+                and t["done_on"]
                 and (today - date.fromisoformat(t["done_on"])).days > DONE_VISIBLE_DAYS
             )
         ]

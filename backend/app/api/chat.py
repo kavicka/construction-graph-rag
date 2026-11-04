@@ -62,16 +62,28 @@ async def _stream_answer(
                 document = event["document"]
                 message_id = uuid.uuid4().hex
                 await run_in_threadpool(
-                    db.add_message, message_id, chat_id, "assistant", event["answer"],
+                    db.add_message,
+                    message_id,
+                    chat_id,
+                    "assistant",
+                    event["answer"],
                     sources_to_json(sources),
                     json.dumps(document, ensure_ascii=False) if document else None,
                 )
                 await run_in_threadpool(
-                    db.set_message_meta, message_id, event["trace_id"],
+                    db.set_message_meta,
+                    message_id,
+                    event["trace_id"],
                     json.dumps(event["verification"], ensure_ascii=False),
                 )
-                yield _sse({"type": "done", "chat_id": chat_id, "message_id": message_id,
-                            "trace_id": event["trace_id"]})
+                yield _sse(
+                    {
+                        "type": "done",
+                        "chat_id": chat_id,
+                        "message_id": message_id,
+                        "trace_id": event["trace_id"],
+                    }
+                )
             elif event["type"] == "sources":
                 yield _sse({**event, "chat_id": chat_id})
             else:
@@ -102,8 +114,9 @@ async def chat(req: ChatRequest) -> StreamingResponse:
     await run_in_threadpool(db.add_message, uuid.uuid4().hex, chat_id, "user", req.message, None)
 
     return StreamingResponse(
-        _stream_answer(chat_id, req.message, history,
-                       "research" if req.mode == "research" else None),
+        _stream_answer(
+            chat_id, req.message, history, "research" if req.mode == "research" else None
+        ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
@@ -145,9 +158,11 @@ async def export_message(message_id: str) -> dict[str, Any]:
     question = await run_in_threadpool(db.preceding_question, message_id)
     try:
         doc = await run_in_threadpool(
-            export_answer_pdf, message["content"],
+            export_answer_pdf,
+            message["content"],
             json.loads(message["sources_json"]) if message["sources_json"] else [],
-            question or "Odpoveď z dokumentov", message["chat_id"],
+            question or "Odpoveď z dokumentov",
+            message["chat_id"],
         )
     except PdfEngineError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc

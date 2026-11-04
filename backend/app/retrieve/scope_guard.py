@@ -45,8 +45,9 @@ def _norm(text: str) -> str:
     return re.sub(r"\s+", " ", plain).strip()
 
 
-_LEET = str.maketrans({"0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "@": "a",
-                       "$": "s"})
+_LEET = str.maketrans(
+    {"0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "@": "a", "$": "s"}
+)
 # jednotlivé písmená oddelené medzerou/pomlčkou/bodkou: „h-e-s-l-o“ → „heslo“
 _SPACED = re.compile(r"\b(?:\w[\s\-_.*/|]+){2,}\w\b")
 
@@ -60,26 +61,46 @@ def variants(question: str) -> list[str]:
 
 
 SECRET_PATTERNS = [
-    r"\bhesl\w*", r"\bpassw\w*", r"\bpasswd\b", r"\bpwd\b", r"\bpassphrase\b",
-    r"\bpin\w{0,3}\b", r"\bpin ?kod\w*", r"\btoken\w*", r"\bapi ?(kluc\w*|key\w*)",
-    r"\bapikey\b", r"\bsecret\w*", r"\b(tajn|sukromn|privatn|licencn|sifrovac)\w* kluc\w*",
-    r"\bprivate ?key\b", r"\bhash\w*", r"(pin|password|passwd)_?hash",
+    r"\bhesl\w*",
+    r"\bpassw\w*",
+    r"\bpasswd\b",
+    r"\bpwd\b",
+    r"\bpassphrase\b",
+    r"\bpin\w{0,3}\b",
+    r"\bpin ?kod\w*",
+    r"\btoken\w*",
+    r"\bapi ?(kluc\w*|key\w*)",
+    r"\bapikey\b",
+    r"\bsecret\w*",
+    r"\b(tajn|sukromn|privatn|licencn|sifrovac)\w* kluc\w*",
+    r"\bprivate ?key\b",
+    r"\bhash\w*",
+    r"(pin|password|passwd)_?hash",
     r"\b(scrypt|bcrypt|argon2)\b",
-    r"\bprihlasovac\w* (udaj|meno|mena)\w*", r"\bcredential\w*", r"\blogin\w* (udaj|data)\w*",
+    r"\bprihlasovac\w* (udaj|meno|mena)\w*",
+    r"\bcredential\w*",
+    r"\blogin\w* (udaj|data)\w*",
     r"\bpristupov\w* (kod|udaj|heslo)\w*",
     r"\bkod\w* (od |k |na |do )?(bran|alarm|dveri|trezor|zamk|vchod|wi ?fi)\w*",
-    r"\b(cookie|session ?(id|token))\b", r"\botp\b", r"\b2fa\b",
+    r"\b(cookie|session ?(id|token))\b",
+    r"\botp\b",
+    r"\b2fa\b",
     # e-maily účtov v aplikácii (kontakt v zmluve je otázka na dokument, tá prejde)
     r"\be[ -]?mail\w*\b.{0,40}\b(v systeme|aplikaci\w*|databaz\w*|uct\w*|prihlas\w*|"
-    r"pouzivatel\w*)", r"\b(uct\w*|prihlas\w*|pouzivatel\w*)\b.{0,30}\be[ -]?mail",
+    r"pouzivatel\w*)",
+    r"\b(uct\w*|prihlas\w*|pouzivatel\w*)\b.{0,30}\be[ -]?mail",
 ]
 INTERNAL_PATTERNS = [
     r"\bsystem\w* (prompt|pokyn\w*|instrukc\w*)",
     r"\b(tvoj|svoj)\w* (instrukc|pokyn|prompt|nastaveni|pravidl)\w*",
-    r"\binstructions? (you|were) (given|told)\b", r"\byour (instructions|prompt|rules)\b",
-    r"\.env\b", r"\benv (subor|premenn)\w*", r"\bselect\b.+\bfrom\b",
+    r"\binstructions? (you|were) (given|told)\b",
+    r"\byour (instructions|prompt|rules)\b",
+    r"\.env\b",
+    r"\benv (subor|premenn)\w*",
+    r"\bselect\b.+\bfrom\b",
     r"\b(drop|delete|insert|update) (table|from|into)\b",
-    r"\btabul\w* (users|sessions|api_tokens|wf_\w+)\b", r"\b(pin_hash|password_hash)\b",
+    r"\btabul\w* (users|sessions|api_tokens|wf_\w+)\b",
+    r"\b(pin_hash|password_hash)\b",
     r"\bzdrojov\w* kod\w* (aplikacie|systemu|backendu)\b",
     r"\b(jailbreak|dan mode|developer mode|god mode)\b",
     r"\b(hraj sa na|predstav si ze si|pretend (to be|you are)|roleplay)\b",
@@ -87,22 +108,30 @@ INTERNAL_PATTERNS = [
 OFFTOPIC_PATTERNS = [
     r"\b(napis|zloz|vymysli|povedz|daj)\w* (mi |nam )?(nejak\w* )?"
     r"(basen|basnick|vtip|pribeh|rozpravk|piesen|pesnick|rap|haiku|slogan|status)\w*",
-    r"\bvtip\w*\b", r"\b(joke|poem|story about)\b",
+    r"\bvtip\w*\b",
+    r"\b(joke|poem|story about)\b",
     r"\bpocasi\w*|\bpredpoved\w* pocasi|\bweather\b|\bteplota vonku\b",
-    r"\bkurz\w* (eura|dolara|meny|bitcoin\w*|akci\w*)", r"\b(bitcoin|kryptomen|burz)\w*",
-    r"\b(futbal|hokej|tenis)\w*", r"\b(vysledk\w* zapas\w*|kto vyhral)\b",
-    r"\bhoroskop\w*", r"\b(ako uvarit|ako upiect)\b",
-    r"\bnaprogramuj\b", r"\bnapis\w* (mi )?(kod|program|skript|funkci\w*)\b",
+    r"\bkurz\w* (eura|dolara|meny|bitcoin\w*|akci\w*)",
+    r"\b(bitcoin|kryptomen|burz)\w*",
+    r"\b(futbal|hokej|tenis)\w*",
+    r"\b(vysledk\w* zapas\w*|kto vyhral)\b",
+    r"\bhoroskop\w*",
+    r"\b(ako uvarit|ako upiect)\b",
+    r"\bnaprogramuj\b",
+    r"\bnapis\w* (mi )?(kod|program|skript|funkci\w*)\b",
     r"\b(python|javascript|typescript|html|css)\b",
     r"\b(kolko je|vypocitaj|spocitaj)\s+\d+\s*[-+*/x×:]\s*\d+",
     r"\b(kto je|kto bol) (prezident|premier|minister)\w*",
-    r"\bhlavn\w* mest\w*\b", r"\b(capital of|who is the president)\b",
+    r"\bhlavn\w* mest\w*\b",
+    r"\b(capital of|who is the president)\b",
 ]
 GREETING = re.compile(
     r"^(ahoj|cau|cauko|cus|servus|dobry (den|vecer|rano)|zdravim|hello|hi|hey)[\s!.?,]*$"
 )
-THANKS = re.compile(r"^(dakujem|dakujeme|diky|vdaka|thanks|thank you|ok|okej|super|fajn)"
-                    r"[\s!.?,]*$")
+THANKS = re.compile(
+    r"^(dakujem|dakujeme|diky|vdaka|thanks|thank you|ok|okej|super|fajn)"
+    r"[\s!.?,]*$"
+)
 
 _SECRET = re.compile("|".join(f"(?:{p})" for p in SECRET_PATTERNS))
 _INTERNAL = re.compile("|".join(f"(?:{p})" for p in INTERNAL_PATTERNS))
@@ -133,8 +162,16 @@ def is_english(question: str) -> bool:
     q = question.casefold()
     if re.search(r"[áäčďéíĺľňóôŕšťúýž]", q):
         return False
-    return len(re.findall(r"\b(what|who|how|when|where|which|is|are|the|does|do|please|"
-                          r"show|tell|give)\b", q)) >= 2
+    return (
+        len(
+            re.findall(
+                r"\b(what|who|how|when|where|which|is|are|the|does|do|please|"
+                r"show|tell|give)\b",
+                q,
+            )
+        )
+        >= 2
+    )
 
 
 SECRET_REPLY = (
@@ -223,9 +260,14 @@ def classify_scope(question: str, documents: list[str]) -> Verdict:
         documents=", ".join(documents[:40]) or "(zatiaľ žiadne)", question=question[:500]
     )
     try:
-        raw = generate_sync(get_settings().answer_model, prompt,
-                            json_schema=_Scope.model_json_schema(), num_ctx=2048,
-                            temperature=0.0, timeout=30.0)
+        raw = generate_sync(
+            get_settings().answer_model,
+            prompt,
+            json_schema=_Scope.model_json_schema(),
+            num_ctx=2048,
+            temperature=0.0,
+            timeout=30.0,
+        )
         parsed = _Scope.model_validate_json(raw)
     except (OllamaError, ValidationError) as exc:
         logger.warning("klasifikátor rozsahu zlyhal: %s", exc)

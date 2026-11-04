@@ -14,8 +14,20 @@ from app.workforce.sk_numbers import CARDINALS
 
 WEEKDAY_SHORT = ["po", "ut", "st", "št", "pi", "so", "ne"]
 WEEKDAY_LONG = ["pondelok", "utorok", "streda", "štvrtok", "piatok", "sobota", "nedeľa"]
-MONTH_GEN = ["januára", "februára", "marca", "apríla", "mája", "júna", "júla", "augusta",
-             "septembra", "októbra", "novembra", "decembra"]
+MONTH_GEN = [
+    "januára",
+    "februára",
+    "marca",
+    "apríla",
+    "mája",
+    "júna",
+    "júla",
+    "augusta",
+    "septembra",
+    "októbra",
+    "novembra",
+    "decembra",
+]
 
 # minulý čas → deň v týždni sa hľadá dozadu
 PAST = re.compile(
@@ -68,8 +80,20 @@ def fmt_period(p: Period, today: date) -> str:
     return f"{fmt_day(p.start, weekday=False)} – {fmt_day(p.end, weekday=False, year=True)}"
 
 
-MONTH_NAMES = ["január", "február", "marec", "apríl", "máj", "jún", "júl", "august",
-               "september", "október", "november", "december"]
+MONTH_NAMES = [
+    "január",
+    "február",
+    "marec",
+    "apríl",
+    "máj",
+    "jún",
+    "júl",
+    "august",
+    "september",
+    "október",
+    "november",
+    "december",
+]
 
 
 def _month_end(d: date) -> date:
@@ -108,8 +132,9 @@ def _explicit_dates(qn: str, today: date, past: bool) -> list[date]:
         dd, mm, yy = int(m.group(1)), int(m.group(2)), m.group(3)
         if not (1 <= mm <= 12 and 1 <= dd <= 31):
             continue
-        year = (int(yy) + 2000 if len(yy) == 2 else int(yy)) if yy else _year_for(
-            mm, dd, today, past)
+        year = (
+            (int(yy) + 2000 if len(yy) == 2 else int(yy)) if yy else _year_for(mm, dd, today, past)
+        )
         if d := _safe(year, mm, dd):
             found.append(d)
     for m in DAY_MONTH_RE.finditer(qn):
@@ -180,8 +205,11 @@ def resolve_period(qn: str, today: date) -> Period | None:
         return Period(today.replace(day=1), today, True)
 
     for word, month in MONTHS.items():
-        if re.search(rf"\b(za|v|vo|cez|pocas|mesiac)\s+{word}\b", qn) or re.search(
-                rf"\b{word}\b", qn) and len(word) >= 5:
+        if (
+            re.search(rf"\b(za|v|vo|cez|pocas|mesiac)\s+{word}\b", qn)
+            or re.search(rf"\b{word}\b", qn)
+            and len(word) >= 5
+        ):
             year = today.year if month <= today.month else today.year - 1
             start = date(year, month, 1)
             end = _month_end(start)

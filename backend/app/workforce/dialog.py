@@ -60,8 +60,9 @@ def _gap_of(question: dict[str, Any]) -> Gap:
     extra_index = None
     if question["kind"] == "extra":
         extra_index = int(question["key"].split(":", 1)[1])
-    return Gap(question["key"], question["kind"], question["task_id"], question["detail"],
-               extra_index)
+    return Gap(
+        question["key"], question["kind"], question["task_id"], question["detail"], extra_index
+    )
 
 
 def sync_questions(report_id: str, *, finish: bool = True) -> list[Gap]:
@@ -76,9 +77,11 @@ def sync_questions(report_id: str, *, finish: bool = True) -> list[Gap]:
     by_id = {t["id"]: t for t in tasks}
     # pýtame sa len na otvorené úlohy — hotovú (napr. uzavretú majiteľom alebo kolegom)
     # pracovník môže spomenúť, ale nemusí
-    active_ids = [t["id"] for t in active_tasks_for(report["user_id"],
-                                                    date.fromisoformat(report["day"]))
-                  if t["status"] in ("todo", "in_progress")]
+    active_ids = [
+        t["id"]
+        for t in active_tasks_for(report["user_id"], date.fromisoformat(report["day"]))
+        if t["status"] in ("todo", "in_progress")
+    ]
     gaps = find_gaps(data, active_ids, tolerance=get_workforce_settings().hours_tolerance)
     gap_keys = {g.key for g in gaps}
     has_input = bool(report["transcript"].strip()) or bool(store.list_inputs(report_id))
@@ -90,19 +93,27 @@ def sync_questions(report_id: str, *, finish: bool = True) -> list[Gap]:
     open_qs = {q["key"]: q for q in store.list_questions(report_id, status="open")}
     for key, resolved in open_qs.items():
         if key not in gap_keys:
-            store.update_question(resolved["id"],
-                                  status="answered" if resolved["answer"] else "obsolete")
+            store.update_question(
+                resolved["id"], status="answered" if resolved["answer"] else "obsolete"
+            )
     for pos, gap in enumerate(gaps):
         q = open_qs.get(gap.key)
         if q is None:
             store.insert_question(
-                report_id, key=gap.key, kind=gap.kind, task_id=gap.task_id, detail=gap.detail,
-                text=question_text(gap, 0, data, by_id), position=pos,
+                report_id,
+                key=gap.key,
+                kind=gap.kind,
+                task_id=gap.task_id,
+                detail=gap.detail,
+                text=question_text(gap, 0, data, by_id),
+                position=pos,
             )
         elif q["detail"] != gap.detail or gap.kind == "hours":
             # čiastočná odpoveď: otázka sa zúži na to, čo ešte chýba
             store.update_question(
-                q["id"], detail=gap.detail, position=pos,
+                q["id"],
+                detail=gap.detail,
+                position=pos,
                 text=question_text(gap, q["attempts"], data, by_id),
             )
         else:
@@ -135,8 +146,9 @@ def _finish_with_error(report_id: str, exc: Exception) -> None:
 
 
 def _stt_prompt(report: dict[str, Any], tasks: list[dict[str, Any]]) -> str:
-    names = [w["name"] for w in store.list_workers(active_only=True)
-             if w["id"] != report["user_id"]]
+    names = [
+        w["name"] for w in store.list_workers(active_only=True) if w["id"] != report["user_id"]
+    ]
     return speech.vocabulary_prompt(
         [t["site_name"] for t in tasks], [t["title"] for t in tasks], names[:12]
     )
@@ -235,8 +247,9 @@ def _apply_choice(
             if idx < len(out.extra_work) and 0 <= hours <= 16:
                 out.extra_work[idx].hours = hours
         if choice.note and choice.note.strip():
-            out.extra_work.append(ExtraWork(description=choice.note.strip()[:300],
-                                            hours=choice.hours))
+            out.extra_work.append(
+                ExtraWork(description=choice.note.strip()[:300], hours=choice.hours)
+            )
     return out
 
 
@@ -297,8 +310,12 @@ def begin_answer(report_id: str, question_id: str, *, audio: bool = True) -> dic
 
 
 def process_answer(
-    report_id: str, question_id: str, *, text: str | None = None,
-    audio_path: Path | None = None, choice: ChoiceAnswer | None = None,
+    report_id: str,
+    question_id: str,
+    *,
+    text: str | None = None,
+    audio_path: Path | None = None,
+    choice: ChoiceAnswer | None = None,
 ) -> None:
     try:
         report = store.get_report(report_id)
@@ -308,14 +325,19 @@ def process_answer(
         data = load_data(report)
 
         if choice is not None:
-            store.insert_input(report_id, "choice", choice.model_dump_json(exclude_none=True),
-                               question_id=question_id)
+            store.insert_input(
+                report_id,
+                "choice",
+                choice.model_dump_json(exclude_none=True),
+                question_id=question_id,
+            )
             new_data = _apply_choice(q, choice, data, tasks)
             answer = "(výber)"
         else:
             if audio_path is not None:
-                input_id = store.insert_input(report_id, "audio", "", question_id=question_id,
-                                              audio_path=str(audio_path))
+                input_id = store.insert_input(
+                    report_id, "audio", "", question_id=question_id, audio_path=str(audio_path)
+                )
                 text = speech.transcribe(audio_path, _stt_prompt(report, tasks))
                 store.set_input_text(input_id, text)
             else:
@@ -337,7 +359,9 @@ def process_answer(
             mode = "choices" if attempts >= CHOICES_AFTER else after["mode"]
             by_id = {t["id"]: t for t in tasks}
             store.update_question(
-                question_id, attempts=attempts, mode=mode,
+                question_id,
+                attempts=attempts,
+                mode=mode,
                 text=question_text(_gap_of(after), attempts, new_data, by_id),
             )
         _finish(report_id, gaps)
@@ -361,8 +385,9 @@ def submit(report_id: str) -> dict[str, Any]:
         raise IncompleteReport(gaps)
     data = load_data(report)
     apply_report_statuses([e.model_dump() for e in data.tasks], report["day"])
-    store.update_report(report_id, status="submitted",
-                        submitted_at=datetime.now(UTC).isoformat(timespec="seconds"))
+    store.update_report(
+        report_id, status="submitted", submitted_at=datetime.now(UTC).isoformat(timespec="seconds")
+    )
     render_worker_report(report_id)
     updated = store.get_report(report_id)
     assert updated is not None

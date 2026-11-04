@@ -20,10 +20,10 @@ def test_sites_crud(client: TestClient) -> None:
     make_site(client, "Bernolákovo")
     names = [s["name"] for s in client.get("/api/sites").json()]
     assert names == ["Bernolákovo", "Rovinka"]
-    resp = client.put(f"/api/sites/{sid}", json={"name": "Rovinka RD", "address": "Hlavná 1",
-                                                 "active": False})
-    assert resp.json() == {"id": sid, "name": "Rovinka RD", "address": "Hlavná 1",
-                           "active": False}
+    resp = client.put(
+        f"/api/sites/{sid}", json={"name": "Rovinka RD", "address": "Hlavná 1", "active": False}
+    )
+    assert resp.json() == {"id": sid, "name": "Rovinka RD", "address": "Hlavná 1", "active": False}
     assert client.delete(f"/api/sites/{sid}").status_code == 204
     assert len(client.get("/api/sites").json()) == 1
 
@@ -33,24 +33,33 @@ def test_task_validation(client: TestClient) -> None:
     jano = make_worker(client, "Jano")
     bad_site = client.post("/api/tasks", json={"site_id": "x", "title": "A"})
     assert bad_site.status_code == 422
-    bad_worker = client.post("/api/tasks", json={"site_id": sid, "title": "A",
-                                                 "assignees": ["nikto"]})
+    bad_worker = client.post(
+        "/api/tasks", json={"site_id": sid, "title": "A", "assignees": ["nikto"]}
+    )
     assert bad_worker.status_code == 422
-    bad_dates = client.post("/api/tasks", json={
-        "site_id": sid, "title": "A", "date_from": _iso(TODAY),
-        "date_to": _iso(TODAY - timedelta(1)),
-    })
+    bad_dates = client.post(
+        "/api/tasks",
+        json={
+            "site_id": sid,
+            "title": "A",
+            "date_from": _iso(TODAY),
+            "date_to": _iso(TODAY - timedelta(1)),
+        },
+    )
     assert bad_dates.status_code == 422
 
     a = make_task(client, sid, "Základy", [jano])
     b = make_task(client, sid, "Murovanie", [jano], depends_on=a["id"])
     assert b["depends_on_title"] == "Základy" and b["blocked"] is True
     # cyklus A → B → A
-    cyc = client.put(f"/api/tasks/{a['id']}", json={"site_id": sid, "title": "Základy",
-                                                    "assignees": [jano], "depends_on": b["id"]})
+    cyc = client.put(
+        f"/api/tasks/{a['id']}",
+        json={"site_id": sid, "title": "Základy", "assignees": [jano], "depends_on": b["id"]},
+    )
     assert cyc.status_code == 422 and "cyklus" in cyc.json()["detail"]
-    self_dep = client.put(f"/api/tasks/{a['id']}", json={"site_id": sid, "title": "Základy",
-                                                         "depends_on": a["id"]})
+    self_dep = client.put(
+        f"/api/tasks/{a['id']}", json={"site_id": sid, "title": "Základy", "depends_on": a["id"]}
+    )
     assert self_dep.status_code == 422
 
 
@@ -58,10 +67,17 @@ def test_board_move_and_filters(client: TestClient) -> None:
     sid = make_site(client, "Rovinka")
     other = make_site(client, "Pezinok")
     jano, fero = make_worker(client, "Jano"), make_worker(client, "Fero")
-    t = make_task(client, sid, "Priečky", [jano], date_from=_iso(TODAY),
-                  date_to=_iso(TODAY + timedelta(3)))
-    make_task(client, other, "Strecha", [fero], date_from=_iso(TODAY + timedelta(30)),
-              date_to=_iso(TODAY + timedelta(35)))
+    t = make_task(
+        client, sid, "Priečky", [jano], date_from=_iso(TODAY), date_to=_iso(TODAY + timedelta(3))
+    )
+    make_task(
+        client,
+        other,
+        "Strecha",
+        [fero],
+        date_from=_iso(TODAY + timedelta(30)),
+        date_to=_iso(TODAY + timedelta(35)),
+    )
     make_task(client, sid, "Hotová vec", [jano], status="done")
 
     # presun Jano → Fero, potom Alt+drag pridá Jana späť
@@ -80,9 +96,15 @@ def test_board_move_and_filters(client: TestClient) -> None:
     by_site = client.get("/api/tasks", params={"site_id": other}).json()
     assert [x["title"] for x in by_site] == ["Strecha"]
 
-    edited = client.put(f"/api/tasks/{t['id']}", json={
-        "site_id": sid, "title": "Priečky 2. NP", "status": "done", "assignees": [jano],
-    }).json()
+    edited = client.put(
+        f"/api/tasks/{t['id']}",
+        json={
+            "site_id": sid,
+            "title": "Priečky 2. NP",
+            "status": "done",
+            "assignees": [jano],
+        },
+    ).json()
     assert edited["status"] == "done" and edited["progress"] == 100
     assert edited["done_on"] == _iso(TODAY)
     detail = client.get(f"/api/tasks/{t['id']}").json()
@@ -94,8 +116,14 @@ def test_active_tasks_rules(client: TestClient) -> None:
     sid = make_site(client)
     jano = make_worker(client, "Jano")
     future = make_task(client, sid, "Budúca", [jano], date_from=_iso(TODAY + timedelta(2)))
-    overdue = make_task(client, sid, "Po termíne", [jano], date_from=_iso(TODAY - timedelta(9)),
-                        date_to=_iso(TODAY - timedelta(2)))
+    overdue = make_task(
+        client,
+        sid,
+        "Po termíne",
+        [jano],
+        date_from=_iso(TODAY - timedelta(9)),
+        date_to=_iso(TODAY - timedelta(2)),
+    )
     base = make_task(client, sid, "Základy", [jano])
     after = make_task(client, sid, "Murovanie", [jano], depends_on=base["id"])
     cancelled = make_task(client, sid, "Zrušená", [jano], status="cancelled")
@@ -112,8 +140,9 @@ def test_active_tasks_rules(client: TestClient) -> None:
     assert tomorrow == {"Po termíne", "Murovanie"}
     assert client.get("/api/me/tasks").json() == []  # bez prihlásenia nie je „ja“
 
-    apply_report_statuses([{"task_id": overdue["id"], "status": "in_progress",
-                            "progress": 60}], _iso(TODAY))
+    apply_report_statuses(
+        [{"task_id": overdue["id"], "status": "in_progress", "progress": 60}], _iso(TODAY)
+    )
     row = store.get_task(overdue["id"])
     assert row is not None and row["status"] == "in_progress" and row["progress"] == 60
     assert after["blocked"] is True

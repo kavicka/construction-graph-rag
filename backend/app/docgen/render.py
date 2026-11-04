@@ -70,12 +70,15 @@ def build_html(
     text = UI_TEXT[content.lang]
     valid = {s.n for s in sources}
     sections = [
-        {"heading": s.heading, "html": markdown_to_html(s.body_md, valid)}
-        for s in content.sections
+        {"heading": s.heading, "html": markdown_to_html(s.body_md, valid)} for s in content.sections
     ]
     # v zozname zdrojov len tie, ktoré dokument naozaj cituje (inak všetky)
-    cited = {int(n) for s in content.sections for m in CITE_RE.finditer(s.body_md)
-             for n in m.group(1).split(",")}
+    cited = {
+        int(n)
+        for s in content.sections
+        for m in CITE_RE.finditer(s.body_md)
+        for n in m.group(1).split(",")
+    }
     shown_sources = [s for s in sources if s.n in cited] or sources
     day = today or date.today()
     return _env.get_template("document.html.j2").render(

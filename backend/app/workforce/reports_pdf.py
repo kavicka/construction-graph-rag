@@ -77,27 +77,35 @@ def render_worker_report(report_id: str) -> Path:
     rows = []
     for entry in data.tasks:
         task = store.get_task(entry.task_id)
-        rows.append({
-            "title": task["title"] if task else "(zmazaná úloha)",
-            "site": task["site_name"] if task else "",
-            "status": entry.status or "not_started",
-            "status_label": STATUS_LABELS.get(entry.status or "", "—"),
-            "progress": entry.progress,
-            "hours": entry.hours,
-            "note": entry.note,
-        })
+        rows.append(
+            {
+                "title": task["title"] if task else "(zmazaná úloha)",
+                "site": task["site_name"] if task else "",
+                "status": entry.status or "not_started",
+                "status_label": STATUS_LABELS.get(entry.status or "", "—"),
+                "progress": entry.progress,
+                "hours": entry.hours,
+                "note": entry.note,
+            }
+        )
     qa = [
         {"question": q["text"], "answer": q["answer"]}
-        for q in store.list_questions(report_id, status="answered") if q["answer"]
+        for q in store.list_questions(report_id, status="answered")
+        if q["answer"]
     ]
     out = get_workforce_settings().reports_dir / f"report-{report_id}.pdf"
     pages = _render(
-        "worker_report.html.j2", out,
+        "worker_report.html.j2",
+        out,
         title=f"Denný výpis — {name} — {report['day']}",
-        worker_name=name, day_label=day_label(report["day"]),
+        worker_name=name,
+        day_label=day_label(report["day"]),
         submitted_at=_local_time(report["submitted_at"]),
         edited_by_owner=bool(report["edited_by_owner"]),
-        data=data, worked=data.worked_hours, task_rows=rows, qa=qa,
+        data=data,
+        worked=data.worked_hours,
+        task_rows=rows,
+        qa=qa,
         transcript=report["transcript"],
     )
     store.update_report(report_id, pdf_path=str(out), pdf_pages=pages)
@@ -120,9 +128,15 @@ def summary_context(day: str) -> dict[str, Any]:
     submitted = 0
     for w in workers:
         r = reports.get(w["id"])
-        row: dict[str, Any] = {"name": w["name"], "arrival": None, "departure": None,
-                               "break_minutes": None, "worked": None, "state": "missing",
-                               "absence_reason": ""}
+        row: dict[str, Any] = {
+            "name": w["name"],
+            "arrival": None,
+            "departure": None,
+            "break_minutes": None,
+            "worked": None,
+            "state": "missing",
+            "absence_reason": "",
+        }
         if r is None or r["status"] != "submitted":
             row["state"] = "open" if r is not None and r["status"] != "draft" else "missing"
             missing.append(w["name"])
@@ -134,8 +148,13 @@ def summary_context(day: str) -> dict[str, Any]:
             row.update(state="absent", absence_reason=data.absence_reason)
             worker_rows.append(row)
             continue
-        row.update(state="submitted", arrival=data.arrival, departure=data.departure,
-                   break_minutes=data.break_minutes, worked=data.worked_hours)
+        row.update(
+            state="submitted",
+            arrival=data.arrival,
+            departure=data.departure,
+            break_minutes=data.break_minutes,
+            worked=data.worked_hours,
+        )
         total_hours += data.worked_hours or 0
         worker_rows.append(row)
         for p in data.problems:
@@ -145,9 +164,16 @@ def summary_context(day: str) -> dict[str, Any]:
         for entry in data.tasks:
             if entry.status == "not_started" and not entry.note:
                 continue
-            agg = task_agg.setdefault(entry.task_id, {
-                "workers": [], "hours": 0.0, "notes": [], "statuses": [], "progress": None,
-            })
+            agg = task_agg.setdefault(
+                entry.task_id,
+                {
+                    "workers": [],
+                    "hours": 0.0,
+                    "notes": [],
+                    "statuses": [],
+                    "progress": None,
+                },
+            )
             agg["workers"].append(w["name"])
             agg["hours"] += entry.hours or 0
             agg["statuses"].append(entry.status)
@@ -163,17 +189,27 @@ def summary_context(day: str) -> dict[str, Any]:
         if task is None:
             continue
         statuses = agg["statuses"]
-        status = ("done" if "done" in statuses else
-                  "in_progress" if "in_progress" in statuses else "not_started")
+        status = (
+            "done"
+            if "done" in statuses
+            else "in_progress"
+            if "in_progress" in statuses
+            else "not_started"
+        )
         done_count += status == "done"
         site = sites[task["site_id"]]
         site["name"] = task["site_name"]
-        site["tasks"].append({
-            "title": task["title"], "workers": agg["workers"], "status": status,
-            "status_label": STATUS_LABELS[status],
-            "progress": 100 if status == "done" else agg["progress"],
-            "hours": round(agg["hours"], 2), "notes": agg["notes"],
-        })
+        site["tasks"].append(
+            {
+                "title": task["title"],
+                "workers": agg["workers"],
+                "status": status,
+                "status_label": STATUS_LABELS[status],
+                "progress": 100 if status == "done" else agg["progress"],
+                "hours": round(agg["hours"], 2),
+                "notes": agg["notes"],
+            }
+        )
     return {
         "day": day,
         "workers": worker_rows,
@@ -192,9 +228,12 @@ def render_daily_summary(day: str) -> Path:
     ctx = summary_context(day)
     out = get_workforce_settings().reports_dir / f"daily-{day}.pdf"
     pages = _render(
-        "daily_summary.html.j2", out,
-        title=f"Súhrnný denný výpis — {day}", day_label=day_label(day),
-        generated_at=datetime.now().strftime("%d. %m. %Y %H:%M"), **ctx,
+        "daily_summary.html.j2",
+        out,
+        title=f"Súhrnný denný výpis — {day}",
+        day_label=day_label(day),
+        generated_at=datetime.now().strftime("%d. %m. %Y %H:%M"),
+        **ctx,
     )
     store.set_daily_summary(day, str(out), pages)
     return out

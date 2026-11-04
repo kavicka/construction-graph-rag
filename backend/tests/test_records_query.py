@@ -27,8 +27,13 @@ def meals() -> None:
         "d1",
         [
             {
-                "id": f"r{i}", "table_id": tid, "page_no": 14, "category": cat,
-                "name": name, "attrs_json": json.dumps(attrs), "raw_text": name,
+                "id": f"r{i}",
+                "table_id": tid,
+                "page_no": 14,
+                "category": cat,
+                "name": name,
+                "attrs_json": json.dumps(attrs),
+                "raw_text": name,
             }
             for i, (tid, cat, name, attrs) in enumerate(data)
         ],
@@ -42,18 +47,27 @@ def test_category_does_not_leak_across_generic_word(meals: None) -> None:
     db.replace_document_records(
         "d1",
         [
-            {k: r[k] for k in ("id", "table_id", "page_no", "category", "name",
-                               "attrs_json", "raw_text")}
+            {
+                k: r[k]
+                for k in ("id", "table_id", "page_no", "category", "name", "attrs_json", "raw_text")
+            }
             for r in existing
         ]
-        + [{
-            "id": "rv1", "table_id": "t-vecere", "page_no": 16,
-            "category": "Večeře varianty", "name": "Gnochi",
-            "attrs_json": json.dumps({"kcal": 678, "b": 45}), "raw_text": "Gnochi",
-        }],
+        + [
+            {
+                "id": "rv1",
+                "table_id": "t-vecere",
+                "page_no": 16,
+                "category": "Večeře varianty",
+                "name": "Gnochi",
+                "attrs_json": json.dumps({"kcal": 678, "b": 45}),
+                "raw_text": "Gnochi",
+            }
+        ],
     )
     plan = QueryPlan(
-        mode="filter", constraints=[Constraint("kcal", "<=", 870)],
+        mode="filter",
+        constraints=[Constraint("kcal", "<=", 870)],
         categories=["Oběd varianty"],
     )
     matched, _ = run_filter(plan)
@@ -113,9 +127,7 @@ def test_pick_items_exact_combo(meals: None) -> None:
 
 
 def test_pick_items_impossible_budget_returns_nearest(meals: None) -> None:
-    combo = pick_items(
-        [Slot("Oběd varianty"), Slot("Snídaně")], budget_attr="kcal", budget_max=500
-    )
+    combo = pick_items([Slot("Oběd varianty"), Slot("Snídaně")], budget_attr="kcal", budget_max=500)
     assert combo is not None
     assert combo.within_budget is False
     # najmenší možný súčet: Těstoviny 820 + Ovesná kaše 447

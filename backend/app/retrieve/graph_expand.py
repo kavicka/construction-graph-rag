@@ -48,9 +48,7 @@ def _hub_penalty(degree: int) -> float:
     return 1.0 / math.log2(2 + degree)
 
 
-def expand_via_graph(
-    seed_chunk_ids: list[str], *, cap: int = 10
-) -> list[dict[str, Any]]:
+def expand_via_graph(seed_chunk_ids: list[str], *, cap: int = 10) -> list[dict[str, Any]]:
     """Vráti lancedb riadky expandovaných chunkov, zoradené podľa grafového skóre."""
     if not seed_chunk_ids:
         return []
@@ -86,9 +84,7 @@ def expand_via_graph(
 
     top_ids = [cid for cid, _ in sorted(scores.items(), key=lambda kv: kv[1], reverse=True)][:cap]
     rows = {r["chunk_id"]: r for r in get_chunks_by_ids(top_ids)}
-    return [
-        {**rows[cid], "graph_score": scores[cid]} for cid in top_ids if cid in rows
-    ]
+    return [{**rows[cid], "graph_score": scores[cid]} for cid in top_ids if cid in rows]
 
 
 def match_query_concepts(query: str, *, threshold: float = 85.0) -> list[str]:

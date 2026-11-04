@@ -42,8 +42,9 @@ def _summary(query: FirmaQuery, today: date) -> str:
     return " · ".join(bits)
 
 
-def answer_firma(question: str, viewer: Viewer, *, today: date | None = None,
-                 worker_context: bool = False) -> FirmaResult | None:
+def answer_firma(
+    question: str, viewer: Viewer, *, today: date | None = None, worker_context: bool = False
+) -> FirmaResult | None:
     """None = otázka nie je na firemné údaje (chat pokračuje do dokumentov). Na mobile
     (`worker_context`) sa vždy vráti odpoveď — aspoň nápoveda."""
     today = today or date.today()
@@ -54,8 +55,11 @@ def answer_firma(question: str, viewer: Viewer, *, today: date | None = None,
 
     decision = authorize(query, viewer, snap)
     if isinstance(decision, Denied):
-        return FirmaResult(decision.message, denied=True,
-                           steps=[{"tool": "firma", "summary": "prístup zamietnutý"}])
+        return FirmaResult(
+            decision.message,
+            denied=True,
+            steps=[{"tool": "firma", "summary": "prístup zamietnutý"}],
+        )
     query = decision
 
     if query.ambiguous:
@@ -65,8 +69,10 @@ def answer_firma(question: str, viewer: Viewer, *, today: date | None = None,
     # „Koľko hodín odpracoval Ján Novák?“ — bez tejto kontroly by prišli hodiny celého tímu
     if query.unknown_name and not query.workers and PERSON_INTENTS & set(query.intents):
         team = ", ".join(w.name for w in snap.workers if w.active)
-        return FirmaResult(f"Pracovníka „{query.unknown_name}“ v tíme nemám."
-                           + (f" V tíme sú: {team}." if team else ""))
+        return FirmaResult(
+            f"Pracovníka „{query.unknown_name}“ v tíme nemám."
+            + (f" V tíme sú: {team}." if team else "")
+        )
     if not query.intents:
         return FirmaResult(HELP_WORKER if viewer.own_only else HELP_ADMIN)
 

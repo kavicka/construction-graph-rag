@@ -110,8 +110,11 @@ class RetrievalConfig:
     def from_settings(cls) -> "RetrievalConfig":
         s = get_settings()
         return cls(
-            graph=s.graph_expansion, rerank=s.effective_rerank, graph_weight=s.graph_weight,
-            graph_relational_only=s.graph_relational_only, visual=s.visual_retrieval,
+            graph=s.graph_expansion,
+            rerank=s.effective_rerank,
+            graph_weight=s.graph_weight,
+            graph_relational_only=s.graph_relational_only,
+            visual=s.visual_retrieval,
         )
 
 
@@ -150,8 +153,9 @@ def rank_chunks(query: str, k: int = 8, cfg: RetrievalConfig | None = None) -> l
 
             pages = search_pages(query, k=5, doc_ids=allowed)
             visual_rows = chunks_on_pages([(d, p) for d, p, _ in pages])
-            set_attrs(s, rag__pages=[f"{d[:8]}:{p}" for d, p, _ in pages],
-                      rag__hits=len(visual_rows))
+            set_attrs(
+                s, rag__pages=[f"{d[:8]}:{p}" for d, p, _ in pages], rag__hits=len(visual_rows)
+            )
         if visual_rows:
             lists.append(visual_rows)
             weights.append(1.0)
@@ -166,9 +170,7 @@ def rank_chunks(query: str, k: int = 8, cfg: RetrievalConfig | None = None) -> l
     return rrf_fuse(lists, top_k=k, weights=weights)
 
 
-def retrieve_sources(
-    query: str, k: int = 8, cfg: RetrievalConfig | None = None
-) -> list[Source]:
+def retrieve_sources(query: str, k: int = 8, cfg: RetrievalConfig | None = None) -> list[Source]:
     fused = rank_chunks(query, k, cfg)
     guard = get_settings().injection_guard
 

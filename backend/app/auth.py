@@ -40,8 +40,8 @@ class AccessScope:
         return self.role == "admin"
 
     def can_see(self, access_groups: list[str]) -> bool:
-        return self.unrestricted or EVERYONE in access_groups or bool(
-            self.groups & set(access_groups)
+        return (
+            self.unrestricted or EVERYONE in access_groups or bool(self.groups & set(access_groups))
         )
 
 
@@ -121,7 +121,9 @@ def create_api_token(user_id: str, name: str) -> str:
 
 def scope_for_user(user: dict[str, Any]) -> AccessScope:
     return AccessScope(
-        user_id=user["id"], email=user["email"], role=user["role"],
+        user_id=user["id"],
+        email=user["email"],
+        role=user["role"],
         groups=frozenset(json.loads(user["groups_json"] or "[]")),
     )
 
@@ -144,8 +146,14 @@ def create_user(
     email: str, name: str, password: str, role: str = "member", groups: list[str] | None = None
 ) -> dict[str, Any]:
     user_id = uuid.uuid4().hex
-    db.insert_user(user_id, email.strip().casefold(), name, hash_password(password), role,
-                   json.dumps(sorted(set(groups or []))))
+    db.insert_user(
+        user_id,
+        email.strip().casefold(),
+        name,
+        hash_password(password),
+        role,
+        json.dumps(sorted(set(groups or []))),
+    )
     user = db.get_user(user_id)
     assert user is not None
     return user

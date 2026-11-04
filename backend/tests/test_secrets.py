@@ -33,20 +33,23 @@ def test_bearer_token() -> None:
     assert "abcDEF123456789xyz0987654321" not in out
 
 
-@pytest.mark.parametrize(("text", "secret"), [
-    ("Heslo k WiFi na stavbe: Kral-2026", "Kral-2026"),
-    ("heslo: stavba", "stavba"),
-    ("PIN 4821", "4821"),
-    ("PIN: 482193", "482193"),
-    ("Kód od brány: 7731#", "7731#"),
-    ("Prístupový kód k alarmu = 99-12-07", "99-12-07"),
-    ("api_key=abc123XYZ", "abc123XYZ"),
-    ("API kľúč: sk_live_51Hx", "sk_live_51Hx"),
-    ("heslo je Kral2026!", "Kral2026"),
-    ("The password is Summer2026", "Summer2026"),
-    ("Heslo:\nBrana-7731", "Brana-7731"),
-    ("WPA kľúč „Stavba#2026“", None),  # bez oddeľovača — nejednoznačné, nevadí
-])
+@pytest.mark.parametrize(
+    ("text", "secret"),
+    [
+        ("Heslo k WiFi na stavbe: Kral-2026", "Kral-2026"),
+        ("heslo: stavba", "stavba"),
+        ("PIN 4821", "4821"),
+        ("PIN: 482193", "482193"),
+        ("Kód od brány: 7731#", "7731#"),
+        ("Prístupový kód k alarmu = 99-12-07", "99-12-07"),
+        ("api_key=abc123XYZ", "abc123XYZ"),
+        ("API kľúč: sk_live_51Hx", "sk_live_51Hx"),
+        ("heslo je Kral2026!", "Kral2026"),
+        ("The password is Summer2026", "Summer2026"),
+        ("Heslo:\nBrana-7731", "Brana-7731"),
+        ("WPA kľúč „Stavba#2026“", None),  # bez oddeľovača — nejednoznačné, nevadí
+    ],
+)
 def test_label_values(text: str, secret: str | None) -> None:
     out = redact_secrets(text)
     if secret is not None:
@@ -54,17 +57,20 @@ def test_label_values(text: str, secret: str | None) -> None:
         assert MASK in out
 
 
-@pytest.mark.parametrize("text", [
-    "IBAN: SK31 1200 0000 1987 4263 7541",
-    "Rodné číslo: 850101/1234, tel. +421 905 123 456",
-    "Príchod 6:30, odchod 15:00, prestávka 30 min, odpracované 8 h",
-    "Cena diela je 4 860 000 EUR bez DPH.",
-    "Heslo je potrebné zmeniť každé 3 mesiace.",
-    "Projekt Heslo roka 2026 vyhral tím z Rovinky.",
-    SECRET_REPLY,
-    "PIN-y nastavuje administrátor v časti Tím.",
-    "Tokeny a kľúče sa v systéme neukladajú v čitateľnej podobe.",
-])
+@pytest.mark.parametrize(
+    "text",
+    [
+        "IBAN: SK31 1200 0000 1987 4263 7541",
+        "Rodné číslo: 850101/1234, tel. +421 905 123 456",
+        "Príchod 6:30, odchod 15:00, prestávka 30 min, odpracované 8 h",
+        "Cena diela je 4 860 000 EUR bez DPH.",
+        "Heslo je potrebné zmeniť každé 3 mesiace.",
+        "Projekt Heslo roka 2026 vyhral tím z Rovinky.",
+        SECRET_REPLY,
+        "PIN-y nastavuje administrátor v časti Tím.",
+        "Tokeny a kľúče sa v systéme neukladajú v čitateľnej podobe.",
+    ],
+)
 def test_no_false_positives(text: str) -> None:
     assert redact_secrets(text) == text
 
@@ -83,8 +89,21 @@ def _stream(tokens: list[str]) -> list[str]:
 
 
 def test_stream_never_leaks_split_value() -> None:
-    tokens = ["Na stavbe ", "je WiFi. ", "Heslo", " k", " WiFi", ":", " Kr", "al-", "20", "26",
-              " a platí", " celý", " mesiac."]
+    tokens = [
+        "Na stavbe ",
+        "je WiFi. ",
+        "Heslo",
+        " k",
+        " WiFi",
+        ":",
+        " Kr",
+        "al-",
+        "20",
+        "26",
+        " a platí",
+        " celý",
+        " mesiac.",
+    ]
     chunks = _stream(tokens)
     assert all("Kral" not in c and "2026" not in c for c in chunks)
     assert "".join(chunks) == redact_secrets("".join(tokens))
@@ -99,8 +118,10 @@ def test_stream_shape_secret_split_across_tokens() -> None:
 
 @pytest.mark.parametrize("size", [1, 2, 3, 5, 8, 13])
 def test_stream_matches_full_redaction(size: int) -> None:
-    text = ("Kontakt: stavbyvedúci Ing. Peter Hronec. PIN 4821 si nikomu nedávaj. "
-            "Heslo k bráne: Brana-7731 platí do piatku.\nIBAN SK31 1200 0000 1987 4263 7541.")
+    text = (
+        "Kontakt: stavbyvedúci Ing. Peter Hronec. PIN 4821 si nikomu nedávaj. "
+        "Heslo k bráne: Brana-7731 platí do piatku.\nIBAN SK31 1200 0000 1987 4263 7541."
+    )
     tokens = ["".join(chunk) for chunk in itertools.batched(text, size)]
     joined = "".join(_stream(tokens))
     assert "4821" not in joined and "Brana-7731" not in joined

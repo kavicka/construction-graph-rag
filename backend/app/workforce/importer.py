@@ -122,8 +122,13 @@ def document_segments(doc_id: str) -> list[Segment]:
         if md.exists():
             text = md.read_text(encoding="utf-8")
             title = f"Tabuľka: {t['caption']}\n" if t.get("caption") else ""
-            segments.append(Segment(title + text, t["page_no"] or 1,
-                                    json.loads(t["boxes_json"]) if t.get("boxes_json") else []))
+            segments.append(
+                Segment(
+                    title + text,
+                    t["page_no"] or 1,
+                    json.loads(t["boxes_json"]) if t.get("boxes_json") else [],
+                )
+            )
     segments.sort(key=lambda s: s.page)
     return segments
 
@@ -214,10 +219,13 @@ class Similarity:
             logger.warning("embeddingy pre podobnosť úloh nedostupné — len fuzzy")
 
     def score(self, i: int, j: int) -> float:
-        fuzzy = max(
-            fuzz.token_set_ratio(normalize(self.texts[i]), normalize(self.texts[j])),
-            fuzz.token_set_ratio(self.stems[i], self.stems[j]),
-        ) / 100
+        fuzzy = (
+            max(
+                fuzz.token_set_ratio(normalize(self.texts[i]), normalize(self.texts[j])),
+                fuzz.token_set_ratio(self.stems[i], self.stems[j]),
+            )
+            / 100
+        )
         if self.vectors is None:
             return fuzzy
         return max(fuzzy, _cosine(self.vectors[i], self.vectors[j]))
@@ -242,7 +250,9 @@ class Draft:
 
 
 def extract_drafts(
-    source: dict[str, Any], windows: list[Window], professions: list[str],
+    source: dict[str, Any],
+    windows: list[Window],
+    professions: list[str],
     on_progress: Any = None,
 ) -> tuple[list[dict[str, Any]], date | None]:
     """LLM po oknách → overené surové úlohy (citát, strana) + dátum dokumentu."""
@@ -253,7 +263,7 @@ def extract_drafts(
     for i, window in enumerate(windows):
         prompt = (
             f"Profesie: {prof_line}\n\nDokument „{source['filename']}“ "
-            f"(časť {i + 1}/{len(windows)}):\n\"\"\"\n{window.prompt_text()}\n\"\"\""
+            f'(časť {i + 1}/{len(windows)}):\n"""\n{window.prompt_text()}\n"""'
         )
         x = _llm_json(prompt, IMPORT_SYSTEM, _XDocument)
         if on_progress:
@@ -271,18 +281,21 @@ def extract_drafts(
             work_type = t.work_type.strip()
             if work_type not in professions:
                 work_type = "iné"
-            raw.append({
-                "title": title,
-                "description": t.description.strip()[:1000],
-                "work_type": work_type,
-                "person": (t.person or "").strip() or None,
-                "date_text": (t.date_text or "").strip() or None,
-                "after_text": (t.after or "").strip() or None,
-                "quote": t.quote.strip()[:600],
-                "page": seg.page,
-                # riadky citátu v textovej vrstve PDF; inak blok z Doclingu
-                "boxes": (pdf_path and locate_quote(pdf_path, seg.page, t.quote)) or seg.boxes[:8],
-            })
+            raw.append(
+                {
+                    "title": title,
+                    "description": t.description.strip()[:1000],
+                    "work_type": work_type,
+                    "person": (t.person or "").strip() or None,
+                    "date_text": (t.date_text or "").strip() or None,
+                    "after_text": (t.after or "").strip() or None,
+                    "quote": t.quote.strip()[:600],
+                    "page": seg.page,
+                    # riadky citátu v textovej vrstve PDF; inak blok z Doclingu
+                    "boxes": (pdf_path and locate_quote(pdf_path, seg.page, t.quote))
+                    or seg.boxes[:8],
+                }
+            )
     return raw, doc_date
 
 
@@ -301,8 +314,14 @@ def dedupe(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     sim = Similarity([f"{i['title']} {i['description'][:120]}" for i in items])
     keep: list[int] = []
     for i, item in enumerate(items):
-        dup = next((k for k in keep if sim.score(i, k) >= DUPLICATE_SCORE
-                    and items[k]["work_type"] == item["work_type"]), None)
+        dup = next(
+            (
+                k
+                for k in keep
+                if sim.score(i, k) >= DUPLICATE_SCORE and items[k]["work_type"] == item["work_type"]
+            ),
+            None,
+        )
         if dup is None:
             keep.append(i)
             continue
@@ -315,8 +334,11 @@ def dedupe(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def build_drafts(
-    source: dict[str, Any], items: list[dict[str, Any]], doc_date: date | None,
-    *, today: date | None = None,
+    source: dict[str, Any],
+    items: list[dict[str, Any]],
+    doc_date: date | None,
+    *,
+    today: date | None = None,
 ) -> list[Draft]:
     today = today or date.today()
     ref = doc_date or today
@@ -333,9 +355,15 @@ def build_drafts(
         derived_start = bool(end and not start)
         if end and not start:
             start = min(max(ref, today), end)
-        sug = suggest_worker(person=item["person"], work_type=item["work_type"],
-                             site_id=site_id, date_from=start, date_to=end,
-                             workers=workers, tasks=all_tasks)
+        sug = suggest_worker(
+            person=item["person"],
+            work_type=item["work_type"],
+            site_id=site_id,
+            date_from=start,
+            date_to=end,
+            workers=workers,
+            tasks=all_tasks,
+        )
         data = {
             **item,
             "date_from": start.isoformat() if start else None,
@@ -444,7 +472,7 @@ def expand_term(date_text: str | None, quote: str) -> str | None:
     pos = norm_quote.find(norm_term)
     if pos <= 0 or TERM_START_RE.match(norm_term):
         return date_text  # predložku už má, alebo nie je v citáte
-    m = TERM_PREFIX_RE.search(norm_quote[max(0, pos - 25):pos])
+    m = TERM_PREFIX_RE.search(norm_quote[max(0, pos - 25) : pos])
     return f"{m.group(1)} {date_text}" if m else date_text
 
 
@@ -503,18 +531,27 @@ def diff_with_previous(drafts: list[Draft], previous_tasks: list[dict[str, Any]]
         if j in used_old:
             continue
         warning = {"in_progress": "úloha je rozpracovaná", "done": "úloha je už hotová"}.get(
-            task["status"])
-        drafts.append(Draft(
-            data={
-                "title": task["title"], "description": task["description"],
-                "work_type": task["work_type"], "date_from": task["date_from"],
-                "date_to": task["date_to"], "assignees": task["assignees"],
-                "quote": task.get("source_quote") or "", "page": task.get("source_page"),
-                "issues": [warning] if warning else [], "confidence": "medium",
-                "task_status": task["status"],
-            },
-            kind="cancelled", target_task_id=task["id"],
-        ))
+            task["status"]
+        )
+        drafts.append(
+            Draft(
+                data={
+                    "title": task["title"],
+                    "description": task["description"],
+                    "work_type": task["work_type"],
+                    "date_from": task["date_from"],
+                    "date_to": task["date_to"],
+                    "assignees": task["assignees"],
+                    "quote": task.get("source_quote") or "",
+                    "page": task.get("source_page"),
+                    "issues": [warning] if warning else [],
+                    "confidence": "medium",
+                    "task_status": task["status"],
+                },
+                kind="cancelled",
+                target_task_id=task["id"],
+            )
+        )
     return drafts
 
 
@@ -560,23 +597,41 @@ def run_import(source_id: str) -> None:
         if not windows:
             raise RuntimeError("v dokumente sa nenašiel žiadny text")
         items, doc_date = extract_drafts(
-            source, windows, store.list_professions(),
-            on_progress=lambda p: store.set_source_status(source_id, "extracting",
-                                                          progress=0.05 + 0.85 * p),
+            source,
+            windows,
+            store.list_professions(),
+            on_progress=lambda p: store.set_source_status(
+                source_id, "extracting", progress=0.05 + 0.85 * p
+            ),
         )
         drafts = build_drafts(source, dedupe(items), doc_date)
         chain: list[str] = []
         if source["previous_id"]:
             chain = store.source_chain(source["previous_id"])
             drafts = diff_with_previous(drafts, store.list_tasks(source_ids=chain))
-        flag_existing(drafts, [t for t in store.list_tasks(site_id=source["site_id"])
-                               if t.get("source_id") not in chain])
-        store.replace_drafts(source_id, [
-            {"kind": d.kind, "target_task_id": d.target_task_id, "data": d.data,
-             "decision": d.decision} for d in drafts
-        ])
-        store.set_source_status(source_id, "review", progress=1.0,
-                                doc_date=doc_date.isoformat() if doc_date else None)
+        flag_existing(
+            drafts,
+            [
+                t
+                for t in store.list_tasks(site_id=source["site_id"])
+                if t.get("source_id") not in chain
+            ],
+        )
+        store.replace_drafts(
+            source_id,
+            [
+                {
+                    "kind": d.kind,
+                    "target_task_id": d.target_task_id,
+                    "data": d.data,
+                    "decision": d.decision,
+                }
+                for d in drafts
+            ],
+        )
+        store.set_source_status(
+            source_id, "review", progress=1.0, doc_date=doc_date.isoformat() if doc_date else None
+        )
     except Exception as exc:  # noqa: BLE001 — chyba sa ukáže majiteľovi pri importe
         logger.exception("import úloh %s zlyhal", source_id)
         store.set_source_status(source_id, "error", error=str(exc)[:300])
@@ -607,8 +662,13 @@ def apply_import(source_id: str) -> dict[str, int]:
             if dep and "draft" in dep:
                 dep_draft = drafts[dep["draft"]] if dep["draft"] < len(drafts) else None
                 if dep_draft is None or dep_draft["decision"] != "approved":
-                    problems.append({"draft_id": d["id"], "index": idx,
-                                     "problem": "závisí od neschválenej úlohy"})
+                    problems.append(
+                        {
+                            "draft_id": d["id"],
+                            "index": idx,
+                            "problem": "závisí od neschválenej úlohy",
+                        }
+                    )
     if problems:
         raise ApplyError(problems)
 
@@ -617,10 +677,14 @@ def apply_import(source_id: str) -> dict[str, int]:
     for idx, d in enumerate(drafts):
         data = d["data"]
         fields = {
-            "title": data["title"].strip(), "description": data.get("description") or "",
-            "work_type": data.get("work_type"), "date_from": data.get("date_from"),
-            "date_to": data.get("date_to"), "source_id": source_id,
-            "source_quote": data.get("quote"), "source_page": data.get("page"),
+            "title": data["title"].strip(),
+            "description": data.get("description") or "",
+            "work_type": data.get("work_type"),
+            "date_from": data.get("date_from"),
+            "date_to": data.get("date_to"),
+            "source_id": source_id,
+            "source_quote": data.get("quote"),
+            "source_page": data.get("page"),
         }
         if d["decision"] != "approved":
             continue

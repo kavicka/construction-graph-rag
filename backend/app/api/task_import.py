@@ -42,8 +42,10 @@ class SourceOut(BaseModel):
 
 def _source_out(row: dict[str, Any]) -> SourceOut:
     site = store.get_site(row["site_id"])
-    return SourceOut(**{k: row[k] for k in SourceOut.model_fields if k in row},
-                     site_name=site["name"] if site else "")
+    return SourceOut(
+        **{k: row[k] for k in SourceOut.model_fields if k in row},
+        site_name=site["name"] if site else "",
+    )
 
 
 class DraftOut(BaseModel):
@@ -100,8 +102,13 @@ async def upload(
     if created:
         schedule_ingest(doc["id"])
     row = await run_in_threadpool(
-        lambda: store.insert_source(doc_id=doc["id"], site_id=site_id, filename=name,
-                                    previous_id=previous_id or None, version=version)
+        lambda: store.insert_source(
+            doc_id=doc["id"],
+            site_id=site_id,
+            filename=name,
+            previous_id=previous_id or None,
+            version=version,
+        )
     )
     schedule(_import_job, row["id"])
     return await run_in_threadpool(_source_out, row)
@@ -118,8 +125,9 @@ def _detail(source_id: str) -> ImportDetail:
     row = store.get_source(source_id)
     if row is None:
         raise HTTPException(status_code=404, detail="import neexistuje")
-    drafts = [DraftOut(**{k: d[k] for k in DraftOut.model_fields}) for d in
-              store.list_drafts(source_id)]
+    drafts = [
+        DraftOut(**{k: d[k] for k in DraftOut.model_fields}) for d in store.list_drafts(source_id)
+    ]
     return ImportDetail(source=_source_out(row), drafts=drafts)
 
 
@@ -151,7 +159,8 @@ async def update_draft(source_id: str, draft_id: str, body: DraftUpdate) -> Draf
         raise HTTPException(status_code=422, detail=f"neznámi pracovníci: {unknown}")
     data = dict(draft["data"])
     data.update(
-        title=body.title.strip(), description=body.description.strip(),
+        title=body.title.strip(),
+        description=body.description.strip(),
         work_type=body.work_type,
         date_from=body.date_from.isoformat() if body.date_from else None,
         date_to=body.date_to.isoformat() if body.date_to else None,
@@ -165,9 +174,7 @@ async def update_draft(source_id: str, draft_id: str, body: DraftUpdate) -> Draf
         data["date_how"] = "absolute"  # termín zadal majiteľ
     if draft["kind"] != "cancelled":
         score_draft(data)
-    await run_in_threadpool(
-        lambda: store.update_draft(draft_id, data=data, decision=body.decision)
-    )
+    await run_in_threadpool(lambda: store.update_draft(draft_id, data=data, decision=body.decision))
     updated = await run_in_threadpool(store.get_draft, draft_id)
     assert updated is not None
     return DraftOut(**{k: updated[k] for k in DraftOut.model_fields})
@@ -186,8 +193,10 @@ async def decide_all(source_id: str, body: DecideAllIn) -> ImportDetail:
         for d in store.list_drafts(source_id):
             if d["decision"] != "pending":
                 continue
-            if body.decision == "approved" and d["kind"] in ("new", "changed") and (
-                draft_issues(d["data"]) or d["data"].get("duplicate_of")
+            if (
+                body.decision == "approved"
+                and d["kind"] in ("new", "changed")
+                and (draft_issues(d["data"]) or d["data"].get("duplicate_of"))
             ):
                 continue  # bez termínu alebo možná duplicita — rozhodne majiteľ sám
             store.update_draft(d["id"], data=d["data"], decision=body.decision)
@@ -204,8 +213,9 @@ async def apply(source_id: str) -> dict[str, int]:
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="import neexistuje") from exc
     except ApplyError as exc:
-        raise HTTPException(status_code=409, detail={"message": str(exc),
-                                                     "problems": exc.problems}) from exc
+        raise HTTPException(
+            status_code=409, detail={"message": str(exc), "problems": exc.problems}
+        ) from exc
 
 
 @router.post("/{source_id}/retry", status_code=202)

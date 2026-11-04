@@ -1,6 +1,6 @@
 """Vloží súhrn a tabuľky z eval/results-v2.json do README.md (značky EVAL_SUMMARY/EVAL_TABLES).
 
-    uv run python -m eval.readme_tables
+uv run python -m eval.readme_tables
 """
 
 import json
@@ -47,7 +47,8 @@ def summary(results: dict[str, Any]) -> str:
         return ""
     return (
         "> Measured on a 128-question golden set with a local 4B model: "
-        + "; ".join(parts) + ". See [Evaluation](#evaluation)."
+        + "; ".join(parts)
+        + ". See [Evaluation](#evaluation)."
     )
 
 

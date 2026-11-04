@@ -105,8 +105,13 @@ Nikdy si nevymýšľaj časy ani čísla, ktoré v texte nie sú — čo nepoved
 def _llm_json(prompt: str, system: str, schema: type[BaseModel]) -> Any:
     try:
         raw = generate_sync(
-            get_workforce_settings().effective_llm, prompt, system=system,
-            json_schema=schema.model_json_schema(), temperature=0.0, num_ctx=8192, timeout=240,
+            get_workforce_settings().effective_llm,
+            prompt,
+            system=system,
+            json_schema=schema.model_json_schema(),
+            temperature=0.0,
+            num_ctx=8192,
+            timeout=240,
         )
         return schema.model_validate_json(raw)
     except (OllamaError, ValidationError, json.JSONDecodeError) as exc:
@@ -158,8 +163,7 @@ def _repair_half_hour(hm: tuple[int, int], text: str) -> tuple[int, int] | None:
     h, m = hm
     if m == 0:
         return None
-    hits = [(ch, cm) for ch, cm in time_candidates(text)
-            if cm == m and (h - ch) % 12 == 1]
+    hits = [(ch, cm) for ch, cm in time_candidates(text) if cm == m and (h - ch) % 12 == 1]
     return hits[0] if len(hits) == 1 else None
 
 
@@ -179,8 +183,11 @@ GENERIC_WORDS = {"uloha", "ulohy", "prace", "praca", "stavba", "stavby", "objekt
 
 
 def _words(text: str) -> set[str]:
-    return {w for w in normalize(text).split()
-            if len(w) >= 4 and not w.isdigit() and w not in GENERIC_WORDS}
+    return {
+        w
+        for w in normalize(text).split()
+        if len(w) >= 4 and not w.isdigit() and w not in GENERIC_WORDS
+    }
 
 
 def _related(a: str, b: str) -> bool:
@@ -205,7 +212,10 @@ def task_mentioned(title: str, text: str, description: str = "") -> bool:
 
 
 def merge_extraction(
-    data: ReportData, x: _Extracted, text: str, refs: dict[str, str],
+    data: ReportData,
+    x: _Extracted,
+    text: str,
+    refs: dict[str, str],
     titles: dict[str, tuple[str, str]] | None = None,
 ) -> ReportData:
     """Overené hodnoty z extrakcie prepíšu dáta výpisu; nepodložené sa zahodia.
@@ -218,8 +228,10 @@ def merge_extraction(
         out.arrival = arrival
     if departure := _time(x.departure, text, afternoon=True):
         out.departure = departure
-    if x.break_minutes is not None and 0 <= x.break_minutes <= 300 and _break_ok(
-        x.break_minutes, text
+    if (
+        x.break_minutes is not None
+        and 0 <= x.break_minutes <= 300
+        and _break_ok(x.break_minutes, text)
     ):
         out.break_minutes = x.break_minutes
 
@@ -274,8 +286,9 @@ def clean_summary(summary: str, text: str) -> str:
     for sentence in SENTENCE_RE.split(summary.strip()):
         ok = all(time_supported(t.replace(".", ":"), text) for t in CLOCK_RE.findall(sentence))
         rest = CLOCK_RE.sub(" ", sentence)
-        ok = ok and all(float(n.replace(",", ".")) in numbers
-                        for n in re.findall(r"\d+(?:[.,]\d+)?", rest))
+        ok = ok and all(
+            float(n.replace(",", ".")) in numbers for n in re.findall(r"\d+(?:[.,]\d+)?", rest)
+        )
         if ok and sentence.strip():
             kept.append(sentence.strip())
     return " ".join(kept)
@@ -287,7 +300,7 @@ def extract_report(
     refs = task_refs(tasks)
     prompt = (
         f"Dátum: {day}\nÚlohy pracovníka na dnes:\n{tasks_block(tasks)}\n\n"
-        f"Prepis výpisu:\n\"\"\"\n{transcript}\n\"\"\""
+        f'Prepis výpisu:\n"""\n{transcript}\n"""'
     )
     x = _llm_json(prompt, EXTRACT_SYSTEM, _Extracted)
     if x is None:
@@ -296,8 +309,10 @@ def extract_report(
     out = merge_extraction(data, x, transcript, refs, titles)
     if not out.absent and (out.arrival is None or out.departure is None):
         _times_from_text(out, transcript)
-    if not out.absent and (reason := absence_reason(transcript)) and not (
-        out.arrival or out.departure or any(e.status for e in out.tasks)
+    if (
+        not out.absent
+        and (reason := absence_reason(transcript))
+        and not (out.arrival or out.departure or any(e.status for e in out.tasks))
     ):
         out.absent, out.absence_reason = True, reason
     return out
@@ -328,8 +343,13 @@ ABSENCE_RE = re.compile(
     r"|marodk\w*|chor\w*|u lekara|na lekarsk\w*|volno|paragraf\w*)"
 )
 ABSENCE_LABELS = [
-    ("dovolenk", "Dovolenka"), ("pn", "Choroba (PN)"), ("marod", "Choroba (PN)"),
-    ("chor", "Choroba (PN)"), ("lekar", "Lekár"), ("volno", "Voľno"), ("paragraf", "Lekár"),
+    ("dovolenk", "Dovolenka"),
+    ("pn", "Choroba (PN)"),
+    ("marod", "Choroba (PN)"),
+    ("chor", "Choroba (PN)"),
+    ("lekar", "Lekár"),
+    ("volno", "Voľno"),
+    ("paragraf", "Lekár"),
 ]
 
 
@@ -385,7 +405,7 @@ def parse_task_answer(
 
     prompt = (
         f"Úloha: {task['title']} (stavba {task.get('site_name', '')})\n"
-        f"Otázka: {question}\nOdpoveď: \"{answer}\""
+        f'Otázka: {question}\nOdpoveď: "{answer}"'
     )
     x = _llm_json(prompt, TASK_ANSWER_SYSTEM, _XTaskAnswer)
     status = (x.status if x else None) or _status_keywords(answer)
@@ -402,8 +422,11 @@ def parse_task_answer(
         out["note"] = answer.strip()[:500]
     # „hotová, robil som tri hodiny“ — hodiny bez LLM, ak je číslo jediné
     if (
-        "hours" not in out and status in ("done", "in_progress") and len(cands) == 1
-        and cands[0] <= 16 and hours_supported(cands[0], answer)
+        "hours" not in out
+        and status in ("done", "in_progress")
+        and len(cands) == 1
+        and cands[0] <= 16
+        and hours_supported(cands[0], answer)
     ):
         out["hours"] = cands[0]
     # samotná poznámka („robil som tam niečo“) nie je odpoveď — otázka ostane a zostrí sa
@@ -431,16 +454,22 @@ def parse_hours_answer(
         f"Pracovný čas: {data.arrival}–{data.departure}, prestávka {data.break_minutes} min "
         f"= {data.worked_hours} h.\nHodiny pri úlohách:\n{current}\n"
         + "".join(f"Iná práca: {e.description} — {e.hours} h\n" for e in data.extra_work)
-        + f"\nOdpoveď pracovníka: \"{answer}\""
+        + f'\nOdpoveď pracovníka: "{answer}"'
     )
     x = _llm_json(prompt, HOURS_FIX_SYSTEM, _XHoursFix)
     if x is None:
         return None
     fixed = merge_extraction(
         data,
-        _Extracted(arrival=x.arrival, departure=x.departure, break_minutes=x.break_minutes,
-                   tasks=x.tasks, extra_work=x.extra_work),
-        answer, refs,
+        _Extracted(
+            arrival=x.arrival,
+            departure=x.departure,
+            break_minutes=x.break_minutes,
+            tasks=x.tasks,
+            extra_work=x.extra_work,
+        ),
+        answer,
+        refs,
     )
     return None if fixed == data else fixed
 
@@ -456,7 +485,7 @@ def parse_problems_answer(answer: str) -> list[str] | None:
         return None
     if is_short_negative(text):
         return []
-    x = _llm_json(f"Odpoveď: \"{text}\"", PROBLEMS_SYSTEM, _XProblems)
+    x = _llm_json(f'Odpoveď: "{text}"', PROBLEMS_SYSTEM, _XProblems)
     if x is None:
         return [text[:300]] if len(normalize(text)) >= 8 else None
     if not x.has_problems:

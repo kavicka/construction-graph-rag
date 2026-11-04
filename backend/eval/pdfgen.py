@@ -25,10 +25,14 @@ from reportlab.platypus import (
 )
 
 FONT_CANDIDATES = [
-    ("/System/Library/Fonts/Supplemental/Arial.ttf",
-     "/System/Library/Fonts/Supplemental/Arial Bold.ttf"),
-    ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
+    (
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+    ),
+    (
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    ),
     ("/usr/share/fonts/dejavu/DejaVuSans.ttf", "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf"),
 ]
 
@@ -56,8 +60,7 @@ def _styles() -> dict[str, ParagraphStyle]:
     return {
         "title": ParagraphStyle("t", parent=base["Title"], fontName=bold, fontSize=18),
         "h": ParagraphStyle("h", parent=base["Heading2"], fontName=bold, fontSize=13),
-        "p": ParagraphStyle("p", parent=base["Normal"], fontName=regular, fontSize=10,
-                            leading=14),
+        "p": ParagraphStyle("p", parent=base["Normal"], fontName=regular, fontSize=10, leading=14),
     }
 
 

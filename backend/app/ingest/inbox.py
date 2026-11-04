@@ -96,8 +96,12 @@ async def watch_inbox(stop: asyncio.Event) -> None:
             for doc_id in [*result.added, *result.updated]:
                 schedule_ingest(doc_id)
             if result.added or result.updated or result.removed:
-                logger.info("inbox: +%d ~%d -%d", len(result.added), len(result.updated),
-                            len(result.removed))
+                logger.info(
+                    "inbox: +%d ~%d -%d",
+                    len(result.added),
+                    len(result.updated),
+                    len(result.removed),
+                )
         except Exception:
             logger.exception("inbox sync zlyhal")
         with contextlib.suppress(TimeoutError):

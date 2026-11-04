@@ -28,8 +28,21 @@ def _seed() -> None:
         db.insert_document(doc, f"{doc}.pdf", f"sha-{doc}")
         cid = f"{doc}:t0"
         replace_document_chunks(
-            doc, [Chunk(cid, doc, f"text {doc}", f"úsek {doc} " + " ".join(concepts), 1, 1, "",
-                        "text", None)], [[1.0, 0.0]],
+            doc,
+            [
+                Chunk(
+                    cid,
+                    doc,
+                    f"text {doc}",
+                    f"úsek {doc} " + " ".join(concepts),
+                    1,
+                    1,
+                    "",
+                    "text",
+                    None,
+                )
+            ],
+            [[1.0, 0.0]],
         )
         db.upsert_graph_node(f"chunk:{cid}", "chunk", cid, doc_id=doc)
         for c in concepts:

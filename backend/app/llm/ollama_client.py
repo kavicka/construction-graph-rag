@@ -82,22 +82,32 @@ def generate_sync(
 ) -> str:
     """Jeden non-stream generate. Qwen3: think=False vypína reasoning režim (rýchlosť)."""
     with span(f"generate {model}") as s:
-        set_attrs(s, **_llm_span_attrs("text_completion", model, temperature),
-                  rag__json_schema=json_schema is not None, rag__prompt_chars=len(prompt))
+        set_attrs(
+            s,
+            **_llm_span_attrs("text_completion", model, temperature),
+            rag__json_schema=json_schema is not None,
+            rag__prompt_chars=len(prompt),
+        )
         if _provider() == "openai":
-            text, usage = _openai_generate(model, prompt, system, json_schema, temperature,
-                                           timeout)
+            text, usage = _openai_generate(model, prompt, system, json_schema, temperature, timeout)
         else:
-            text, usage = _ollama_generate(model, prompt, system, json_schema, temperature,
-                                           num_ctx, timeout, think)
+            text, usage = _ollama_generate(
+                model, prompt, system, json_schema, temperature, num_ctx, timeout, think
+            )
         record_llm_usage(s, usage)
         set_attrs(s, rag__output_chars=len(text))
         return text
 
 
 def _ollama_generate(
-    model: str, prompt: str, system: str | None, json_schema: dict[str, Any] | None,
-    temperature: float, num_ctx: int, timeout: float, think: bool,
+    model: str,
+    prompt: str,
+    system: str | None,
+    json_schema: dict[str, Any] | None,
+    temperature: float,
+    num_ctx: int,
+    timeout: float,
+    think: bool,
 ) -> tuple[str, dict[str, Any]]:
     payload: dict[str, Any] = {
         "model": model,
@@ -126,8 +136,12 @@ def _ollama_generate(
 
 
 def _openai_generate(
-    model: str, prompt: str, system: str | None, json_schema: dict[str, Any] | None,
-    temperature: float, timeout: float,
+    model: str,
+    prompt: str,
+    system: str | None,
+    json_schema: dict[str, Any] | None,
+    temperature: float,
+    timeout: float,
 ) -> tuple[str, dict[str, Any]]:
     messages = ([{"role": "system", "content": system}] if system else []) + [
         {"role": "user", "content": prompt}
@@ -139,8 +153,12 @@ def _openai_generate(
             "json_schema": {"name": "output", "schema": json_schema, "strict": False},
         }
     try:
-        resp = httpx.post(_openai_url("/chat/completions"), json=payload,
-                          headers=_openai_headers(), timeout=timeout)
+        resp = httpx.post(
+            _openai_url("/chat/completions"),
+            json=payload,
+            headers=_openai_headers(),
+            timeout=timeout,
+        )
         resp.raise_for_status()
         data = resp.json()
         content = data["choices"][0]["message"]["content"] or ""
@@ -161,8 +179,7 @@ async def chat_stream(
     """Streamuje tokeny odpovede. Span sa uzavrie po poslednom tokene (alebo chybe);
     `parent` explicitne, lebo volajúci async generátor nemá span ako current."""
     s = get_tracer().start_span(f"chat {model}", context=parent)
-    set_attrs(s, **_llm_span_attrs("chat", model, temperature),
-              rag__messages=len(messages))
+    set_attrs(s, **_llm_span_attrs("chat", model, temperature), rag__messages=len(messages))
     chars = 0
     try:
         stream = (
@@ -185,7 +202,11 @@ async def chat_stream(
 
 
 async def _ollama_chat_stream(
-    model: str, messages: list[dict[str, str]], temperature: float, num_ctx: int, think: bool,
+    model: str,
+    messages: list[dict[str, str]],
+    temperature: float,
+    num_ctx: int,
+    think: bool,
 ) -> AsyncIterator[str | dict[str, Any]]:
     payload: dict[str, Any] = {
         "model": model,
@@ -221,18 +242,24 @@ async def _ollama_chat_stream(
 
 
 async def _openai_chat_stream(
-    model: str, messages: list[dict[str, str]], temperature: float,
+    model: str,
+    messages: list[dict[str, str]],
+    temperature: float,
 ) -> AsyncIterator[str | dict[str, Any]]:
     payload = {
-        "model": model, "messages": messages, "temperature": temperature, "stream": True,
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+        "stream": True,
         "stream_options": {"include_usage": True},
     }
     timeout = httpx.Timeout(300.0, connect=10.0)
     try:
         async with (
             httpx.AsyncClient(timeout=timeout) as client,
-            client.stream("POST", _openai_url("/chat/completions"), json=payload,
-                          headers=_openai_headers()) as resp,
+            client.stream(
+                "POST", _openai_url("/chat/completions"), json=payload, headers=_openai_headers()
+            ) as resp,
         ):
             resp.raise_for_status()
             async for line in resp.aiter_lines():
@@ -284,8 +311,11 @@ def _parse_args(raw: Any) -> dict[str, Any]:
 
 
 async def chat_with_tools(
-    model: str, messages: list[dict[str, Any]], tools: list[dict[str, Any]],
-    *, temperature: float = 0.1,
+    model: str,
+    messages: list[dict[str, Any]],
+    tools: list[dict[str, Any]],
+    *,
+    temperature: float = 0.1,
 ) -> ToolTurn:
     with span(f"chat {model}") as s:
         set_attrs(s, **_llm_span_attrs("chat", model, temperature), rag__tools=len(tools))
@@ -295,16 +325,26 @@ async def chat_with_tools(
                 if _provider() == "openai":
                     resp = await client.post(
                         _openai_url("/chat/completions"),
-                        json={"model": model, "messages": messages, "tools": tools,
-                              "temperature": temperature},
+                        json={
+                            "model": model,
+                            "messages": messages,
+                            "tools": tools,
+                            "temperature": temperature,
+                        },
                         headers=_openai_headers(),
                     )
                 else:
                     resp = await client.post(
                         f"{get_settings().ollama_base_url}/api/chat",
-                        json={"model": model, "messages": messages, "tools": tools,
-                              "stream": False, "think": False, "keep_alive": "10m",
-                              "options": {"temperature": temperature, "num_ctx": 8192}},
+                        json={
+                            "model": model,
+                            "messages": messages,
+                            "tools": tools,
+                            "stream": False,
+                            "think": False,
+                            "keep_alive": "10m",
+                            "options": {"temperature": temperature, "num_ctx": 8192},
+                        },
                     )
                 resp.raise_for_status()
                 data: dict[str, Any] = resp.json()
@@ -328,5 +368,6 @@ async def chat_with_tools(
             for c in message.get("tool_calls") or []
         ]
         set_attrs(s, rag__tool_calls=[c.name for c in calls])
-        return ToolTurn(content=(message.get("content") or "").strip(), calls=calls,
-                        message=message)
+        return ToolTurn(
+            content=(message.get("content") or "").strip(), calls=calls, message=message
+        )
