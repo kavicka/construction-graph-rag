@@ -23,6 +23,7 @@ from app.api import (
     tables,
     task_import,
     traces,
+    voice,
     workforce,
 )
 from app.auth import (
@@ -198,4 +199,5 @@ app.include_router(traces.router, prefix="/api")
 app.include_router(workforce.router, prefix="/api")
 app.include_router(task_import.router, prefix="/api")
 app.include_router(attendance.router, prefix="/api")
+app.include_router(voice.router, prefix="/api")
 app.router.routes.append(Route("/mcp", endpoint=mcp_endpoint))

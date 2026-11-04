@@ -61,9 +61,10 @@ async def wait_for_jobs() -> None:
 # --- ochrana API pre pracovníkov --------------------------------------------------------
 
 WORKER_ALLOWED_PREFIXES = ("/api/attendance/", "/api/me/")
-# only the auth endpoints a worker's phone needs — no API tokens, users or anything else
+# only the endpoints a worker's phone needs — no API tokens, users or anything else
 WORKER_ALLOWED_PATHS = {
     "/api/health",
+    "/api/voice",
     "/api/auth/login",
     "/api/auth/logout",
     "/api/auth/me",
