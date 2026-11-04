@@ -3,8 +3,9 @@
 RRF spája poradia, ale nevidí dvojicu otázka–text naraz; cross-encoder áno, preto
 presnejšie zoradí top kandidátov (najmä pri podobných dokumentoch dvoch projektov).
 Model podľa RAM profilu, oba multilingválne (SK otázka nad EN dokumentom a naopak):
-  low  → jina-reranker-v2-base-multilingual cez fastembed (ONNX)
-  high → BAAI/bge-reranker-v2-m3 cez sentence-transformers (MPS), pár k bge-m3
+  low  → cross-encoder/mmarco-mMiniLMv2-L12-H384-v1 (malý, Apache-2.0)
+  high → BAAI/bge-reranker-v2-m3 (pár k bge-m3)
+Modely, ktoré fastembed pozná, bežia cez ONNX; ostatné cez sentence-transformers (MPS).
 """
 
 import logging
@@ -53,11 +54,17 @@ class SentenceTransformersReranker:
         return [float(s) for s in scores]
 
 
+def _fastembed_supports(model_name: str) -> bool:
+    from fastembed.rerank.cross_encoder import TextCrossEncoder
+
+    return any(m.get("model") == model_name for m in TextCrossEncoder.list_supported_models())
+
+
 @lru_cache
 def get_reranker() -> Reranker:
     settings = get_settings()
     model = settings.effective_reranker_model
-    if model.startswith("jinaai/") or settings.effective_profile == "low":
+    if _fastembed_supports(model):
         logger.info("reranker: fastembed %s", model)
         return FastembedReranker(model)
     logger.info("reranker: sentence-transformers %s", model)
