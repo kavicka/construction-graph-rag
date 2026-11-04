@@ -1,21 +1,28 @@
-.PHONY: dev backend frontend models test lint eval eval-full eval-gate eval-baseline mcp docker
+.PHONY: install dev backend frontend models test lint eval eval-full eval-gate eval-baseline mcp docker
 
-# retrieval ablácie nad stavebným korpusom (eval/construction.py) → backend/eval/REPORT.md
+# Voice (Whisper STT + Piper TTS, GPL-3) is an optional extra — installed on macOS only
+UV_EXTRAS := $(if $(filter Darwin,$(shell uname -s)),--extra voice,)
+
+install:
+	cd backend && uv sync $(UV_EXTRAS)
+	cd frontend && pnpm install
+
+# retrieval ablations over the construction corpus (eval/construction.py) → backend/eval/REPORT.md
 eval:
 	cd backend && uv run python -m eval.harness
 
-# + kvalita odpovedí (LLM judge) a prompt-injection útoky — potrebuje Ollamu, ~30 min
+# + answer quality (LLM judge) and prompt-injection attacks — needs Ollama, ~30 min
 eval-full:
 	cd backend && uv run python -m eval.harness --generate --injection
 
-# regresný gate: zlyhá, ak metrika klesne o viac ako 2 body pod eval/baseline.json
+# regression gate: fails if a metric drops more than 2 points below eval/baseline.json
 eval-gate:
 	cd backend && uv run python -m eval.harness --generate --gate
 
 eval-baseline:
 	cd backend && uv run python -m eval.harness --generate --update-baseline
 
-# MCP server cez stdio (Claude Desktop / Claude Code)
+# MCP server over stdio (Claude Desktop / Claude Code)
 mcp:
 	cd backend && uv run python -m app.mcp_server
 
@@ -39,5 +46,5 @@ test:
 	cd frontend && pnpm build
 
 lint:
-	cd backend && uv run ruff check . && uv run mypy app eval
+	cd backend && uv run ruff check . && uv run ruff format --check . && uv run mypy app eval
 	cd frontend && pnpm lint

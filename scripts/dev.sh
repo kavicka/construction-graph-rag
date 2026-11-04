@@ -2,14 +2,20 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# voice (Whisper STT + Piper TTS) is an optional extra — on macOS install it;
+# --inexact keeps other extras (e.g. visual) that were installed by hand
+if [ "$(uname -s)" = "Darwin" ]; then
+  (cd backend && uv sync --inexact --extra voice)
+fi
+
 if ! curl -sf http://localhost:11434/api/version >/dev/null 2>&1; then
-  echo "→ štartujem ollama serve"
+  echo "→ starting ollama serve"
   nohup ollama serve >/tmp/ollama.log 2>&1 &
   sleep 2
 fi
 
-# zabíjame len naše dva servery — ollama daemon necháme bežať
-# exec: subshell sa NAHRADÍ serverom, takže kill PID trafí priamo server
+# kill only our two servers on exit — the ollama daemon keeps running
+# exec: the subshell is REPLACED by the server, so kill PID hits the server directly
 (cd backend && exec uv run uvicorn app.main:app --reload --port 8000) &
 BACK_PID=$!
 (cd frontend && exec pnpm dev) &

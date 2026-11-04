@@ -208,6 +208,8 @@ def test_guard_checks_question_before_history_rewrite(
 def test_mobile_voice_question_and_speech(
     client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Any
 ) -> None:
+    from app.workforce.speech import transcribe as real_transcribe
+
     _seed(client)
     prompts: list[str | None] = []
 
@@ -230,6 +232,14 @@ def test_mobile_voice_question_and_speech(
         "/api/attendance/ask/audio", files={"file": ("otazka.webm", b"x", "audio/webm")}
     )
     assert empty.status_code == 422
+
+    # bez extra `voice` (Linux, Docker) → 501 so slovenským vysvetlením, nie 500
+    monkeypatch.setattr("app.workforce.speech.transcribe", real_transcribe)
+    monkeypatch.setattr("app.workforce.speech.stt_available", lambda: False)
+    missing = client.post(
+        "/api/attendance/ask/audio", files={"file": ("otazka.webm", b"x", "audio/webm")}
+    )
+    assert missing.status_code == 501 and "prepis reči" in missing.json()["detail"]
 
     spoken: list[str] = []
     wav = tmp_path / "odpoved.wav"

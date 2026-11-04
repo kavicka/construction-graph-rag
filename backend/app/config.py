@@ -16,7 +16,8 @@ PROFILE_EMBEDDING_MODELS: dict[str, str] = {
     "high": "BAAI/bge-m3",
 }
 PROFILE_RERANKER_MODELS: dict[str, str] = {
-    "low": "jinaai/jina-reranker-v2-base-multilingual",
+    # mMiniLMv2 (Apache-2.0, ~120M) — multilingválny vrátane SK; jina-v2 je CC-BY-NC
+    "low": "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1",
     "high": "BAAI/bge-reranker-v2-m3",
 }
 

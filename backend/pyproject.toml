@@ -12,13 +12,11 @@ dependencies = [
     "lancedb>=0.37.1",
     "markdown>=3.11",
     "mcp[cli]>=2.3.0",
-    "mlx-whisper>=0.4.3",
     "networkx>=3.6.1",
     "ocrmac>=1.0.1; sys_platform == 'darwin'",
     "opentelemetry-api>=1.45.1",
     "opentelemetry-exporter-otlp-proto-http>=1.45.1",
     "opentelemetry-sdk>=1.45.1",
-    "piper-tts>=1.8.0",
     "pyarrow>=25.0.1",
     "pydantic-settings>=2.15.0",
     "python-multipart>=0.0.32",
@@ -33,6 +31,12 @@ dependencies = [
 [project.optional-dependencies]
 visual = [
     "colpali-engine>=0.3.10",
+]
+# Hlas (prepis + syntéza): `uv sync --extra voice`. Piper je GPL-3.0 — preto nie je povinný;
+# mlx-whisper beží len na Apple Silicon. Bez extra ostáva všetko textové.
+voice = [
+    "mlx-whisper>=0.4.3; sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "piper-tts>=1.8.0",
 ]
 
 [tool.ruff]
@@ -50,6 +54,7 @@ strict = true
 module = [
     "docling.*", "ocrmac.*", "Vision", "pyarrow.*", "pandas.*", "reportlab.*", "networkx.*",
     "weasyprint.*", "cffi.*", "markdown.*", "colpali_engine.*", "pypdfium2.*",
+    "mlx_whisper.*", "piper.*",
 ]
 ignore_missing_imports = true
 

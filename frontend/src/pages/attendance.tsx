@@ -9,6 +9,7 @@ import { Chip } from '@/components/wf/chip'
 import { AbsenceChoice, QuestionChoices } from '@/components/wf/question-choices'
 import { RecordButton } from '@/components/wf/record-button'
 import { ReportSummary } from '@/components/wf/report-summary'
+import { useVoice } from '@/hooks/use-voice'
 import {
   answerAudio,
   answerChoice,
@@ -282,6 +283,7 @@ function MainInput({
   prompt?: string
   compact?: boolean
 }) {
+  const { stt } = useVoice()
   const [typing, setTyping] = useState(false)
   const [text, setText] = useState('')
   const send = () => {
@@ -294,7 +296,7 @@ function MainInput({
   return (
     <div className={compact ? 'space-y-3' : 'space-y-4 rounded-lg border px-4 py-6'}>
       {prompt && <p className="text-center text-sm text-muted-foreground">{prompt}</p>}
-      {!typing ? (
+      {stt && !typing ? (
         <div className={compact ? 'flex flex-wrap items-center gap-3' : 'flex flex-col items-center gap-4'}>
           <RecordButton onRecorded={onAudio} disabled={busy} size={compact ? 'sm' : 'lg'} idleLabel={compact ? 'Nahrať' : 'Ťukni a hovor'} />
           <button
@@ -314,10 +316,12 @@ function MainInput({
             placeholder="Dnes som prišiel o siedmej, murovali sme priečky na 2. NP…"
             autoFocus
           />
-          <div className="flex justify-between gap-2">
-            <Button type="button" variant="ghost" onClick={() => setTyping(false)}>
-              Späť na hlas
-            </Button>
+          <div className={stt ? 'flex justify-between gap-2' : 'flex justify-end gap-2'}>
+            {stt && (
+              <Button type="button" variant="ghost" onClick={() => setTyping(false)}>
+                Späť na hlas
+              </Button>
+            )}
             <Button type="button" onClick={send} disabled={busy || !text.trim()} className="gap-2">
               <HugeiconsIcon icon={SentIcon} className="size-4" />
               Odoslať
@@ -342,6 +346,7 @@ function QuestionCard({
   total: number
   onUpdate: (r: Report) => void
 }) {
+  const { stt } = useVoice()
   const [muted, setMuted] = useState(readMuted)
   const [text, setText] = useState('')
   const [absence, setAbsence] = useState(false)
@@ -421,7 +426,7 @@ function QuestionCard({
         <QuestionChoices question={question} report={report} disabled={busy} onAnswer={(c) => viaChoice.mutate(c)} />
       ) : (
         <div className="space-y-3">
-          <RecordButton size="sm" idleLabel="Odpovedať hlasom" disabled={busy} onRecorded={(b) => viaAudio.mutate(b)} />
+          {stt && <RecordButton size="sm" idleLabel="Odpovedať hlasom" disabled={busy} onRecorded={(b) => viaAudio.mutate(b)} />}
           <form
             className="flex gap-2"
             onSubmit={(e) => {
@@ -429,7 +434,7 @@ function QuestionCard({
               if (text.trim()) viaText.mutate(text.trim())
             }}
           >
-            <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="alebo napíš odpoveď" className="h-11" />
+            <Input value={text} onChange={(e) => setText(e.target.value)} placeholder={stt ? 'alebo napíš odpoveď' : 'Napíš odpoveď'} className="h-11" />
             <Button type="submit" className="h-11" disabled={busy || !text.trim()} aria-label="Odoslať odpoveď">
               <HugeiconsIcon icon={SentIcon} className="size-4" />
             </Button>

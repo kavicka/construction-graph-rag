@@ -18,7 +18,7 @@ alebo natívne na macOS (rýchlejšie, Apple GPU):
 ```bash
 brew install ollama tesseract tesseract-lang pango
 make models
-cd backend && uv sync && cd ../frontend && pnpm install
+make install                        # uv sync --extra voice (hlas) + pnpm install
 make dev                            # backend :8000, frontend :5173
 ```
 

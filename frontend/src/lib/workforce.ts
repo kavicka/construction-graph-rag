@@ -383,6 +383,21 @@ export const ownerEditReport = (id: string, data: ReportData) =>
   call<Report>(`/api/attendance/reports/${id}`, body('PUT', { data }))
 export const questionSpeechUrl = (qid: string) => `/api/attendance/questions/${qid}/speech`
 
+/** Hlas na serveri je voliteľný (extra `voice`): stt = prepis (Whisper), tts = Piper. */
+export interface VoiceStatus {
+  stt: boolean
+  tts: boolean
+}
+
+/** Server bez /api/voice (staršia verzia) hlas mal vždy → predvolene zapnuté. */
+export async function fetchVoice(): Promise<VoiceStatus> {
+  try {
+    return await call<VoiceStatus>('/api/voice')
+  } catch {
+    return { stt: true, tts: true }
+  }
+}
+
 // --- otázky pracovníka na vlastné údaje (mobil, PLAN.md §17) -----------------------------
 
 export interface AskAnswer {

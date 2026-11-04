@@ -58,6 +58,21 @@ def _question_numbers(question: str) -> set[float]:
     return {float(n.replace(",", ".")) for n in NUM_RE.findall(question)}
 
 
+# Prah kosínusu pre embedding fallback podľa modelu (kalibrované na SK/CZ kategóriách
+# jedál: raňajky→Snídaně 0.84 áno, večeře→Snídaně 0.74 a vymyslená 0.39 nie).
+# E5 má anizotropný priestor — každá dvojica slov skončí na ~0.77–0.89 a raňajky sú
+# bližšie k obedu než k snídani, takže žiadny prah nerozlíši → fallback vypnutý (None).
+CATEGORY_SIM_FLOOR: dict[str, float | None] = {
+    "BAAI/bge-m3": 0.80,
+    "intfloat/multilingual-e5-small": None,
+}
+DEFAULT_CATEGORY_SIM_FLOOR = 0.80
+
+
+def _category_sim_floor(model_name: str) -> float | None:
+    return CATEGORY_SIM_FLOOR.get(model_name, DEFAULT_CATEGORY_SIM_FLOOR)
+
+
 def _match_known_category(name: str, known: list[str]) -> str | None:
     """Lexikálne (token_set) → fallback embedding — SK↔CZ synonymá
     (raňajky ↔ snídaně) lexika nevyrieši, multilingválny priestor áno."""
@@ -72,6 +87,9 @@ def _match_known_category(name: str, known: list[str]) -> str | None:
     from app.index.embedder import get_embedder
 
     embedder = get_embedder()
+    floor = _category_sim_floor(embedder.model_name)
+    if floor is None:
+        return None
     query_vec = embedder.embed_query(name)
     cat_vecs = embedder.embed_passages(known)
 
@@ -83,7 +101,7 @@ def _match_known_category(name: str, known: list[str]) -> str | None:
 
     scored = [(cosine(query_vec, v), c) for v, c in zip(cat_vecs, known, strict=True)]
     sim, cat = max(scored)
-    return cat if sim >= 0.55 else None
+    return cat if sim >= floor else None
 
 
 def extract_compose_plan(question: str, known_categories: list[str]) -> ComposePlan | None:

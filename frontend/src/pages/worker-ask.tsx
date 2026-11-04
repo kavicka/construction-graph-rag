@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { RecordButton } from '@/components/wf/record-button'
+import { useVoice } from '@/hooks/use-voice'
 import { askFirma, askFirmaAudio, askSpeech, type AskAnswer } from '@/lib/workforce'
 import { cn } from '@/lib/utils'
 import {
@@ -28,6 +29,7 @@ type Item = AskAnswer & { id: number }
 
 /** Pracovník sa pýta na svoje úlohy, dochádzku a hodiny — odpovedá kód z jeho údajov. */
 export default function WorkerAskPage() {
+  const { stt } = useVoice()
   const [items, setItems] = useState<Item[]>([])
   const [text, setText] = useState('')
   const nextId = useRef(1)
@@ -116,7 +118,7 @@ export default function WorkerAskPage() {
           <HugeiconsIcon icon={SentIcon} className="size-4" />
         </Button>
       </form>
-      <RecordButton size="sm" idleLabel="Opýtať sa hlasom" disabled={busy} onRecorded={(b) => viaAudio.mutate(b)} />
+      {stt && <RecordButton size="sm" idleLabel="Opýtať sa hlasom" disabled={busy} onRecorded={(b) => viaAudio.mutate(b)} />}
     </div>
   )
 }

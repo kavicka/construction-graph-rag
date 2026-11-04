@@ -49,6 +49,16 @@ def test_effective_rerank_follows_profile(monkeypatch: pytest.MonkeyPatch) -> No
     assert get_settings().effective_reranker_model == "BAAI/bge-reranker-v2-m3"
 
 
+def test_low_reranker_is_permissive_and_routed_by_fastembed_support() -> None:
+    from app.config import PROFILE_RERANKER_MODELS
+    from app.retrieve.rerank import _fastembed_supports
+
+    # CC-BY-NC (jina-v2) nesmie byť default — repo je MIT
+    assert PROFILE_RERANKER_MODELS["low"] == "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
+    assert not _fastembed_supports(PROFILE_RERANKER_MODELS["low"])  # → sentence-transformers
+    assert _fastembed_supports("Xenova/ms-marco-MiniLM-L-6-v2")
+
+
 HISTORY = [
     {"role": "user", "content": "Aká je cena diela Agátová?"},
     {"role": "assistant", "content": "Cena je 4 860 000 EUR [1]."},

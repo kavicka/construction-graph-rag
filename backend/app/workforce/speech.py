@@ -1,11 +1,15 @@
 """Reč: prepis (mlx-whisper) a syntéza (Piper) — obe lokálne, modely sa načítajú lenivo.
 
+Obe knižnice sú voliteľné (`uv sync --extra voice`; mlx-whisper len na Apple Silicon).
+Bez Pipera sú otázky len textové, bez Whispera prepis vráti 501 s vysvetlením.
+
 Prepis: ľubovoľný formát z mobilu (webm/opus, mp4/aac, ogg, m4a, wav) → ffmpeg → 16 kHz mono
 wav → Whisper so slovenčinou a slovníkom stavby (initial_prompt: názvy stavieb a úloh),
 aby lepšie trafil žargón. Jeden prepis naraz — MLX model zdieľa GPU pamäť.
 """
 
 import hashlib
+import importlib.util
 import logging
 import re
 import subprocess
@@ -15,6 +19,8 @@ import wave
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
+
+from fastapi import HTTPException
 
 from app.workforce.config import get_workforce_settings
 
@@ -35,6 +41,24 @@ HALLUCINATIONS = re.compile(
 
 class SpeechError(RuntimeError):
     pass
+
+
+class SpeechUnavailable(HTTPException):
+    """Chýba voliteľná závislosť — API ju vráti ako 501, prepis na pozadí ako chybu výpisu."""
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(status_code=501, detail=detail)
+
+    def __str__(self) -> str:
+        return str(self.detail)
+
+
+def _installed(module: str) -> bool:
+    return importlib.util.find_spec(module) is not None
+
+
+def stt_available() -> bool:
+    return _installed("mlx_whisper")
 
 
 def to_wav16k(src: Path, dst: Path) -> float:
@@ -94,7 +118,12 @@ def vocabulary_prompt(sites: list[str], tasks: list[str], names: list[str]) -> s
 
 def transcribe(audio_path: Path, prompt: str | None = None) -> str:
     """Audio súbor → slovenský text."""
-    import mlx_whisper  # type: ignore[import-untyped]
+    if not stt_available():
+        raise SpeechUnavailable(
+            "prepis reči nie je na tomto serveri dostupný (vyžaduje Apple Silicon "
+            "a `uv sync --extra voice`) — napíš to textom"
+        )
+    import mlx_whisper
 
     with tempfile.TemporaryDirectory() as tmp:
         wav = Path(tmp) / "audio.wav"
@@ -116,6 +145,10 @@ def transcribe(audio_path: Path, prompt: str | None = None) -> str:
 
 @lru_cache
 def _voice() -> Any:
+    if not _installed("piper"):
+        raise SpeechUnavailable(
+            "syntéza reči nie je na tomto serveri nainštalovaná (`uv sync --extra voice`)"
+        )
     from piper import PiperVoice
 
     settings = get_workforce_settings()
@@ -129,6 +162,8 @@ def _voice() -> Any:
 
 
 def tts_available() -> bool:
+    if not _installed("piper"):
+        return False
     settings = get_workforce_settings()
     return (settings.voices_dir / f"{settings.tts_voice}.onnx").exists()
 
