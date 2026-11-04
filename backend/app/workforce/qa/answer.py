@@ -1,7 +1,7 @@
-"""Odpovede z firemných údajov — šablóny, ktoré plní kód. LLM do textu nezasahuje.
+"""Answers from company data — templates filled by code. The LLM does not touch the text.
 
-Každý čas, dátum, počet hodín aj percento pochádza priamo z DB; formát je slovenský
-(„št 8. 10.“, „6:30“, „7,5 h“). Texty sú rodovo neutrálne.
+Every time, date, hour count and percentage comes straight from the DB; the format is Slovak
+(„št 8. 10.“, „6:30“, „7,5 h“). Texts are gender-neutral.
 """
 
 from collections.abc import Callable
@@ -49,13 +49,13 @@ class Ctx:
         return tasks
 
     def subjects(self) -> list[WorkerRef]:
-        """Pracovníci, o ktorých je reč — menovaní, inak všetci aktívni (len admin)."""
+        """The workers in question — those named, otherwise all active ones (admin only)."""
         if self.query.workers:
             return self.query.workers
         return [w for w in self.snap.workers if w.active]
 
 
-# --- formát -----------------------------------------------------------------------------
+# --- format -----------------------------------------------------------------------------
 
 
 def hours(value: float) -> str:
@@ -179,7 +179,7 @@ def attendance_text(data: ReportData) -> str:
     return ", ".join(bits) if bits else "bez časov"
 
 
-# --- typy otázok ------------------------------------------------------------------------
+# --- question types ------------------------------------------------------------------------
 
 
 def _day(ctx: Ctx) -> date:
@@ -191,7 +191,7 @@ def planned_on(worker_id: str, day: date, ctx: Ctx) -> list[TaskFact]:
     if day >= ctx.today:
         by_id = {t.id: t.as_dict() for t in ctx.snap.tasks}
         return [t for t in mine if is_active_on(t.as_dict(), day, by_id)]
-    # minulosť: dnešný stav úlohy nehovorí, čo sa robilo vtedy → podľa termínov
+    # past: a task's current state does not say what was done then → go by the deadlines
     out = []
     for t in mine:
         start, done = _d(t.date_from), _d(t.done_on)
@@ -593,9 +593,9 @@ STEP_LABELS: dict[Intent, str] = {
 
 
 def markdown_blocks(text: str) -> str:
-    """Riadky šablón → markdown: prázdny riadok medzi všetkým okrem po sebe idúcich položiek
-    zoznamu. Inak by markdown zlial nadpis s ďalším riadkom do jedného odseku a riadok za
-    zoznamom prilepil k poslednej položke."""
+    """Template lines → markdown: a blank line between everything except consecutive list
+    items. Otherwise markdown would merge a heading with the next line into one paragraph and
+    glue the line after a list onto the last item."""
     out: list[str] = []
     prev = ""
     for line in text.splitlines():

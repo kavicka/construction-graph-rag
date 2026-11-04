@@ -1,4 +1,4 @@
-"""Typy generovaných dokumentov a ich osnovy."""
+"""Generated document types and their outlines."""
 
 from dataclasses import dataclass, field
 from typing import Literal
@@ -23,7 +23,7 @@ DOC_TYPE_LABELS: dict[Lang, dict[DocType, str]] = {
     },
 }
 
-# pevné osnovy šablón; "free" si osnovu navrhne LLM
+# fixed template outlines; for "free" the LLM proposes the outline
 OUTLINES: dict[Lang, dict[DocType, list[str]]] = {
     "sk": {
         "free": [],

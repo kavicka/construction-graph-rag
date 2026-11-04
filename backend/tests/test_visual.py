@@ -14,12 +14,12 @@ from eval.pdfgen import render_pages
 
 
 class FakeVisual:
-    """Strana = 4 patche; patch 0 nesie 'tému' strany podľa farby pixelu vľavo hore."""
+    """Page = 4 patches; patch 0 carries the page's 'theme' by the colour of the top-left pixel."""
 
     def embed_images(self, images: list[object]) -> list[np.ndarray]:
         out = []
         for img in images:
-            dark = np.asarray(img).mean() < 250  # stránka s tabuľkou je tmavšia
+            dark = np.asarray(img).mean() < 250  # a page with a table is darker
             topic = np.array([1.0, 0.0, 0.0]) if dark else np.array([0.0, 1.0, 0.0])
             out.append(np.vstack([topic, np.eye(3)[2], np.eye(3)[2], np.eye(3)[2]]))
         return out
@@ -58,7 +58,7 @@ def test_index_and_search_pages(tmp_path: Path) -> None:
     db.init_db()
     pdf = _pdf(tmp_path)
     assert index_pages("d1", pdf, FakeVisual()) == 2
-    assert index_pages("d1", pdf, FakeVisual()) == 2  # idempotentné
+    assert index_pages("d1", pdf, FakeVisual()) == 2  # idempotent
     top = search_pages("kde je tá tabuľka?", k=1, embedder=FakeVisual())
     assert top[0][:2] == ("d1", 2)
     assert search_pages("tabuľka", doc_ids={"iny"}, embedder=FakeVisual()) == []

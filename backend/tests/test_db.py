@@ -38,6 +38,6 @@ def test_pages_and_tables() -> None:
     assert len(tables) == 1
     assert tables[0]["caption"] == "Tab. 1"
 
-    # re-ingest musí tabuľky nahradiť, nie duplikovať
+    # re-ingest must replace the tables, not duplicate them
     db.delete_document_tables("d1")
     assert db.list_tables("d1") == []

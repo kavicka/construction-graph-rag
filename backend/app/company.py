@@ -1,9 +1,9 @@
-"""Nastavenia firmy — údaje a hlavička/pätička generovaných dokumentov.
+"""Company settings — details and header/footer of generated documents.
 
-Jeden riadok v SQLite (`company_settings`, id = 1) s JSON payloadom. Vzhľad dokumentov
-(farby, písmo) tu NIE je — určuje ho téma aplikácie (`app.docgen.theme`). Staré uložené
-nastavenia s poľami logo/farby/font sa načítajú bez nich (neznáme polia sa ignorujú).
-Validácia je v Pydantic modeli, DB vrstva je hlúpa.
+One row in SQLite (`company_settings`, id = 1) with a JSON payload. The look of documents
+(colours, font) is NOT stored here — it is set by the app theme (`app.docgen.theme`). Old saved
+settings with logo/colour/font fields load without them (unknown fields are ignored).
+Validation lives in the Pydantic model; the DB layer is dumb.
 """
 
 import json
@@ -15,7 +15,7 @@ from app.docgen.theme import THEME
 
 
 class CompanySettings(BaseModel):
-    # údaje firmy
+    # company details
     name: str = Field(default="", max_length=120)
     street: str = Field(default="", max_length=120)
     city: str = Field(default="", max_length=80)
@@ -29,7 +29,7 @@ class CompanySettings(BaseModel):
     website: str = Field(default="", max_length=120)
     iban: str = Field(default="", max_length=42)
 
-    # hlavička a pätička dokumentov (vzhľad určuje téma, nie firma)
+    # document header and footer (the look comes from the theme, not the company)
     header_text: str = Field(default="", max_length=160)
     footer_text: str = Field(default="", max_length=300)
     show_page_numbers: bool = True
@@ -58,8 +58,8 @@ class CompanySettings(BaseModel):
             raise ValueError("neplatný e-mail")
         return v
 
-    # spätná kompatibilita pre šablóny, ktoré ešte čítajú company.primary_color/accent_color
-    # (workforce výpisy) — farby sú z témy, nie z nastavení
+    # backward compatibility for templates that still read company.primary_color/accent_color
+    # (workforce reports) — colours come from the theme, not the settings
     @property
     def primary_color(self) -> str:
         return THEME.foreground
@@ -92,7 +92,7 @@ def load_company() -> CompanySettings:
         row = conn.execute("SELECT data_json FROM company_settings WHERE id = 1").fetchone()
     if row is None:
         return CompanySettings()
-    # model_validate (nie construct) — staré uložené dáta prejdú cez defaulty nových polí
+    # model_validate (not construct) — old stored data goes through the defaults of new fields
     return CompanySettings.model_validate(json.loads(row["data_json"]))
 
 

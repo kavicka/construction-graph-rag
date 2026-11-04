@@ -1,4 +1,4 @@
-"""Redakcia tajomstiev — vzory, návestia, falošné poplachy a priebežný stream (PLAN.md §17)."""
+"""Secret redaction — patterns, labels, false alarms and the streaming case (PLAN.md §17)."""
 
 import itertools
 
@@ -47,7 +47,7 @@ def test_bearer_token() -> None:
         ("heslo je Kral2026!", "Kral2026"),
         ("The password is Summer2026", "Summer2026"),
         ("Heslo:\nBrana-7731", "Brana-7731"),
-        ("WPA kľúč „Stavba#2026“", None),  # bez oddeľovača — nejednoznačné, nevadí
+        ("WPA kľúč „Stavba#2026“", None),  # no separator — ambiguous, doesn't matter
     ],
 )
 def test_label_values(text: str, secret: str | None) -> None:

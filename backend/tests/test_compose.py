@@ -37,19 +37,19 @@ def test_plan_maps_categories_and_validates(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 def test_plan_rejects_invented_budget(monkeypatch: pytest.MonkeyPatch) -> None:
-    invented = VALID_PLAN.replace("1500", "1400")  # model si „dopočítal" budget
+    invented = VALID_PLAN.replace("1500", "1400")  # the model "calculated" a budget itself
     monkeypatch.setattr("app.retrieve.compose.generate_sync", lambda *a, **kw: invented)
     assert extract_compose_plan(QUESTION, KNOWN) is None
 
 
 def test_plan_sanitizes_invented_slot_limit(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Model dopočítal slot limit (1500-870=630) → limit sa zmaže, plán prežije."""
+    """The model computed a slot limit (1500-870=630) → the limit is dropped, the plan survives."""
     invented = VALID_PLAN.replace('"max_value": null', '"max_value": 630')
     monkeypatch.setattr("app.retrieve.compose.generate_sync", lambda *a, **kw: invented)
     plan = extract_compose_plan(QUESTION, KNOWN)
     assert plan is not None
-    assert plan.slots[0].max_value == 870  # legitímny limit z otázky ostal
-    assert plan.slots[1].max_value is None  # vymyslený 630 zmazaný
+    assert plan.slots[0].max_value == 870  # legitimate limit from the question was kept
+    assert plan.slots[1].max_value is None  # invented 630 removed
 
 
 class FakeEmbedder:
@@ -72,7 +72,7 @@ class FakeEmbedder:
 
 
 def test_cross_language_category_via_embedding(monkeypatch: pytest.MonkeyPatch) -> None:
-    """SK 'raňajky' → CZ 'Snídaně' — lexika zlyhá, embedding mapuje."""
+    """SK 'raňajky' → CZ 'Snídaně' — the lexicon fails, the embedding maps."""
     monkeypatch.setattr("app.index.embedder.get_embedder", FakeEmbedder)
     plan_json = VALID_PLAN.replace('"category": "snidane"', '"category": "raňajky"')
     monkeypatch.setattr("app.retrieve.compose.generate_sync", lambda *a, **kw: plan_json)
@@ -82,7 +82,7 @@ def test_cross_language_category_via_embedding(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_e5_skips_embedding_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
-    """E5 nemá rozlišujúce kosínusy (všetko ~0.8) → mapuje sa len lexikálne."""
+    """E5 has no discriminating cosines (everything ~0.8) → maps lexically only."""
 
     class E5Embedder(FakeEmbedder):
         model_name = "intfloat/multilingual-e5-small"
@@ -134,7 +134,7 @@ def test_run_compose_end_to_end(meals: None, monkeypatch: pytest.MonkeyPatch) ->
     result = run_compose(QUESTION, KNOWN)
     assert result is not None
     answer, sources, evidence = result
-    # rizoto (829, 74b) + kaše (447, 30b) = 1276 ≤ 1500, max bielkoviny
+    # rizoto (829, 74b) + kaše (447, 30b) = 1276 ≤ 1500, max protein
     assert "Kuřecí rizoto" in answer
     assert "Ovesná kaše" in answer
     assert "1276" in answer
@@ -150,7 +150,7 @@ def test_run_compose_impossible_shows_nearest(meals: None, monkeypatch: pytest.M
     answer, sources, _ = result
     assert "NEDÁ splniť" in answer
     assert "najbližšia" in answer
-    # min kombinácia pod obed≤870: rizoto(829)+kaše(447)=1276 → o 276 nad 1000
+    # min combination under lunch≤870: rizoto(829)+kaše(447)=1276 → 276 over 1000
     assert "1276" in answer
     assert "276" in answer
     assert sources, "aj najbližšia kombinácia má citovateľné zdroje"

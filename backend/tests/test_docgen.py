@@ -75,9 +75,9 @@ def test_intent_detected(question: str, doc_type: str, lang: str) -> None:
     "question",
     [
         "Aký bol prietok pri meraní?",
-        "Čo hovorí dokument o skladovaní?",  # dokument bez slovesa tvorby
-        "Vytvor zoznam položiek do 500 kcal",  # sloveso bez typu dokumentu
-        "zhrň mi kalibráciu",  # bez PDF → bežná odpoveď v chate
+        "Čo hovorí dokument o skladovaní?",  # document without a creation verb
+        "Vytvor zoznam položiek do 500 kcal",  # verb without a document type
+        "zhrň mi kalibráciu",  # no PDF → ordinary chat answer
         "Which document mentions calibration?",
     ],
 )
@@ -100,7 +100,7 @@ def test_markdown_escapes_raw_html_and_links_citations() -> None:
     assert "&lt;script&gt;" in out
     assert '<a href="#src-1">1</a>' in out
     assert '<a href="#src-2">2</a>' in out
-    assert "src-9" not in out  # neexistujúci zdroj sa zahodí
+    assert "src-9" not in out  # a non-existent source is dropped
 
 
 def test_markdown_drops_fully_invalid_citation() -> None:
@@ -123,13 +123,13 @@ def test_build_html_uses_app_theme(ready_db: None) -> None:
         Outline("Názov", "Podnadpis", ["A", "B"]), "report", "sk", ["Prvá [1].", "Druhá."]
     )
     out = build_html(content, company, [_src(1), _src(2)])
-    # téma aplikácie: oranžový akcent, system-ui text, JetBrains Mono štítky
+    # app theme: orange accent, system-ui text, JetBrains Mono labels
     assert THEME.primary in out and THEME.foreground in out
     assert "system-ui" in out
     assert "jetbrains-mono-400-latin.woff2" in out and "jetbrains-mono-700-ext.woff2" in out
     assert "Firma &lt;b&gt;s.r.o.&lt;/b&gt;" in out  # autoescape
     assert "IČO: 12345678" in out
-    # citovaný je len zdroj 1 → zoznam zdrojov ukáže len ten
+    # only source 1 is cited → the sources list shows only that one
     assert 'id="src-1"' in out
     assert 'id="src-2"' not in out
 
@@ -180,7 +180,7 @@ def test_outline_uses_llm_json(monkeypatch: pytest.MonkeyPatch) -> None:
     free = plan_outline("vygeneruj dokument", "free", "sk", [_src(1)])
     assert free.title == "Prehľad zmlúv 2027"
     assert free.headings == ["Úvod", "Termíny", "Riziká"]
-    # šablóna má pevnú osnovu, LLM dáva len názov
+    # the template has a fixed outline, the LLM supplies only the title
     report = plan_outline("priprav report", "report", "sk", [_src(1)])
     assert report.headings == OUTLINES["sk"]["report"]
 

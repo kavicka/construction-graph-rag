@@ -1,6 +1,6 @@
-"""Stavba grafu jedného dokumentu. Beží v ingest threade po embeddingu.
+"""Build the graph for a single document. Runs in the ingest thread after embedding.
 
-Idempotentné: najprv sa zmaže starý doc-viazaný podgraf.
+Idempotent: the old document-bound subgraph is deleted first.
 """
 
 import json
@@ -19,7 +19,7 @@ from app.index.lancedb_store import document_chunks
 
 logger = logging.getLogger(__name__)
 
-TABLE_QUANTITY_LINES = 12  # hlavička + prvé riadky — reprezentatívne jednotky
+TABLE_QUANTITY_LINES = 12  # header + first rows — representative units
 
 
 def build_document_graph(doc_id: str) -> dict[str, int]:
@@ -106,7 +106,7 @@ def build_document_graph(doc_id: str) -> dict[str, int]:
             new_concept_ids.append(con_id)
             counts["concepts"] += 1
 
-    # tabuľky: uzol + jednotky z hlavičky a prvých riadkov
+    # tables: node + units from the header and first rows
     for t in db.list_tables(doc_id):
         tid = gs.table_node_id(t["id"])
         db.upsert_graph_node(

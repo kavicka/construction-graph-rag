@@ -1,8 +1,8 @@
-"""LLM-as-judge pre faithfulness: rozloží odpoveď na tvrdenia a overí ich voči zdrojom.
+"""LLM-as-judge for faithfulness: splits the answer into claims and checks them against the sources.
 
-Sudca je ten istý lokálny model ako generátor (qwen3:4b) — self-preference bias je
-známe obmedzenie; čísla preto slúžia na porovnanie konfigurácií medzi sebou, nie ako
-absolútna pravda. Presné čísla kontroluje deterministicky `contains_expected`.
+The judge is the same local model as the generator (qwen3:4b) — self-preference bias is a
+known limitation; the numbers therefore serve to compare configurations with each other, not as
+absolute truth. Exact numbers are checked deterministically by `contains_expected`.
 """
 
 import logging
@@ -37,7 +37,7 @@ ODPOVEĎ:
 
 
 def judge_faithfulness(answer: str, sources_text: str) -> float | None:
-    """Podiel podporených tvrdení; None ak sudca zlyhal alebo odpoveď nemá tvrdenia."""
+    """Share of supported claims; None if the judge failed or the answer has no claims."""
     try:
         raw = generate_sync(
             get_settings().answer_model,

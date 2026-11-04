@@ -1,7 +1,7 @@
-"""Reciprocal Rank Fusion — kombinuje poradia z viacerých vyhľadávaní bez ladenia váh.
+"""Reciprocal Rank Fusion — combines rankings from multiple searches without tuning weights.
 
-RRF skóre = Σ 1/(K + rank). Default namiesto neurálneho rerankera (nula RAM);
-reranker je opt-in pre veľké stroje (config, fáza 5).
+RRF score = Σ 1/(K + rank). Default instead of a neural reranker (zero RAM);
+the reranker is opt-in for big machines (config, phase 5).
 """
 
 from typing import Any
@@ -16,7 +16,7 @@ def rrf_fuse(
     top_k: int = 8,
     weights: list[float] | None = None,
 ) -> list[dict[str, Any]]:
-    """`weights` per zoznam (default 1.0) — slabší signál (graf) nesmie prebiť dense/BM25."""
+    """`weights` per list (default 1.0) — a weaker signal (graph) must not outrank dense/BM25."""
     scores: dict[str, float] = {}
     best_row: dict[str, dict[str, Any]] = {}
     for i, results in enumerate(result_lists):

@@ -1,4 +1,4 @@
-"""Vygenerované branded PDF dokumenty."""
+"""Generated branded PDF documents."""
 
 from fastapi import APIRouter, HTTPException
 from fastapi.concurrency import run_in_threadpool
@@ -39,7 +39,7 @@ def _out(row: dict) -> GeneratedOut:  # type: ignore[type-arg]
 
 
 def _visible(row: dict) -> bool:  # type: ignore[type-arg]
-    """Bez prihlasovania vidno všetko; inak len vlastné dokumenty (autor alebo jeho chat)."""
+    """Without login everything is visible; otherwise only own documents (author or their chat)."""
     scope = current_scope()
     if scope.user_id is None:
         return True

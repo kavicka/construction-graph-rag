@@ -1,4 +1,4 @@
-"""Import úloh z dokumentu: upload → návrhy (na pozadí) → úpravy a schválenie → úlohy."""
+"""Task import from a document: upload → proposals (background) → edits and approval → tasks."""
 
 from datetime import date
 from typing import Any, Literal
@@ -70,7 +70,7 @@ def _import_job(source_id: str) -> None:
 
 @router.get("/suggest-previous")
 async def suggest(site_id: str, filename: str) -> SourceOut | None:
-    """Je nahrávaný súbor nová verzia už importovaného dokumentu?"""
+    """Is the uploaded file a new version of an already imported document?"""
     require_admin()
     row = await run_in_threadpool(suggest_previous, site_id, filename)
     return await run_in_threadpool(_source_out, row) if row else None
@@ -170,7 +170,7 @@ async def update_draft(source_id: str, draft_id: str, body: DraftUpdate) -> Draf
     if data.get("assignees") != draft["data"].get("assignees"):
         data["assign_reason"] = "upravené majiteľom"
     if body.date_from or body.date_to:
-        data["date_how"] = "absolute"  # termín zadal majiteľ
+        data["date_how"] = "absolute"  # the owner set the deadline
     if draft["kind"] != "cancelled":
         score_draft(data)
     await run_in_threadpool(lambda: store.update_draft(draft_id, data=data, decision=body.decision))
@@ -185,7 +185,7 @@ class DecideAllIn(BaseModel):
 
 @router.post("/{source_id}/decide-all")
 async def decide_all(source_id: str, body: DecideAllIn) -> ImportDetail:
-    """„Schváliť všetko“ — len nerozhodnuté návrhy; tie bez termínu ostanú nerozhodnuté."""
+    """„Schváliť všetko“ (Approve all) — undecided proposals only; those without a deadline stay."""
     require_admin()
 
     def run() -> None:
@@ -197,7 +197,7 @@ async def decide_all(source_id: str, body: DecideAllIn) -> ImportDetail:
                 and d["kind"] in ("new", "changed")
                 and (draft_issues(d["data"]) or d["data"].get("duplicate_of"))
             ):
-                continue  # bez termínu alebo možná duplicita — rozhodne majiteľ sám
+                continue  # no deadline or a possible duplicate — the owner decides
             store.update_draft(d["id"], data=d["data"], decision=body.decision)
 
     await run_in_threadpool(run)

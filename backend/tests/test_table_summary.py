@@ -26,4 +26,4 @@ def test_summarize_falls_back_when_ollama_down(monkeypatch: pytest.MonkeyPatch) 
 
     monkeypatch.setattr("app.index.chunker.generate_sync", boom)
     s = summarize_table("Tab. 1", MD, 2, 2)
-    assert "Prietok" in s  # deterministický fallback, ingest nesmie spadnúť
+    assert "Prietok" in s  # deterministic fallback, ingest must not crash

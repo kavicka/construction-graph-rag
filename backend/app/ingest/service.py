@@ -1,9 +1,9 @@
-"""Orchestrácia ingest jobov.
+"""Orchestration of ingest jobs.
 
-Semafor 1 — nikdy dva ingesty naraz (RAM disciplína, platí aj na high profile:
-paralelné parsovanie nezrýchli ML modely, len zdvojnásobí pamäť).
+Semaphore 1 — never two ingests at once (RAM discipline, applies on the high profile too:
+parallel parsing does not speed up the ML models, it only doubles memory).
 
-Pipeline: parsing → tables (LLM sumáre) → embedding (chunky → LanceDB) → done
+Pipeline: parsing → tables (LLM summaries) → embedding (chunks → LanceDB) → done
 """
 
 import asyncio
@@ -39,7 +39,7 @@ def schedule_ingest(doc_id: str) -> None:
 
 
 def _index_document(doc_id: str) -> int:
-    """Chunking + sumáre tabuliek + embeddingy + zápis do LanceDB. Beží v to_thread."""
+    """Chunking + table summaries + embeddings + write to LanceDB. Runs in to_thread."""
     document = load_document(doc_id)
     chunks = chunk_text_items(doc_id, document)
 
@@ -55,7 +55,7 @@ def _index_document(doc_id: str) -> int:
     embedder = get_embedder()
     vectors = embedder.embed_passages([c.text for c in chunks])
     stored = replace_document_chunks(doc_id, chunks, vectors)
-    # súradnice pre zvýraznenie citácie v PDF — v SQLite, schéma LanceDB ostáva stabilná
+    # coordinates for citation highlighting in the PDF — in SQLite, the LanceDB schema stays stable
     db.replace_chunk_boxes(doc_id, {c.chunk_id: c.boxes for c in chunks})
 
     doc = db.get_document(doc_id)

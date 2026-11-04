@@ -1,4 +1,4 @@
-"""DocumentContent + nastavenia firmy → branded HTML → PDF."""
+"""DocumentContent + company settings → branded HTML → PDF."""
 
 import html
 import re
@@ -27,7 +27,7 @@ CITE_RE = re.compile(r"\[(\d+(?:\s*,\s*\d+)*)\]")
 
 
 def _cite_links(body_html: str, valid: set[int]) -> str:
-    """[1] / [1, 3] → horný index s odkazom na zoznam zdrojov; neplatné čísla zahodí."""
+    """[1] / [1, 3] → superscript linking to the source list; invalid numbers are dropped."""
 
     def repl(m: re.Match[str]) -> str:
         nums = [int(x) for x in m.group(1).split(",") if int(x) in valid]
@@ -40,14 +40,14 @@ def _cite_links(body_html: str, valid: set[int]) -> str:
 
 
 def markdown_to_html(body_md: str, valid_citations: set[int]) -> str:
-    # surové HTML od LLM sa escapuje — do PDF ide len to, čo vyrobí markdown
+    # raw HTML from the LLM is escaped — only what markdown produces goes into the PDF
     escaped = html.escape(body_md, quote=False)
     rendered = markdown.markdown(escaped, extensions=["tables", "sane_lists"])
     return _cite_links(rendered, valid_citations)
 
 
 def _page_counter_css(template: str) -> str:
-    """'Strana {page} z {pages}' → CSS content s countermi."""
+    """'Strana {page} z {pages}' → CSS content with counters."""
     parts = re.split(r"(\{page\}|\{pages\})", template)
     css = []
     for part in parts:
@@ -72,7 +72,7 @@ def build_html(
     sections = [
         {"heading": s.heading, "html": markdown_to_html(s.body_md, valid)} for s in content.sections
     ]
-    # v zozname zdrojov len tie, ktoré dokument naozaj cituje (inak všetky)
+    # list only the sources the document actually cites (otherwise all)
     cited = {
         int(n)
         for s in content.sections

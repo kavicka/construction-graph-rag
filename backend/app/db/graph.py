@@ -44,7 +44,7 @@ def upsert_graph_edge(
 
 
 def delete_document_graph(doc_id: str) -> None:
-    """Zmaž doc-viazané uzly + ich hrany + osirotené zdieľané uzly."""
+    """Delete document-bound nodes + their edges + orphaned shared nodes."""
     with get_conn() as conn:
         doc_nodes = [
             r["id"]
@@ -59,7 +59,7 @@ def delete_document_graph(doc_id: str) -> None:
                 doc_nodes + doc_nodes,
             )
             conn.execute(f"DELETE FROM graph_nodes WHERE id IN ({placeholders})", doc_nodes)
-        # zdieľané uzly bez akejkoľvek hrany už nič nedokladá — preč
+        # shared nodes with no edge left are backed by nothing — remove them
         conn.execute(
             """DELETE FROM graph_nodes WHERE doc_id IS NULL AND id NOT IN
                (SELECT src FROM graph_edges UNION SELECT dst FROM graph_edges)"""

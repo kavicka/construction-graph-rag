@@ -71,10 +71,10 @@ async def upload_documents(files: list[UploadFile]) -> list[DocumentOut]:
             )
         row, created = await run_in_threadpool(store_document, name, data, fmt)
         if not created and not await run_in_threadpool(can_access_document, row["id"]):
-            # identický obsah ako dokument, ktorý používateľ nevidí — nič o ňom neprezradiť
+            # identical content to a document the user can't see — reveal nothing about it
             raise HTTPException(status_code=409, detail=f"{name}: rovnaký obsah už existuje")
         if created and current_scope().groups and not current_scope().unrestricted:
-            # nahraté členom: vidí ho jeho skupina, admin môže prístup rozšíriť
+            # uploaded by a member: their group sees it, an admin can widen access
             groups = sorted(current_scope().groups)
             await run_in_threadpool(db.set_document_access, row["id"], json.dumps(groups))
             row = {**row, "access_json": json.dumps(groups)}
@@ -105,7 +105,7 @@ async def get_document_detail(doc_id: str) -> DocumentDetail:
 
 @router.post("/documents/{doc_id}/reindex", status_code=202)
 async def reindex_document(doc_id: str) -> DocumentOut:
-    """Znovu spustí celú pipeline (parse → index → graf) — po upgrade ingestu."""
+    """Re-runs the whole pipeline (parse → index → graph) — after an ingest upgrade."""
     require_admin()
     row = await run_in_threadpool(ensure_document, doc_id)
     if not document_path(doc_id, row["format"]).exists():
@@ -140,8 +140,8 @@ async def _file_response(doc_id: str, *, pdf_only: bool) -> FileResponse:
             filename=row["filename"],
             content_disposition_type="inline",
         )
-    # HTML/MD/Office od používateľa nesmú bežať v origine appky (XSS → admin session):
-    # stiahnutie + sandbox CSP + bez MIME sniffingu
+    # user-supplied HTML/MD/Office must not run in the app's origin (XSS → admin session):
+    # download + sandbox CSP + no MIME sniffing
     return FileResponse(
         path,
         media_type=media_type(row["format"]),
@@ -161,7 +161,7 @@ async def get_document_pdf(doc_id: str) -> FileResponse:
 
 @router.get("/documents/{doc_id}/file")
 async def get_document_file(doc_id: str) -> FileResponse:
-    """Originálny súbor v pôvodnom formáte (DOCX, PPTX, …)."""
+    """Original file in its original format (DOCX, PPTX, …)."""
     return await _file_response(doc_id, pdf_only=False)
 
 
@@ -179,7 +179,7 @@ class ChunkOut(BaseModel):
 
 @router.get("/chunks/{chunk_id}")
 async def get_chunk(chunk_id: str) -> ChunkOut:
-    """Citovaná pasáž — prehliadač pre formáty bez strán (DOCX, HTML, MD…)."""
+    """Cited passage — viewer for formats without pages (DOCX, HTML, MD…)."""
     rows = await run_in_threadpool(get_chunks_by_ids, [chunk_id])
     if not rows:
         raise HTTPException(status_code=404, detail="pasáž neexistuje")

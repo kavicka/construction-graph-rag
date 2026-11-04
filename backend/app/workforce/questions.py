@@ -1,8 +1,7 @@
-"""Texty doplňujúcich otázok — šablóny, nie LLM: predvídateľné, krátke a dobre sa čítajú
-nahlas. Formulácie sú rodovo neutrálne („O koľkej sa ti začal pracovný deň?“).
+"""Texts of follow-up questions — templates, not the LLM: predictable, short and easy to read aloud.
+Wording is gender-neutral („O koľkej sa ti začal pracovný deň?“ — what time did your day start?).
 
-attempt 0 = prvá otázka, 1 = konkrétnejšie po nejasnej odpovedi, 2+ = výber (tlačidlá).
-"""
+attempt 0 = first question, 1 = more specific after an unclear answer, 2+ = choice (buttons)."""
 
 from typing import Any
 

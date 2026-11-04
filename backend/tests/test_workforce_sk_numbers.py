@@ -16,7 +16,7 @@ from app.workforce.sk_numbers import (
     ("text", "expected"),
     [
         ("prišiel som o pol ôsmej", (7, 30)),
-        ("prišiel som o pol uosmej", (7, 30)),  # chyba prepisu
+        ("prišiel som o pol uosmej", (7, 30)),  # transcription error
         ("o siedmej", (7, 0)),
         ("odišiel som o 4", (4, 0)),
         ("začal som 6:45", (6, 45)),
@@ -34,8 +34,8 @@ def test_time_candidates(text: str, expected: tuple[int, int]) -> None:
 def test_time_supported_rejects_invented() -> None:
     text = "Dnes som prišiel o pol ôsmej a robil som murovanie."
     assert time_supported("07:30", text)
-    assert not time_supported("08:30", text)  # klasická chyba: „pol ôsmej“ ≠ 8:30
-    assert not time_supported("16:00", text)  # odchod nepovedal
+    assert not time_supported("08:30", text)  # classic mistake: „pol ôsmej“ ≠ 8:30
+    assert not time_supported("16:00", text)  # did not say departure
 
 
 @pytest.mark.parametrize(
@@ -87,7 +87,7 @@ def test_to_24h() -> None:
 
 
 def test_conjunction_a_before_half_and_glued_preposition() -> None:
-    # „a“ ako spojka nezruší polhodinu; „Opol 7“ z Whispera = o pol siedmej
+    # „a“ as a conjunction does not cancel the half hour; „Opol 7“ from Whisper = o pol siedmej
     assert number_candidates("hodinu sme čakali na piesok a pol hodiny som upratoval") == {1.0, 0.5}
     assert number_candidates("dve a pol hodiny") == {2.5}
     assert time_candidates("Opol 7.") == {(6, 30)}

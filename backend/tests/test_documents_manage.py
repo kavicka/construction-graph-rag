@@ -28,11 +28,11 @@ def _office(package_dir: str) -> bytes:
     ("name", "data", "expected"),
     [
         ("a.pdf", b"%PDF-1.7 ...", "pdf"),
-        ("scan.bin", b"%PDF-1.4", "pdf"),  # PDF podľa hlavičky
+        ("scan.bin", b"%PDF-1.4", "pdf"),  # PDF by header
         ("zmluva.docx", _office("word/"), "docx"),
         ("deck.pptx", _office("ppt/"), "pptx"),
         ("tab.xlsx", _office("xl/"), "xlsx"),
-        ("fake.docx", _office("ppt/"), None),  # zip, ale nie Word
+        ("fake.docx", _office("ppt/"), None),  # zip, but not Word
         ("fake.docx", b"not a zip", None),
         ("page.htm", "<h1>Ťažký</h1>".encode(), "html"),
         ("notes.md", "# Poznámky".encode(), "md"),
@@ -83,7 +83,7 @@ def test_delete_document_everywhere(client: TestClient) -> None:
         chunk = client.get(f"/api/chunks/{doc_id}:t0").json()
         assert chunk["filename"] == "a.pdf"
 
-        assert client.delete(f"/api/documents/{doc_id}").status_code == 409  # ešte queued
+        assert client.delete(f"/api/documents/{doc_id}").status_code == 409  # still queued
         db.set_document_status(doc_id, "done", progress=1.0)
         assert client.delete(f"/api/documents/{doc_id}").status_code == 204
 
@@ -113,16 +113,16 @@ def test_inbox_sync_add_update_remove() -> None:
     assert len(first.added) == 1 and not first.updated and not first.removed
     doc = db.get_document(first.added[0])
     assert doc is not None and doc["source_path"] == "a.pdf"
-    assert sync_inbox().added == []  # bez zmeny nič
+    assert sync_inbox().added == []  # nothing without a change
 
     db.set_document_status(first.added[0], "done", progress=1.0)
     db.set_document_access(first.added[0], '["financie"]')
     _write(inbox / "a.pdf", b"%PDF-1.4 verzia 2")
     second = sync_inbox()
     assert len(second.updated) == 1
-    assert db.get_document(first.added[0]) is None  # stará verzia preč
+    assert db.get_document(first.added[0]) is None  # old version gone
     new_doc = db.get_document(second.updated[0])
-    assert new_doc is not None and new_doc["access_json"] == '["financie"]'  # práva ostali
+    assert new_doc is not None and new_doc["access_json"] == '["financie"]'  # access rights kept
 
     new_id = second.updated[0]
     db.set_document_status(new_id, "done", progress=1.0)

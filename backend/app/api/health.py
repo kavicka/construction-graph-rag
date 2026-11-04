@@ -28,7 +28,7 @@ class HealthResponse(BaseModel):
     embedding_model: str
     ollama: OllamaStatus
     ocr: OcrStatus
-    pdf_engine: bool  # WeasyPrint + pango — potrebné na generovanie dokumentov
+    pdf_engine: bool  # WeasyPrint + pango — required for document generation
 
 
 async def check_ollama(base_url: str, wanted: list[str]) -> OllamaStatus:
@@ -39,7 +39,7 @@ async def check_ollama(base_url: str, wanted: list[str]) -> OllamaStatus:
             available = {m["name"] for m in resp.json().get("models", [])}
     except (httpx.HTTPError, KeyError, ValueError):
         return OllamaStatus(up=False, models=dict.fromkeys(wanted, False))
-    # ollama tags majú tvar "qwen3:4b" — porovnanie priamo na name
+    # ollama tags look like "qwen3:4b" — compared directly on name
     return OllamaStatus(up=True, models={m: m in available for m in wanted})
 
 

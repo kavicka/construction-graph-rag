@@ -1,8 +1,8 @@
 """HTML → PDF cez WeasyPrint.
 
-Obsah dokumentu píše LLM, preto renderer smie načítať iba súbory z povolených
-adresárov (fonty). Žiadne http(s), žiadne iné file:// cesty — inak by
-`![](file:///etc/passwd)` alebo externý obrázok v markdowne prešiel do PDF.
+The document content is written by an LLM, so the renderer may load only files from allowed
+directories (fonts). No http(s), no other file:// paths — otherwise
+`![](file:///etc/passwd)` or an external image in the markdown would end up in the PDF.
 """
 
 import os
@@ -23,9 +23,9 @@ class PdfEngineError(RuntimeError):
 
 
 def _import_with_homebrew_fallback() -> Any:
-    """macOS: WeasyPrint hľadá pango/gobject cez dlopen bez cesty, ktorý Homebrew
-    knižnice v /opt/homebrew/lib nevidí (DYLD_FALLBACK_LIBRARY_PATH sa číta len pri
-    štarte procesu). Počas importu preto dlopen skúsi aj absolútnu cestu."""
+    """macOS: WeasyPrint looks up pango/gobject via dlopen without a path, so it does not see
+    Homebrew libraries in /opt/homebrew/lib (DYLD_FALLBACK_LIBRARY_PATH is only read at
+    process start). Hence during import dlopen also tries an absolute path."""
     import cffi
 
     prefixes = [os.environ.get("HOMEBREW_PREFIX", ""), *HOMEBREW_PREFIXES]

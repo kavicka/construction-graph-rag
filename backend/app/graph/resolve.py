@@ -1,16 +1,16 @@
-"""Entity resolution — SAME_AS hrany medzi konceptmi naprieč dokumentmi.
+"""Entity resolution — SAME_AS edges between concepts across documents.
 
-1. Presná zhoda norm_key → ten istý uzol (rieši sa už pri konštrukcii ID).
-2. rapidfuzz nad norm_key ≥ FUZZY_THRESHOLD → SAME_AS (preklepy, skloňovanie).
-3. Embedding kosínus labelov ≥ EMB_THRESHOLD → SAME_AS cross-lingual (SK ↔ EN
-   funguje vďaka multilingválnemu priestoru).
+1. Exact norm_key match → the same node (handled already when building the ID).
+2. rapidfuzz over norm_key ≥ FUZZY_THRESHOLD → SAME_AS (typos, declension).
+3. Embedding cosine of labels ≥ EMB_THRESHOLD → cross-lingual SAME_AS (SK ↔ EN
+   works thanks to the multilingual space).
 
-Kľúčové pravidlo (empiricky overené na vzorkovom korpuse): SAME_AS sa tvorí IBA
-medzi konceptmi z DISJUNKTNÝCH množín dokumentov. V rámci jedného dokumentu je
-SAME_AS zbytočný (dokument je už prepojený štruktúrou) a spolu-spomínané pojmy
-(„zariadenie" ↔ „materiál") dávajú falošne vysoké podobnosti. Prah 0.70 je
-kalibrovaný na label-only embeddingy: pravý SK↔EN pár ~0.75, falošné cross-doc
-páry < 0.6.
+Key rule (empirically verified on a sample corpus): SAME_AS is created ONLY
+between concepts from DISJOINT sets of documents. Within a single document
+SAME_AS is pointless (the document is already linked by its structure) and co-mentioned terms
+(„zariadenie" ↔ „materiál") give falsely high similarities. The 0.70 threshold is
+calibrated on label-only embeddings: a true SK↔EN pair ~0.75, false cross-doc
+pairs < 0.6.
 """
 
 import json
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 FUZZY_THRESHOLD = 90.0
 EMB_THRESHOLD = 0.70
-MAX_EMB_CANDIDATES = 400  # ochrana pri veľkom grafe
+MAX_EMB_CANDIDATES = 400  # guard for a large graph
 
 
 def _cosine(a: list[float], b: list[float]) -> float:
@@ -37,7 +37,7 @@ def _cosine(a: list[float], b: list[float]) -> float:
 
 
 def _concept_doc_sets() -> dict[str, set[str]]:
-    """concept_id → množina doc_id, v ktorých má dôkaz (cez MENTIONS/DEFINES)."""
+    """concept_id → set of doc_ids where it has evidence (via MENTIONS/DEFINES)."""
     docs: dict[str, set[str]] = {}
     for e in db.list_graph_edges():
         if e["type"] in (MENTIONS, DEFINES) and e["evidence_chunk_id"]:
@@ -47,7 +47,7 @@ def _concept_doc_sets() -> dict[str, set[str]]:
 
 
 def resolve_same_as(new_node_ids: list[str]) -> int:
-    """Porovná nové koncepty s existujúcimi, zapíše SAME_AS hrany. Vracia počet."""
+    """Compare new concepts with existing ones, write SAME_AS edges. Returns the count."""
     all_concepts = [n for n in db.concept_nodes() if n["type"] == CONCEPT]
     new_set = set(new_node_ids)
     new_nodes = [n for n in all_concepts if n["id"] in new_set]

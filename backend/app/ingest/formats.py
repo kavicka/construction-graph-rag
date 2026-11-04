@@ -1,7 +1,7 @@
-"""Podporované formáty dokumentov — rozpoznanie podľa obsahu, nie len prípony.
+"""Supported document formats — detected by content, not just extension.
 
-Všetko parsuje Docling (rovnaký chunking, tabuľky aj graf). Súradnice na zvýraznenie
-citácie a prehliadač strán má len PDF; ostatné formáty ukazujú citovanú pasáž ako text.
+Docling parses everything (same chunking, tables and graph). Only PDF has the coordinates for
+citation highlighting and a page viewer; other formats show the cited passage as text.
 """
 
 import codecs
@@ -9,7 +9,7 @@ import io
 import zipfile
 from pathlib import Path
 
-# formát → (media type, adresár, ktorý musí byť v ZIP balíku Office formátu)
+# format → (media type, directory that must be in the ZIP package of the Office format)
 FORMATS: dict[str, tuple[str, str | None]] = {
     "pdf": ("application/pdf", None),
     "docx": ("application/vnd.openxmlformats-officedocument.wordprocessingml.document", "word/"),
@@ -27,7 +27,7 @@ def media_type(fmt: str) -> str:
 
 
 def detect_format(filename: str, data: bytes) -> str | None:
-    """→ kľúč formátu alebo None. PDF sa pozná podľa hlavičky aj s inou príponou."""
+    """→ format key or None. PDF is recognised by its header even with a different extension."""
     if data.startswith(b"%PDF"):
         return "pdf"
     ext = Path(filename).suffix.casefold().lstrip(".")
@@ -46,7 +46,7 @@ def detect_format(filename: str, data: bytes) -> str | None:
             return None
         return ext
     try:
-        # inkrementálny dekodér — rez na 64 kB môže pretnúť viacbajtový znak (č, ž…)
+        # incremental decoder — a cut at 64 kB can split a multi-byte character (č, ž…)
         codecs.getincrementaldecoder("utf-8")().decode(data[:65536], final=False)
     except UnicodeDecodeError:
         return None

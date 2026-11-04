@@ -1,7 +1,7 @@
-"""Jedna otázka → prúd udalostí (plan, step, sources, delta, document, verify, final).
+"""One question → a stream of events (plan, step, sources, delta, document, verify, final).
 
-Spoločné jadro pre chat (SSE), eval, MCP nástroj `ask` a tracing — každý spotrebiteľ
-si udalosti formátuje po svojom. Udalosti sú čisté dicty, bez chat_id a perzistencie.
+Shared core for chat (SSE), eval, the MCP `ask` tool and tracing — each consumer
+formats the events its own way. Events are plain dicts, without chat_id or persistence.
 """
 
 import logging
@@ -70,8 +70,8 @@ Event = dict[str, Any]
 
 
 async def strip_think(stream: AsyncIterator[str]) -> AsyncIterator[str]:
-    """Odfiltruje úvodný <think>…</think> blok, ak by ho model predsa poslal
-    (thinking varianty qwen3 ho leakujú do contentu)."""
+    """Filters out a leading <think>…</think> block in case the model sends it anyway
+    (thinking variants of qwen3 leak it into content)."""
     head = ""
     checking = True
     skipping = False
@@ -105,8 +105,8 @@ async def strip_think(stream: AsyncIterator[str]) -> AsyncIterator[str]:
 async def _traced[T](
     name: str, parent: Context, fn: Callable[..., T], *args: Any, **attrs: Any
 ) -> T:
-    """Sync krok v threadpoole ako child span — vnorené spany (LLM, retrieval) sa naň
-    napoja, lebo anyio kopíruje contextvars do threadu."""
+    """Sync step in the threadpool as a child span — nested spans (LLM, retrieval) attach to it
+    because anyio copies contextvars into the thread."""
     with span(name, parent=parent, **attrs):
         return await run_in_threadpool(fn, *args)
 
@@ -116,8 +116,8 @@ def _sources_event(sources: list[Source]) -> Event:
 
 
 async def _fixed(mode: str, text: str, steps: list[dict[str, str]]) -> AsyncIterator[Event]:
-    """Odpoveď, ktorú poskladal kód (firemné údaje, odmietnutie) — bez LLM a bez zdrojov.
-    Prázdna udalosť `sources` je nutná: UI si z nej berie chat_id."""
+    """An answer composed by code (company data, refusal) — no LLM and no sources.
+    The empty `sources` event is required: the UI takes chat_id from it."""
     yield {"type": "plan", "mode": mode}
     for step in steps:
         yield {"type": "step", **step}
@@ -136,10 +136,10 @@ async def _fixed(mode: str, text: str, steps: list[dict[str, str]]) -> AsyncIter
 
 
 def _in_scope(question: str) -> bool:
-    """Lookup otázka bez signálu z knižnice ani firmy → rozhodne malý LLM klasifikátor."""
+    """Lookup question with no library or company signal → a small LLM classifier decides."""
     if mentions_library(question):
         return True
-    snap = qa_data.snapshot()  # stavba či pracovník v otázke = určite firemná téma
+    snap = qa_data.snapshot()  # a site or worker in the question = definitely a company topic
     if match_sites(question, snap.sites) or match_workers(question, snap.workers).workers:
         return True
     allowed = allowed_doc_ids()
@@ -158,12 +158,12 @@ async def run_query(
     history: list[dict[str, Any]] | None = None,
     mode: str | None = None,
 ) -> AsyncIterator[Event]:
-    """Posledná udalosť je vždy {"type": "final", answer, sources, document, trace_id}.
-    `history` = predchádzajúce správy chatu (role, content) pre doplňujúce otázky."""
+    """The last event is always {"type": "final", answer, sources, document, trace_id}.
+    `history` = previous chat messages (role, content) for follow-up questions."""
     root, ctx = start_root("rag.query", rag__question=question, rag__chat_id=chat_id)
     try:
-        # brána kontroluje pôvodnú otázku — prepis z histórie by žiadosť o heslo mohol
-        # preformulovať tak, že ju vzory nezachytia
+        # the gate checks the original question — a rewrite from history could
+        # rephrase a password request so that the patterns miss it
         blocked = get_settings().scope_guard and check_question(question).blocked
         if history and not blocked and needs_rewrite(question, history):
             standalone = await _traced(
@@ -178,7 +178,7 @@ async def run_query(
                 set_attrs(root, rag__standalone_question=standalone)
                 yield {"type": "rewrite", "question": standalone}
                 question = standalone
-        # tajomstvá sa redigujú už v streame — nesmú preblysnúť ani na zlomok sekundy
+        # secrets are redacted in the stream itself — they must not flash even briefly
         stream_filter = SecretStreamFilter()
         streamed: list[str] = []
         async for event in _run(question, chat_id, ctx, mode):
@@ -192,7 +192,7 @@ async def run_query(
                 yield {"type": "delta", "text": rest}
             if event["type"] == "final":
                 if event["answer"] != "".join(streamed):
-                    # finálna odpoveď prešla redakciou / očistou → UI ju vymení celú
+                    # the final answer went through redaction / cleanup → the UI replaces it whole
                     yield {"type": "replace", "text": event["answer"]}
                 event["trace_id"] = trace_id_of(root)
                 set_attrs(
@@ -234,7 +234,7 @@ class _Turn:
     evidence: list[str] = field(default_factory=list)
     answer_parts: list[str] = field(default_factory=list)
     document: dict[str, Any] | None = None
-    verify_text: str | None = None  # None → overuje sa samotná odpoveď
+    verify_text: str | None = None  # None → the answer itself is verified
     finished: bool = False  # the handler already sent a complete fixed reply (refusal)
 
 
@@ -297,12 +297,12 @@ async def _generate(turn: _Turn) -> AsyncIterator[Event]:
     turn.answer_parts.append(answer_text)
     yield {"type": "delta", "text": answer_text}
     turn.evidence = [*(s.text for s in sources), question]
-    # overenie čísel beží nad textom dokumentu, nie nad krátkou správou v chate
+    # number verification runs over the document text, not over the short chat message
     turn.verify_text = "\n".join(bodies)
 
 
 async def _filter(turn: _Turn) -> AsyncIterator[Event]:
-    # plne deterministická cesta — filter aj odpoveď robí kód, LLM sa nevolá
+    # fully deterministic path — code does both the filter and the answer, no LLM call
     plan = turn.plan
     matched, nearest = await _traced("rag.filter", turn.ctx, run_filter, plan)
     context, turn.sources = await run_in_threadpool(build_filter_context, plan, matched, nearest)
@@ -328,7 +328,7 @@ async def _compose(turn: _Turn) -> AsyncIterator[Event]:
         turn.answer_parts.append(answer_text)
         yield {"type": "delta", "text": answer_text}
         return
-    # plán sa nedal spoľahlivo vytiahnuť → voľná agent slučka
+    # the plan could not be reliably extracted → free agent loop
     yield {"type": "step", "tool": "agent", "summary": "plán neistý — agent slučka"}
     with span("rag.agent", parent=ctx):
         result = await run_agent(question)
@@ -407,7 +407,7 @@ async def _lookup(turn: _Turn) -> AsyncIterator[Event]:
         turn.finished = True
         return
     if is_compound(question):
-        # „Kto je stavbyvedúci a aká je pokuta?“ — jedno vyhľadávanie nájde len polovicu
+        # „Kto je stavbyvedúci a aká je pokuta?“ — a single search finds only half
         subquestions = await _traced("rag.decompose", ctx, decompose, question)
     else:
         subquestions = [question]
@@ -472,7 +472,7 @@ async def _run(
                 yield event
             return
 
-    if mode == "research":  # vynútené z UI (prepínač Deep research)
+    if mode == "research":  # forced from the UI (Deep research toggle)
         plan = QueryPlan(mode="research")
     else:
         plan = await _traced("rag.route", ctx, route_query, question)
@@ -488,17 +488,18 @@ async def _run(
     if settings.injection_guard:
         answer = sanitize_answer(answer)
     if plan.mode == "lookup" and is_refusal_answer(answer):
-        # „podklady to neuvádzajú [1]“ — malý model citáciu pridá aj k odmietnutiu
+        # „podklady to neuvádzajú [1]“ — the small model adds a citation to a refusal too
         answer = CITE_RE.sub("", answer).strip()
         if settings.scope_guard and len(split_sentences(answer)) <= 1:
-            # samotné odmietnutie → pevná veta, nič dopísané z vlastných vedomostí modelu
+            # a bare refusal → fixed sentence, nothing added from the model's own knowledge
             answer = not_found_reply(question)
     verify_text = turn.verify_text if turn.verify_text is not None else answer
     issues = check_numbers(verify_text, turn.evidence)
     sentences: list[dict[str, Any]] = []
     if plan.mode in ("lookup", "research") and answer.strip():
-        # deterministické cesty (filter, compose) píše kód zo zdrojov a global cituje témy,
-        # nie vety — tam sa overujú len čísla
+        # deterministic paths (filter, compose) are written by code from sources, and
+        # global cites topics,
+        # not sentences — only numbers are verified there
         checks = await _traced("rag.verify", ctx, verify_sentences, answer, turn.sources)
         sentences = [c.to_json() for c in checks]
     yield {"type": "verify", "ok": not issues, "issues": issues, "sentences": sentences}
@@ -526,7 +527,7 @@ class AnswerResult:
 
 
 async def answer_question(question: str, *, mode: str | None = None) -> AnswerResult:
-    """Nestreamovaná odpoveď — eval, MCP, API klienti."""
+    """Non-streamed answer — eval, MCP, API clients."""
     steps: list[dict[str, str]] = []
     issues: list[str] = []
     async for event in run_query(question, mode=mode):

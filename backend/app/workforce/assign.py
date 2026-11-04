@@ -1,10 +1,9 @@
-"""Návrh pracovníka pre importovanú úlohu — počíta kód, nie LLM.
+"""Worker suggestion for an imported task — computed by code, not by the LLM.
 
-1. Meno v dokumente → ten pracovník (fuzzy, aj len priezvisko / krstné meno).
-2. Inak skóre: zhoda profesie s typom práce (+3), už robí na tejto stavbe (+2),
-   menšie vyťaženie v termíne (−1 za každú súbežnú otvorenú úlohu).
-Bez zhody profesie aj stavby sa nenavrhuje nikto — úloha ostane Nepriradená.
-"""
+1. Name in the document → that worker (fuzzy, also surname only / first name only).
+2. Otherwise a score: profession matches the work type (+3), already works on this site (+2), lower
+   workload in the deadline window (−1 per concurrent open task). Without a profession or site match
+   nobody is suggested — the task stays Unassigned."""
 
 import json
 from dataclasses import dataclass
@@ -44,7 +43,7 @@ def match_person(person: str | None, workers: list[dict[str, Any]]) -> dict[str,
     scored.sort(key=lambda s: -s[0])
     if not scored or scored[0][0] < NAME_MATCH_MIN:
         return None
-    # dvaja „Jánovia“ — nejednoznačné, radšej nikoho
+        # two „Jánovia“ (Johns) — ambiguous, better to pick nobody
     if len(scored) > 1 and scored[1][0] == scored[0][0]:
         return None
     return scored[0][1]

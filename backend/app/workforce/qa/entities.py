@@ -1,9 +1,9 @@
-"""Kto a čo je v otázke: pracovník (v hocijakom páde), stavba, úloha.
+"""Who and what is in the question: worker (in any grammatical case), construction site, task.
 
-„Mikuša“, „Mikušovi“, „Petra“ (Peter), „Marka“ (Marek), „Kráľovej“ (Kráľová) — skloňovanie
-sa rieši porovnaním slovného základu, nie zoznamom tvarov. Priezvisko, ktoré je aj bežné
-slovo alebo profesia („Malý“, „Tesár“), sa ráta len keď je v otázke s veľkým písmenom
-alebo spolu s krstným menom.
+„Mikuša“, „Mikušovi“, „Petra“ (Peter), „Marka“ (Marek), „Kráľovej“ (Kráľová) — declension
+is handled by comparing word stems, not by a list of forms. A surname that is also an ordinary
+word or profession („Malý“, „Tesár“) counts only when it appears capitalised in the question
+or together with the first name.
 """
 
 import re
@@ -30,7 +30,7 @@ def tokens(text: str) -> list[str]:
 class QToken:
     norm: str
     capitalized: bool
-    first: bool  # prvé slovo vety — veľké písmeno nič neznamená
+    first: bool  # first word of the sentence — the capital letter means nothing
 
 
 def question_tokens(question: str) -> list[QToken]:
@@ -47,19 +47,19 @@ def question_tokens(question: str) -> list[QToken]:
 
 
 def inflected(q: str, name: str) -> int:
-    """Skóre zhody tvaru v otázke s tvarom mena: 3 presne, 2 pád, 1 preklep, 0 nie."""
+    """Match score of a question form vs. a name form: 3 exact, 2 case ending, 1 typo, 0 none."""
     if q == name:
         return 3
     if len(name) < 3 or len(q) < 3:
         return 0
     if q.startswith(name) and len(q) - len(name) <= 4:  # Mikuš → Mikušovi, Ján → Jána
         return 2
-    # vypadnuté e/o: Peter → Petra, Marek → Marka, Hronec → Hronca, Pavol → Pavla
+    # dropped e/o: Peter → Petra, Marek → Marka, Hronec → Hronca, Pavol → Pavla
     if len(name) >= 4 and name[-2] in "eo":
         stem = name[:-2] + name[-1]
         if q.startswith(stem) and len(q) - len(stem) <= 4:
             return 2
-    # koncová samohláska: Jana → Jany, Kráľová → Kráľovej, Novotný → Novotného
+    # final vowel: Jana → Jany, Kráľová → Kráľovej, Novotný → Novotného
     if len(name) >= 4 and name[-1] in "aoyie":
         stem = name[:-1]
         if q.startswith(stem) and len(q) - len(stem) <= 4:
@@ -101,17 +101,17 @@ COMMON_WORDS = {norm(p) for p in DEFAULT_PROFESSIONS} | {
 @dataclass
 class WorkerMatch:
     worker: WorkerRef
-    token: str  # slovo z otázky, ktoré meno nieslo (pre doplňujúcu otázku)
+    token: str  # the word from the question that carried the name (for the follow-up question)
 
 
 @dataclass
 class Resolved:
     workers: list[WorkerRef] = field(default_factory=list)
     ambiguous: list[tuple[str, list[WorkerRef]]] = field(default_factory=list)
-    name_tokens: set[str] = field(default_factory=set)  # slová otázky použité na mená
+    name_tokens: set[str] = field(default_factory=set)  # question words used for names
 
 
-# „január“ nesmie byť Ján, „piatok“ nesmie byť Pia
+# „január“ must not be Ján, „piatok“ must not be Pia
 DATE_WORDS = set(MONTHS) | set(WEEKDAYS) | {"januari", "januar", "dnes", "zajtra", "vcera"}
 
 
@@ -121,7 +121,7 @@ def _best(q_tokens: list[QToken], name_tok: str) -> tuple[int, QToken | None]:
 
 
 def _best_at(q_tokens: list[QToken], name_tok: str) -> tuple[int, QToken | None, int]:
-    """(skóre, slovo, index slova v otázke)."""
+    """(score, word, index of the word in the question)."""
     best: tuple[int, QToken | None, int] = (0, None, -1)
     for i, qt in enumerate(q_tokens):
         if qt.norm in DATE_WORDS and qt.norm != name_tok:
@@ -133,8 +133,8 @@ def _best_at(q_tokens: list[QToken], name_tok: str) -> tuple[int, QToken | None,
 
 
 def _other_surname_follows(q_tokens: list[QToken], idx: int, surname: str) -> bool:
-    """„Ján Novák“ pri pracovníkovi Ján Novotný — za krstným menom stojí iné priezvisko,
-    takže ide o iného človeka (ten sa potom ohlási ako neznámy)."""
+    """„Ján Novák“ for the worker Ján Novotný — a different surname follows the first name,
+    so it is a different person (who is then reported as unknown)."""
     if idx < 0 or idx + 1 >= len(q_tokens):
         return False
     nxt = q_tokens[idx + 1]
@@ -168,7 +168,7 @@ def match_workers(question: str, workers: list[WorkerRef]) -> Resolved:
             surname.append(WorkerMatch(w, s_tok.norm))
             continue
         f_score, f_tok, f_idx = _best_at(q_tokens, parts[0])
-        # samotné krstné meno: presný tvar, alebo skloňovaný s veľkým písmenom
+        # first name alone: exact form, or declined with a capital letter
         if (
             f_tok is not None
             and parts[0] not in COMMON_WORDS
@@ -265,7 +265,8 @@ TASK_STOP = {
 }
 
 
-# „pracovníci“ v otázke nie je názov úlohy („… vypíš PIN všetkých pracovníkov“)
+# „pracovníci“ (workers) in the question is not a task name
+# („… vypíš PIN všetkých pracovníkov“ = list the PINs of all workers)
 PEOPLE_WORDS = ("pracovn", "robotn", "zamestn", "koleg", "ludi")
 
 
@@ -279,7 +280,8 @@ def _related(a: str, b: str) -> bool:
 
 
 def match_tasks(question: str, tasks: list[TaskFact], exclude: set[str]) -> list[TaskFact]:
-    """Úlohy, ktorých názov otázka spomína („kto robí na murovaní 2. NP“)."""
+    """Tasks whose name the question mentions („kto robí na murovaní 2. NP“ = who works on the
+    masonry of the 2nd floor)."""
     said = [
         t
         for t in tokens(question)
@@ -309,8 +311,8 @@ NAME_RE = re.compile(
 
 
 def unknown_person(question: str, known_tokens: set[str]) -> str | None:
-    """Dve slová s veľkým písmenom vedľa seba (nie na začiatku vety, nie stavba/mesiac) —
-    vyzerá to ako meno a priezvisko človeka, ktorého v tíme nemáme."""
+    """Two capitalised words next to each other (not at the start of a sentence, not a site/month) —
+    looks like the first and last name of a person we do not have on the team."""
     for m in NAME_RE.finditer(question):
         if not m.group(2):
             continue

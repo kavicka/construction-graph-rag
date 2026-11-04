@@ -1,8 +1,8 @@
-"""PDF výpisy: za pracovníka (po odovzdaní) a súhrnný denný za firmu.
+"""PDF reports: per worker (after submission) and the daily company summary.
 
-Čísla v PDF (hodiny, súčty, počty) dosádza šablóna z overených dát výpisov — LLM tu
-nepíše nič. Vzhľad (farby, písmo) je z témy aplikácie, hlavička/pätička z nastavení firmy.
-"""
+Numbers in the PDF (hours, totals, counts) are filled in by the template from the verified report
+data — the LLM writes nothing here. The look (colours, font) comes from the app theme, header/footer
+from the company settings."""
 
 from collections import defaultdict
 from datetime import UTC, date, datetime
@@ -113,11 +113,11 @@ def render_worker_report(report_id: str) -> Path:
 
 
 def summary_context(day: str) -> dict[str, Any]:
-    """Dáta súhrnu za deň — oddelené od renderu, aby sa dali testovať bez PDF."""
+    """Summary data for a day — separate from rendering so it can be tested without a PDF."""
     reports = {r["user_id"]: r for r in store.list_reports(day=day)}
     workers = store.list_workers(active_only=True)
     known = {w["id"] for w in workers}
-    # aj deaktivovaný pracovník, ktorý v ten deň výpis odovzdal
+    # also a deactivated worker who submitted a report that day
     for uid in reports:
         if uid not in known and (inactive := store.get_worker(uid)):
             workers.append(inactive)
@@ -240,7 +240,7 @@ def render_daily_summary(day: str) -> Path:
 
 
 def summary_is_stale(day: str) -> bool:
-    """Súhrn treba pregenerovať, ak po ňom niekto odovzdal alebo upravil výpis."""
+    """The summary must be regenerated if someone submitted or edited a report after it."""
     summary = store.get_daily_summary(day)
     if summary is None or not Path(summary["pdf_path"]).exists():
         return True

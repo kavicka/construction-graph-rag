@@ -1,7 +1,7 @@
-"""Presný filter nad records — čísla porovnáva kód, LLM len formuluje.
+"""Exact filter over records — code compares the numbers, the LLM only phrases.
 
-Vracia štruktúrovaný výsledok + zdroje (tabuľka → dokument + strana), aby
-citácie fungovali rovnako ako pri klasickom RAG.
+Returns a structured result + sources (table → document + page) so that
+citations work the same as in classic RAG.
 """
 
 import json
@@ -33,8 +33,8 @@ class RecordHit:
 
 
 def _category_matches(record_category: str | None, wanted: list[str]) -> bool:
-    """Exact po normalizácii, inak token_set — partial_ratio matchoval generické
-    slovo ('varianty') a prepúšťal cudzie kategórie (Oběd ↔ Večeře)."""
+    """Exact after normalisation, otherwise token_set — partial_ratio matched a generic
+    word ('varianty') and let foreign categories through (Oběd ↔ Večeře)."""
     if not wanted:
         return True
     if not record_category:
@@ -88,10 +88,11 @@ def load_hits(categories: list[str], doc_ids: list[str] | None = None) -> list[R
 
 
 def run_filter(plan: QueryPlan) -> tuple[list[RecordHit], list[RecordHit]]:
-    """→ (vyhovujúce, najbližšie-nevyhovujúce pre poctivú odpoveď pri nule)."""
+    """→ (matching, closest non-matching for an honest answer when there are none)."""
     candidates = load_hits(plan.categories, plan.doc_ids)
     if plan.doc_ids and not any(c.attr in h.attrs for h in candidates for c in plan.constraints):
-        # dokument z otázky ten atribút nemá (napr. „Agátová" → zmluva) → celá knižnica
+        # the document from the question lacks that attribute (e.g. „Agátová" → contract)
+        # → whole library
         candidates = load_hits(plan.categories)
     matched = [h for h in candidates if _passes(h.attrs, plan.constraints)]
 
@@ -109,7 +110,7 @@ def run_filter(plan: QueryPlan) -> tuple[list[RecordHit], list[RecordHit]]:
 
 
 def hits_to_sources(hits: list[RecordHit]) -> list[Source]:
-    """Zoskupí záznamy podľa tabuľky → očíslované zdroje s dokumentom a stranou."""
+    """Groups records by table → numbered sources with document and page."""
     sources: list[Source] = []
     seen: dict[str, int] = {}
     for h in hits:
@@ -137,7 +138,7 @@ def hits_to_sources(hits: list[RecordHit]) -> list[Source]:
 
 
 def attr_labels() -> dict[str, str]:
-    """kľúč → „Pevnosť [MPa]" z registra; makrá jedálnička majú pevné štítky."""
+    """key → „Pevnosť [MPa]" from the registry; meal-plan macros have fixed labels."""
     labels = dict(ATTR_LABELS)
     for a in db.list_record_attrs():
         labels.setdefault(a["key"], f"{a['label']} [{a['unit']}]" if a["unit"] else a["label"])
@@ -145,7 +146,7 @@ def attr_labels() -> dict[str, str]:
 
 
 def _fmt_value(v: float) -> str:
-    """12400.0 → „12 400", 36.4 → „36.4" — tisíce ako v slovenských dokumentoch."""
+    """12400.0 → „12 400", 36.4 → „36.4" — thousands as in Slovak documents."""
     if v == int(v) and abs(v) >= 10_000:
         return f"{int(v):,}".replace(",", " ")
     return f"{v:g}"
@@ -165,10 +166,10 @@ def format_hit(h: RecordHit, source_n: int, labels: dict[str, str] | None = None
 def format_filter_answer(
     plan: QueryPlan, matched: list[RecordHit], nearest: list[RecordHit], sources: list[Source]
 ) -> str:
-    """Deterministická odpoveď pre filter mód — žiadny LLM, žiadne zlyhanie.
+    """Deterministic answer for filter mode — no LLM, no failure.
 
-    (Model dostal zoznam 8 položiek a vypísal jednu — formulovanie zoznamov
-    malému modelu nezverujeme.)
+    (The model was given a list of 8 items and printed one — we do not entrust
+    phrasing lists to the small model.)
     """
     table_n = {s.table_id: s.n for s in sources}
     labels = attr_labels()
@@ -197,7 +198,7 @@ ATTR_LABELS = {"kcal": "kcal", "b": "bielkoviny", "s": "sacharidy", "t": "tuky"}
 def build_filter_context(
     plan: QueryPlan, matched: list[RecordHit], nearest: list[RecordHit]
 ) -> tuple[str, list[Source]]:
-    """→ (blok presných výsledkov pre LLM, zdroje na citovanie)."""
+    """→ (block of exact results for the LLM, sources to cite)."""
     sources = hits_to_sources(matched or nearest)
     table_n = {s.table_id: s.n for s in sources}
 

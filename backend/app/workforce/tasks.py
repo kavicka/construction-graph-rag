@@ -1,4 +1,4 @@
-"""Logika úloh: ktoré úlohy sú v daný deň aktívne, nástenka, zmena stavu z výpisov."""
+"""Task logic: which tasks are active on a given day, the board, status change from reports."""
 
 from datetime import date
 from typing import Any
@@ -13,10 +13,10 @@ def _d(value: str | None) -> date | None:
 
 
 def is_active_on(task: dict[str, Any], day: date, by_id: dict[str, dict[str, Any]]) -> bool:
-    """Aktívna úloha = otvorená, začala (dátum alebo dokončená závislosť) a nie je zrušená.
+    """Active task = open, started (date or completed dependency) and not cancelled.
 
-    Koniec termínu ju NEdeaktivuje — oneskorená úloha sa kontroluje, kým nie je hotová.
-    Úloha dokončená v ten istý deň ostáva aktívna (spolupracovník ju mohol robiť tiež)."""
+    The end of the deadline does NOT deactivate it — an overdue task is checked until it is done. A
+    task completed on the same day stays active (a colleague may have worked on it too)."""
     if task["status"] == "cancelled":
         return False
     if task["status"] == "done":
@@ -41,7 +41,8 @@ def active_tasks_for(user_id: str, day: date) -> list[dict[str, Any]]:
 
 
 def overlaps(task: dict[str, Any], start: date, end: date) -> bool:
-    """Úloha zasahuje do obdobia (na nástenke). Otvorená úloha po termíne zasahuje vždy."""
+    """The task falls within the period (on the board). An open task past its deadline always
+    does."""
     t_from, t_to = _d(task.get("date_from")), _d(task.get("date_to"))
     if t_from and t_from > end:
         return False
@@ -51,7 +52,7 @@ def overlaps(task: dict[str, Any], start: date, end: date) -> bool:
 
 
 def apply_report_statuses(entries: list[dict[str, Any]], day: str) -> None:
-    """Odovzdaný výpis posunie stav úloh: hotová → done, rozpracovaná → % hotovosti."""
+    """A submitted report advances task state: finished → done, in progress → completion %."""
     for entry in entries:
         task = store.get_task(entry["task_id"])
         if task is None or task["status"] == "cancelled":

@@ -1,10 +1,10 @@
-"""Slovenské čísla a časy v hovorenej reči — deterministická kontrola výstupu LLM.
+"""Slovak numbers and times in spoken language — deterministic check of LLM output.
 
-LLM z prepisu vytiahne „príchod 07:30, murovanie 5 h“. Tu overíme, že to človek naozaj
-povedal: čas 07:30 musí v texte zodpovedať napr. „o pol ôsmej“, „7:30“ alebo „o pol 8“,
-hodiny 5 zas „päť hodín“ alebo „od 7 do 12“. Nepodložené číslo sa zahodí a systém sa
-radšej dopýta. Prepis reči má chyby, preto sa radové číslovky porovnávajú fuzzy.
-"""
+From the transcript the LLM extracts „príchod 07:30, murovanie 5 h“ (arrival 07:30, bricklaying 5
+h). Here we verify that the person really said it: the time 07:30 must correspond in the text to
+e.g. „o pol ôsmej“, „7:30“ or „o pol 8“, and 5 hours to „päť hodín“ or „od 7 do 12“. An unsupported
+number is dropped and the system prefers to ask again. Speech transcripts contain errors, so ordinal
+numerals are compared fuzzily."""
 
 import re
 import unicodedata
@@ -64,7 +64,7 @@ TENS = {
 }
 UNITS = {k: v for k, v in CARDINALS.items() if 1 <= v <= 9}
 
-# „o siedmej“, „pol ôsmej“ — genitív radovej číslovky = hodina
+# „o siedmej“, „pol ôsmej“ — genitive of an ordinal numeral = hour
 ORDINALS: dict[str, int] = {
     "jednej": 1,
     "prvej": 1,
@@ -82,7 +82,7 @@ ORDINALS: dict[str, int] = {
 }
 ORDINAL_FUZZY_MIN = 85
 
-# zlomky a slovné tvary množstva
+# fractions and word forms of quantity
 FRACTION_WORDS: list[tuple[re.Pattern[str], float]] = [
     (re.compile(r"\bpoldruha\b"), 1.5),
     (re.compile(r"\b(polhodin\w*|polhodk\w*)\b"), 0.5),
@@ -97,19 +97,20 @@ FRACTION_WORDS: list[tuple[re.Pattern[str], float]] = [
 ]
 
 NUM_RE = re.compile(r"\d+(?:[.,]\d+)?")
-# Whisper zlepí predložku s číslovkou: „Opol 7“ = „o pol 7“
+# Whisper glues the preposition to the numeral: „Opol 7“ = „o pol 7“
 STT_FIXES = [
     (re.compile(r"\bopol\b"), "o pol"),
     (re.compile(r"\bodpol\b"), "od pol"),
     (re.compile(r"\bpolu\b"), "pol"),  # „od polu ôsmej“
-    (re.compile(r"\b(stvrti|ctvrt|ctvrti)\b"), "stvrt"),  # „o štvrti na sedem“, čeština
+    # „o štvrti na sedem“ (quarter to seven), Czech
+    (re.compile(r"\b(stvrti|ctvrt|ctvrti)\b"), "stvrt"),
     (re.compile(r"\bctvrte\b"), "stvrte"),
 ]
 HHMM_RE = re.compile(r"\b(\d{1,2})[:.](\d{2})\b")
 
 
 def normalize(text: str) -> str:
-    """Malé písmená, bez diakritiky, interpunkcia → medzery (okrem : a . medzi číslicami)."""
+    """Lowercase, no diacritics, punctuation → spaces (except : and . between digits)."""
     decomposed = unicodedata.normalize("NFKD", text.casefold())
     plain = "".join(c for c in decomposed if not unicodedata.combining(c))
     plain = re.sub(r"(?<=\d)[:.](?=\d)", ":", plain)
@@ -132,7 +133,7 @@ def _ordinal(token: str) -> int | None:
 
 
 def _word_number(tokens: list[str], i: int) -> tuple[float, int] | None:
-    """Číslo zo slov na pozícii i → (hodnota, počet spotrebovaných tokenov)."""
+    """Number from words at position i → (value, number of tokens consumed)."""
     tok = tokens[i]
     digit = NUM_RE.fullmatch(tok)
     if digit:
@@ -143,19 +144,19 @@ def _word_number(tokens: list[str], i: int) -> tuple[float, int] | None:
     elif tok in CARDINALS:
         value, used = CARDINALS[tok], 1
     else:
-        # zložené jedným slovom: „dvadsatpat“
+        # compound in one word: „dvadsatpat“
         for ten, tv in TENS.items():
             if tok.startswith(ten) and tok[len(ten) :] in UNITS:
                 return float(tv + UNITS[tok[len(ten) :]]), 1
         return None
-    # „dve a pol“ / „5 a pol“
+    # „dve a pol“ (two and a half) / „5 a pol“
     if i + used + 1 < len(tokens) and tokens[i + used] == "a" and tokens[i + used + 1] == "pol":
         return float(value) + 0.5, used + 2
     return float(value), used
 
 
 def number_candidates(text: str) -> set[float]:
-    """Všetky množstvá, ktoré v texte zazneli (číslice, slová, zlomky)."""
+    """All quantities mentioned in the text (digits, words, fractions)."""
     norm = normalize(text)
     tokens = norm.replace(":", " : ").split()
     found: set[float] = set()
@@ -170,8 +171,8 @@ def number_candidates(text: str) -> set[float]:
     for pattern, value in FRACTION_WORDS:
         if pattern.search(norm):
             found.add(value)
-    # samostatné „pol“ (pol hodiny) = 0,5 — nie „dve a pol“ (to je 2,5 vyššie);
-    # „a“ ako spojka („piesok a pol hodiny“) polovicu nezruší
+    # a standalone „pol“ (pol hodiny — half an hour) = 0.5 — not „dve a pol“ (that is 2.5 above);
+    # "a" as a conjunction („piesok a pol hodiny“ — sand and half an hour) does not cancel the half
     for j, tok in enumerate(tokens):
         if tok == "pol":
             part_of_number = j >= 2 and tokens[j - 1] == "a" and _word_number(tokens, j - 2)
@@ -189,7 +190,7 @@ def _clock(hour: int, minute: int) -> tuple[int, int] | None:
 
 
 def time_candidates(text: str) -> set[tuple[int, int]]:
-    """Časy (hodina mod 12, minúta), ktoré v texte zazneli."""
+    """Times (hour mod 12, minute) mentioned in the text."""
     norm = normalize(text)
     tokens = norm.replace(":", " : ").split()
     found: set[tuple[int, int]] = set()
@@ -219,7 +220,7 @@ def time_candidates(text: str) -> set[tuple[int, int]]:
             found.add(((h - 1) % 12, 45))
         elif tok in ("o", "od", "do", "po", "okolo", "cca") and (h := hour_at(j + 1)) is not None:
             follow = tokens[j + 2] if j + 2 < len(tokens) else ""
-            if follow not in (":", "stvrte", "stvrt"):  # „o tri štvrte na štyri“ nie je 3:00
+            if follow not in (":", "stvrte", "stvrt"):  # „o tri štvrte na štyri“ (3:45) is not 3:00
                 found.add((h % 12, 0))
         elif _ordinal(tok) is not None and nxt.startswith("hodin"):
             found.add(((_ordinal(tok) or 0) % 12, 0))
@@ -246,7 +247,8 @@ def _close(a: float, b: float, tol: float) -> bool:
 
 
 def hours_supported(value: float, text: str) -> bool:
-    """Počet hodín zaznel priamo, alebo je to rozdiel dvoch povedaných časov (od 7 do 12)."""
+    """The number of hours was said directly, or it is the difference of two spoken times (od 7 do
+    12)."""
     if any(_close(value, c, 0.01) for c in number_candidates(text)):
         return True
     times = time_candidates(text)
@@ -268,9 +270,9 @@ def percent_supported(value: int, text: str) -> bool:
 
 
 def to_24h(hm: tuple[int, int], *, afternoon_hint: bool) -> tuple[int, int]:
-    """Hodina bez dopoludnia/popoludnia: pracovný deň 5:00–21:00.
+    """Hour without am/pm: working day 5:00–21:00.
 
-    afternoon_hint = ide o odchod (ten je takmer vždy popoludní)."""
+    afternoon_hint = it is a departure (almost always in the afternoon)."""
     h, m = hm
     if h >= 13:
         return h, m
@@ -285,7 +287,8 @@ NEGATIVE_RE = re.compile(
     r"\b(nie|nebol\w*|ziadn\w*|nic|bez (problem\w*|prestavk\w*)|nemal\w*|netreba"
     r"|vsetko (ok|v poriadku|fajn)|v poriadku|ok)\b"
 )
-# „nebolo lepidlo“ je problém, nie zápor — obsahové slová krátku odpoveď vylúčia
+# „nebolo lepidlo“ (there was no glue) is a problem, not a negation — content words rule out a short
+# answer
 PROBLEM_HINT_RE = re.compile(
     r"\b(chyb\w*|pokazil\w*|porucha|poruch\w*|uraz\w*|zranil\w*|meska\w*|neprisl\w*"
     r"|nedoviez\w*|nedodal\w*|prsal\w*|prsi|dazd\w*|mraz\w*|vietor|lepidl\w*|material\w*"
@@ -295,7 +298,8 @@ SHORT_ANSWER_TOKENS = 6
 
 
 def is_short_negative(text: str) -> bool:
-    """Krátke „nie“ / „žiadne“ / „bez problémov“ bez obsahových slov → odpoveď je nič."""
+    """Short „nie“ / „žiadne“ / „bez problémov“ (no / none / no problems) with no content words →
+    the answer is nothing."""
     norm = normalize(text)
     return (
         bool(NEGATIVE_RE.search(norm))

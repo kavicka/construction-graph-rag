@@ -1,8 +1,8 @@
-"""Sledovaný priečinok — knižnica sa synchronizuje so súbormi v data/inbox.
+"""Watched folder — the library is synchronised with the files in data/inbox.
 
-Nový súbor → ingest, zmenený (iný sha256) → reindex ako nová verzia, zmazaný → dokument
-sa odstráni. Polling (bez natívnych watcherov) — funguje rovnako na macOS, Linuxe aj
-v Docker volume. Súbory, do ktorých sa práve zapisuje, sa preskočia (čerstvý mtime).
+New file → ingest, changed (different sha256) → reindex as a new version, deleted → the document
+is removed. Polling (no native watchers) — works the same on macOS, Linux and
+in a Docker volume. Files currently being written to are skipped (fresh mtime).
 """
 
 import asyncio
@@ -20,12 +20,12 @@ from app.ingest.store import delete_document, store_document
 
 logger = logging.getLogger(__name__)
 
-SETTLE_SECONDS = 2.0  # súbor musí byť 2 s nemenný — kopírovanie veľkého PDF ešte beží
+SETTLE_SECONDS = 2.0  # file must be unchanged for 2 s — copying a large PDF may still be running
 
 
 @dataclass
 class SyncResult:
-    added: list[str] = field(default_factory=list)  # doc_id na ingest
+    added: list[str] = field(default_factory=list)  # doc_ids to ingest
     updated: list[str] = field(default_factory=list)
     removed: list[str] = field(default_factory=list)
 
@@ -37,7 +37,7 @@ def inbox_dir() -> Path:
 
 
 def _source_key(path: Path) -> str:
-    """Kľúč = cesta relatívne k inboxu — rovnaká na hostiteľovi aj v Docker volume."""
+    """Key = path relative to the inbox — the same on the host and in a Docker volume."""
     return path.relative_to(inbox_dir()).as_posix()
 
 
@@ -48,7 +48,7 @@ def sync_inbox(now: float | None = None) -> SyncResult:
     present: set[str] = set()
 
     for path in sorted(inbox_dir().iterdir()):
-        # symlinky by viedli mimo inboxu; skryté súbory sú dočasné súbory editorov
+        # symlinks would lead outside the inbox; hidden files are editors' temp files
         if path.is_symlink() or not path.is_file() or path.name.startswith("."):
             continue
         key = _source_key(path)
@@ -69,8 +69,8 @@ def sync_inbox(now: float | None = None) -> SyncResult:
         access_json = None
         if doc is not None:
             if doc["status"] not in ("done", "error"):
-                continue  # predošlá verzia sa ešte spracúva
-            access_json = doc.get("access_json")  # nová verzia dedí prístupové práva
+                continue  # the previous version is still being processed
+            access_json = doc.get("access_json")  # the new version inherits access rights
             delete_document(doc["id"])
         row, created = store_document(path.name, data, fmt, source_path=key)
         if created and access_json:

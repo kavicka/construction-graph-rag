@@ -1,15 +1,15 @@
-"""Brána pred routerom — na čo chat vôbec neodpovedá.
+"""Gate in front of the router — what the chat does not answer at all.
 
-Deterministicky (bez LLM), pre chat, MCP `ask` aj mobil pracovníka:
-  secret     — heslá, PIN-y, tokeny, kľúče, hashe, prihlasovacie a prístupové údaje
-  internals  — systémový prompt, konfigurácia, SQL nad internými tabuľkami, prompt injection
-  offtopic   — tvorivé písanie, počasie, kurzy, šport, programovanie, výpočty, pozdrav
-  ok         — pokračuje do firmy / dokumentov
+Deterministic (no LLM), for chat, MCP `ask` and the worker mobile app:
+  secret     — passwords, PINs, tokens, keys, hashes, login and access credentials
+  internals  — system prompt, configuration, SQL over internal tables, prompt injection
+  offtopic   — creative writing, weather, exchange rates, sport, programming, maths, greetings
+  ok         — continues to company / documents
 
-Otázka sa kontroluje aj v odmaskovanom tvare („h-e-s-l-o“, „h e s l o“, „h3sl0“) — tak
-sa obchádzajú jednoduché filtre. Pri lookup otázke bez signálu z knižnice rozhodne o
-rozsahu ešte malý LLM klasifikátor (`classify_scope`), pri chybe pustí otázku ďalej —
-RAG aj tak odpovedá len zo zdrojov.
+The question is also checked in an unmasked form („h-e-s-l-o“, „h e s l o“, „h3sl0“) — that is how
+simple filters get bypassed. For a lookup question without a library signal, a small LLM classifier
+(`classify_scope`) decides the scope; on error it lets the question through —
+RAG answers only from sources anyway.
 """
 
 import logging
@@ -48,12 +48,12 @@ def _norm(text: str) -> str:
 _LEET = str.maketrans(
     {"0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "@": "a", "$": "s"}
 )
-# jednotlivé písmená oddelené medzerou/pomlčkou/bodkou: „h-e-s-l-o“ → „heslo“
+# single letters separated by space/hyphen/dot: „h-e-s-l-o“ → „heslo“
 _SPACED = re.compile(r"\b(?:\w[\s\-_.*/|]+){2,}\w\b")
 
 
 def variants(question: str) -> list[str]:
-    """Normalizovaná otázka + odmaskované tvary, v ktorých sa hľadajú zakázané témy."""
+    """Normalised question + unmasked forms in which the forbidden topics are searched for."""
     base = _norm(question)
     collapsed = _SPACED.sub(lambda m: re.sub(r"[\s\-_.*/|]+", "", m.group(0)), base)
     leet = collapsed.translate(_LEET)
@@ -85,7 +85,7 @@ SECRET_PATTERNS = [
     r"\b(cookie|session ?(id|token))\b",
     r"\botp\b",
     r"\b2fa\b",
-    # e-maily účtov v aplikácii (kontakt v zmluve je otázka na dokument, tá prejde)
+    # app account e-mails (a contact in a contract is a document question, that passes)
     r"\be[ -]?mail\w*\b.{0,40}\b(v systeme|aplikaci\w*|databaz\w*|uct\w*|prihlas\w*|"
     r"pouzivatel\w*)",
     r"\b(uct\w*|prihlas\w*|pouzivatel\w*)\b.{0,30}\be[ -]?mail",
@@ -227,7 +227,7 @@ def not_found_reply(question: str) -> str:
     return NOT_FOUND_REPLY_EN if is_english(question) else NOT_FOUND_REPLY
 
 
-# --- LLM klasifikátor rozsahu (len lookup bez signálu z knižnice) -----------------------
+# --- LLM scope classifier (lookup only, without a library signal) -----------------------
 
 
 class _Scope(BaseModel):
@@ -252,8 +252,8 @@ Otázka: {question}"""
 
 
 def classify_scope(question: str, documents: list[str]) -> Verdict:
-    """→ "ok" alebo "offtopic". Chyba modelu = "ok" (fail open do RAG, ktorý je viazaný
-    na zdroje)."""
+    """→ "ok" or "offtopic". Model error = "ok" (fail open into RAG, which is bound
+    to sources)."""
     if not get_settings().scope_classifier:
         return "ok"
     prompt = SCOPE_PROMPT.format(

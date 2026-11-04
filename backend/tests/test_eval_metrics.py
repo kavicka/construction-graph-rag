@@ -36,7 +36,7 @@ def test_normalize_numbers_and_dates() -> None:
         ("Pokuta je 0.05 % denne.", "0,05", True),
         ("Termín je 30.11.2027.", "30. 11. 2027", True),
         ("Zádržné je 5 %.", "5", True),
-        ("Zádržné je 15 %.", "5", False),  # krátky token len ako celé slovo
+        ("Zádržné je 15 %.", "5", False),  # short token only as a whole word
         ("Pevnosť 36.4 MPa", "36.4", True),
         ("Pevnosť 36.45 MPa", "36.4", False),
         ("Trieda E.", "E", True),
@@ -55,8 +55,8 @@ def test_refusal_detection() -> None:
     assert is_refusal("Táto informácia sa v podkladoch nenachádza.")
     assert is_refusal("The sources do not mention the CEO.")
     assert not is_refusal("Cena je 4 860 000 EUR [1].")
-    assert is_refusal("V zdrojoch nie je informácia o vzorke K-06. [1]")  # zbytočná citácia
-    # dlhá odpoveď, kde chýba len jedna časť, nie je odmietnutie
+    assert is_refusal("V zdrojoch nie je informácia o vzorke K-06. [1]")  # superfluous citation
+    # a long answer missing just one part is not a refusal
     assert not is_refusal("Pokuta Agátová je 0,05 % denne [1]. " * 8 + "Senec neuvádza.")
 
 
@@ -67,7 +67,7 @@ def test_retrieval_metrics() -> None:
     assert recall_at_k(ranked, gold, 2) == 0.5
     assert recall_at_k(ranked, gold, 4) == 1.0
     assert reciprocal_rank(ranked, gold) == 0.5
-    # zisky na pozíciách 2 a 4 (pozícia 3 pokrýva už videnú stranu)
+    # gains at positions 2 and 4 (position 3 covers an already seen page)
     expected = (1 / math.log2(3) + 1 / math.log2(5)) / (1 + 1 / math.log2(3))
     assert ndcg_at_k(ranked, gold, 10) == pytest.approx(expected)
     assert math.isnan(recall_at_k(ranked, [], 5))

@@ -1,4 +1,4 @@
-"""Presný filter nad ľubovoľnými tabuľkami — nielen jedálniček."""
+"""Exact filter over arbitrary tables — not just the meal plan."""
 
 import pytest
 
@@ -63,7 +63,7 @@ def test_registry_from_headers(library: None) -> None:
     attrs = {a["key"]: (a["label"], a["unit"], a["docs"]) for a in db.list_record_attrs()}
     assert attrs["pevnost"] == ("Pevnosť", "MPa", 1)
     assert attrs["cena"] == ("Cena", "EUR", 2)
-    assert "c" not in attrs  # poradové číslo nie je atribút
+    assert "c" not in attrs  # ordinal number is not an attribute
 
 
 def test_filter_by_unit(library: None) -> None:
@@ -92,6 +92,6 @@ def test_filter_without_document_spans_library(library: None) -> None:
 
 
 def test_eval_questions_stay_on_rag_path(library: None) -> None:
-    """Faktografické otázky z golden setu nesmú omylom spadnúť do filtra."""
+    """Factual questions from the golden set must not fall into the filter by mistake."""
     filtered = [q.id for q in QUESTIONS if route_query(q.question).mode == "filter"]
     assert filtered == []

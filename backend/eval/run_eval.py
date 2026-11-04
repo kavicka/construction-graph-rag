@@ -1,17 +1,17 @@
-"""Eval harness — meria retrieval hit-rate, presnosť citácií a prínos grafu.
+"""Eval harness — measures retrieval hit-rate, citation accuracy and the contribution of the graph.
 
-Beží proti spustenému backendu (make backend):
-    uv run python -m eval.run_eval            # plný beh (upload korpusu + otázky)
-    uv run python -m eval.run_eval --skip-upload   # korpus už je zaindexovaný
+Runs against a running backend (make backend):
+    uv run python -m eval.run_eval            # full run (corpus upload + questions)
+    uv run python -m eval.run_eval --skip-upload   # the corpus is already indexed
 
-Metriky per otázka:
-  hit@k       — očakávané dokumenty medzi zdrojmi
-  substrings  — presné hodnoty (čísla) v odpovedi
-  cited       — odpoveď obsahuje aspoň jednu platnú citáciu [n]
-Graf A/B: relačné otázky sa vyhodnotia s RAG_GRAPH_EXPANSION on aj off
-(prepínané per-request cez query param sa nedá — meriame cez /api/search expanziu
-zdrojov: on-beh používa bežiaci server; off-porovnanie robí čistý retrieval bez grafu
-priamo cez /api/search?mode=hybrid).
+Metrics per question:
+  hit@k       — expected documents among the sources
+  substrings  — exact values (numbers) in the answer
+  cited       — the answer contains at least one valid citation [n]
+Graph A/B: relational questions are evaluated with RAG_GRAPH_EXPANSION both on and off
+(switching per request via a query param is not possible — we measure the source expansion: the
+on-run uses the running server; the off-comparison does pure retrieval without the graph
+directly via /api/search?mode=hybrid).
 """
 
 import argparse
@@ -33,7 +33,7 @@ CITATION = re.compile(r"\[(\d+)\]")
 
 
 def upload_corpus() -> dict[str, str]:
-    """→ filename → doc_id; čaká na done."""
+    """→ filename → doc_id; waits for done."""
     tmp = Path(__file__).parent / "_corpus"
     paths = generate_corpus(tmp)
     files = [("files", (p.name, p.read_bytes(), "application/pdf")) for p in paths]

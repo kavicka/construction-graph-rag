@@ -1,5 +1,5 @@
-"""Regresie k bezpečnostnej kontrole: XSS cez HTML upload, vlastníctvo vygenerovaných PDF,
-Host allowlist, únik cez dedupe, find_connections, escapovanie zdrojov, čistenie odpovede."""
+"""Regressions for the security review: XSS via HTML upload, ownership of generated PDFs,
+Host allowlist, leak via dedupe, find_connections, source escaping, answer cleanup."""
 
 import json
 
@@ -45,7 +45,7 @@ def test_generated_pdf_visible_only_to_owner() -> None:
 
     row = db.get_generated_document("g1")
     assert row is not None
-    assert _visible(row)  # bez prihlasovania (lokálne) vidno všetko
+    assert _visible(row)  # without login (local) everything is visible
     token = set_scope(AccessScope(user_id="member-id", email=None, role="member"))
     try:
         assert not _visible(row)
@@ -149,5 +149,7 @@ def test_find_connections_respects_access(monkeypatch: pytest.MonkeyPatch) -> No
     finally:
         reset_scope(token)
     assert [d["doc_id"] for d in out["documents"]] == ["A"]
-    assert out["matched_concepts"] == []  # pojem dokladá len B → štítok sa neprezradí
+    assert (
+        out["matched_concepts"] == []
+    )  # the concept is evidenced only by B → the label is not revealed
     assert json.dumps(out).count("text B") == 0

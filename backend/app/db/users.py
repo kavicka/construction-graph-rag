@@ -53,7 +53,7 @@ def update_user(user_id: str, *, role: str, groups_json: str, name: str) -> None
 def update_user_password(user_id: str, password_hash: str) -> None:
     with get_conn() as conn:
         conn.execute("UPDATE users SET password_hash = ? WHERE id = ?", (password_hash, user_id))
-        # po resete hesla musia staré prihlásenia aj tokeny prestať platiť
+        # after a password reset, old logins and tokens must stop being valid
         revoke_credentials(user_id, conn)
 
 

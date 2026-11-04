@@ -1,13 +1,13 @@
-"""Eval korpus v2 — stavebná firma, 12 prepojených dokumentov + otázky so zlatými stranami.
+"""Eval corpus v2 — a construction company, 12 linked documents + questions with gold pages.
 
-Prečo syntetický: deterministický, zdieľateľný (žiadne dáta klienta) a s presne
-známymi odpoveďami a stranami. Aby nebol triviálny:
-- dva projekty s rovnakou štruktúrou dokumentov a podobnými číslami (distraktory),
-- tie isté entity naprieč dokumentmi (subdodávateľ v zmluve, v zozname aj v reklamáciách),
-- SK aj EN dokumenty a otázky (cross-lingual retrieval),
-- tabuľky, viacstranové dokumenty, otázky bez odpovede v korpuse.
+Why synthetic: deterministic, shareable (no client data) and with exactly
+known answers and pages. To keep it from being trivial:
+- two projects with the same document structure and similar numbers (distractors),
+- the same entities across documents (a subcontractor in the contract, the list and the complaints),
+- SK and EN documents and questions (cross-lingual retrieval),
+- tables, multi-page documents, questions with no answer in the corpus.
 
-Každá položka v `pages` je jedna strana PDF, takže `gold` (súbor, strana) sedí z konštrukcie.
+Each item in `pages` is one PDF page, so `gold` (file, page) is correct by construction.
 """
 
 from dataclasses import dataclass, field
@@ -24,8 +24,8 @@ class EvalQuestion:
     id: str
     question: str
     kind: Kind
-    gold: list[tuple[str, int]]  # (súbor, strana) — relevantné pre retrieval
-    expected: list[str] = field(default_factory=list)  # všetko musí byť v odpovedi
+    gold: list[tuple[str, int]]  # (file, page) — relevant for retrieval
+    expected: list[str] = field(default_factory=list)  # everything must be in the answer
     forbidden: list[str] = field(default_factory=list)
     lang: Literal["sk", "en"] = "sk"
 
@@ -519,7 +519,7 @@ def _q(
 
 
 QUESTIONS: list[EvalQuestion] = [
-    # --- zmluva Agátová ----------------------------------------------------------------
+    # --- contract Agátová ----------------------------------------------------------------
     _q(
         "za-cena",
         "Aká je cena diela pri bytovom dome Agátová?",
@@ -655,7 +655,7 @@ QUESTIONS: list[EvalQuestion] = [
         ["60"],
         lang="en",
     ),
-    # --- rozpočet Agátová --------------------------------------------------------------
+    # --- budget Agátová --------------------------------------------------------------
     _q(
         "ra-zemne",
         "Koľko stoja zemné práce v rozpočte Agátová?",
@@ -724,7 +724,7 @@ QUESTIONS: list[EvalQuestion] = [
         ["386 500"],
         lang="en",
     ),
-    # --- stavebný denník -----------------------------------------------------------------
+    # --- construction diary -----------------------------------------------------------------
     _q(
         "da-doska",
         "Kedy sa betónovala základová doska na Agátovej?",
@@ -797,7 +797,7 @@ QUESTIONS: list[EvalQuestion] = [
         [],
         lang="en",
     ),
-    # --- kontrola kvality ----------------------------------------------------------------
+    # --- quality control ----------------------------------------------------------------
     _q(
         "ka-poziadavka",
         "Akú minimálnu pevnosť musí mať betón C30/37 na kockách?",
@@ -941,7 +941,7 @@ QUESTIONS: list[EvalQuestion] = [
         ["7 240 000"],
         lang="en",
     ),
-    # --- BOZP ----------------------------------------------------------------------------
+    # --- occupational safety (BOZP) ----------------------------------------------------------
     _q(
         "bozp-vyska",
         "Od akej výšky treba pri práci zaistiť kolektívnu ochranu?",
@@ -974,7 +974,7 @@ QUESTIONS: list[EvalQuestion] = [
         ["12"],
         lang="en",
     ),
-    # --- subdodávatelia ------------------------------------------------------------------
+    # --- subcontractors ------------------------------------------------------------------
     _q("sub-tatra-hodnotenie", "Aké hodnotenie má Strechy Tatra?", "table", [(SUB, 1)], ["4.6"]),
     _q(
         "sub-krupina-hodnotenie",
@@ -1073,7 +1073,7 @@ QUESTIONS: list[EvalQuestion] = [
         ["A0"],
         lang="en",
     ),
-    # --- EN dokumenty --------------------------------------------------------------------
+    # --- EN documents --------------------------------------------------------------------
     _q(
         "wc-101-cost",
         "What did warranty claim WC-101 cost?",
@@ -1152,7 +1152,7 @@ QUESTIONS: list[EvalQuestion] = [
         [(EQ, 1)],
         ["4 August 2026|4. augusta 2026|4. 8. 2026"],
     ),
-    # --- naprieč dokumentmi --------------------------------------------------------------
+    # --- across documents --------------------------------------------------------------
     _q(
         "x-pokuty",
         "Porovnaj zmluvné pokuty za omeškanie pri projektoch Agátová a Senec.",
@@ -1260,7 +1260,7 @@ QUESTIONS: list[EvalQuestion] = [
         ["0,05", "0,03"],
         lang="en",
     ),
-    # --- bez odpovede v korpuse ----------------------------------------------------------
+    # --- no answer in the corpus ----------------------------------------------------------
     _q("na-senec-zaciatok", "Kedy sa začnú práce na hale Senec?", "unanswerable", [], []),
     _q("na-cena-zeriav", "Koľko stál žeriav TC-03?", "unanswerable", [], []),
     _q("na-agatova-vytah", "Aký výťah sa osadí v bytovom dome Agátová?", "unanswerable", [], []),

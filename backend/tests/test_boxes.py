@@ -10,7 +10,7 @@ class _BBox:
         self.l, self.t, self.r, self.b = l, t, r, b
 
     def to_top_left_origin(self, page_height: float) -> "_BBox":
-        # Docling: BOTTOMLEFT → TOPLEFT (y sa preklopí)
+        # Docling: BOTTOMLEFT → TOPLEFT (y is flipped)
         return _BBox(self.l, page_height - self.t, self.r, page_height - self.b)
 
 

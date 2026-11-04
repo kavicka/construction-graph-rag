@@ -19,7 +19,7 @@ TRACE_ROOTS = ("rag.query", "rag.ingest")
 
 
 def list_root_spans(limit: int = 50) -> list[dict[str, Any]]:
-    """Posledné traces (root spany) + súčty tokenov a počty spanov za celý trace."""
+    """Latest traces (root spans) + token totals and span counts for the whole trace."""
     with get_conn() as conn:
         rows = conn.execute(
             """SELECT r.*,

@@ -47,7 +47,7 @@ logger = logging.getLogger(__name__)
 
 
 def _recover_stuck_ingests() -> None:
-    """Po reštarte servera dobehni dokumenty, ktorých ingest zomrel v strede."""
+    """After a server restart, finish documents whose ingest died midway."""
     for doc in db.list_documents():
         if doc["status"] not in ("done", "error"):
             logger.info("recovery: doc %s (%s) → re-ingest", doc["id"], doc["status"])
@@ -55,8 +55,8 @@ def _recover_stuck_ingests() -> None:
 
 
 class _McpEndpoint:
-    """MCP streamable HTTP na /mcp. Session manager MCP SDK sa dá spustiť len raz,
-    preto lifespan pri každom štarte vytvorí novú ASGI appku a tu ju len odovzdáme."""
+    """MCP streamable HTTP at /mcp. The MCP SDK session manager can only be started once,
+    so the lifespan creates a new ASGI app on every start and we only hand it over here."""
 
     app: ASGIApp | None = None
 
@@ -78,8 +78,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         ensure_bootstrap_admin()
     _recover_stuck_ingests()
     init_workforce()
-    # stateless: každý MCP request beží v úlohe svojho HTTP requestu → nesie prístupové
-    # práva TOHO requestu (nie toho, kto session otvoril)
+    # stateless: each MCP request runs in the task of its own HTTP request → it carries the access
+    # rights of THAT request (not of whoever opened the session)
     mcp_endpoint.app = mcp.streamable_http_app(
         streamable_http_path="/mcp",
         transport_security=mcp_transport_security(),
@@ -103,7 +103,7 @@ PUBLIC_PATHS = {
     "/api/auth/me",
     "/api/health",
     "/api/auth/workers",
-    "/api/auth/pin",  # prihlásenie pracovníka PIN-om
+    "/api/auth/pin",  # worker PIN login
 }
 
 
@@ -120,8 +120,8 @@ def _matches(value: str, patterns: list[str]) -> bool:
 
 
 def _host_allowed(host: str) -> bool:
-    """Rovnaký zoznam hostov ako DNS-rebinding ochrana MCP — chráni aj /api: bez neho by
-    cudzia stránka s rebindovanou doménou čítala knižnicu cez prehliadač používateľa."""
+    """The same host list as the MCP DNS-rebinding protection — it guards /api too: without it
+    a foreign page with a rebound domain could read the library through the user's browser."""
     return _matches(host, mcp_transport_security().allowed_hosts)
 
 
@@ -140,8 +140,8 @@ def _cross_origin_write(method: str, origin: str | None, fetch_site: str | None)
 
 
 class AuthMiddleware:
-    """Čisté ASGI (nie BaseHTTPMiddleware) — scope v contextvar ostane platný aj počas
-    streamovania SSE odpovede, ktoré beží v podúlohe."""
+    """Pure ASGI (not BaseHTTPMiddleware) — the scope in the contextvar stays valid even while
+    streaming an SSE response, which runs in a subtask."""
 
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
@@ -173,7 +173,7 @@ class AuthMiddleware:
         if access is None and path not in PUBLIC_PATHS:
             await JSONResponse({"detail": "prihlás sa"}, status_code=401)(scope, receive, send)
             return
-        # fail closed: s prihlasovaním nikdy nebeží request s implicitným lokálnym adminom
+        # fail closed: with login on, a request never runs with an implicit local admin
         token = set_scope(access or NO_ACCESS)
         try:
             await self.app(scope, receive, send)
@@ -182,8 +182,8 @@ class AuthMiddleware:
 
 
 app = FastAPI(title="rag", version="0.1.0", lifespan=lifespan)
-# poradie: posledný pridaný je vonkajší — WorkerGuard beží VO VNÚTRI AuthMiddleware,
-# až keď je nastavený access scope
+# order: the last one added is the outermost — WorkerGuard runs INSIDE AuthMiddleware,
+# only once the access scope is set
 app.add_middleware(WorkerGuard)
 app.add_middleware(AuthMiddleware)
 app.include_router(auth.router, prefix="/api")

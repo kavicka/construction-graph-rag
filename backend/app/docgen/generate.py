@@ -1,9 +1,9 @@
 """Generovanie dokumentu: osnova (JSON) → sekcie po jednej (markdown) → PDF.
 
-Malý lokálny model (qwen3:4b) spoľahlivo nenapíše celý dokument ako jeden JSON,
-preto ide po krokoch: krátky štruktúrovaný výstup na osnovu, potom voľný
-markdown pre každú sekciu zvlášť. Každý krok má fallback — dokument vznikne
-vždy, aj keď LLM vráti nezmysel.
+A small local model (qwen3:4b) cannot reliably write a whole document as one JSON,
+so it works in steps: a short structured output for the outline, then free
+markdown for each section separately. Every step has a fallback — a document is
+always produced, even if the LLM returns nonsense.
 """
 
 import json
@@ -156,7 +156,7 @@ _THINK = re.compile(r"<think>.*?</think>", re.DOTALL)
 
 def clean_section(body: str, heading: str) -> str:
     body = _THINK.sub("", body).strip()
-    # model občas zopakuje nadpis — buď ako markdown heading, alebo tučný prvý riadok
+    # the model sometimes repeats the heading — either as a markdown heading or a bold first line
     body = _HEADING_LINE.sub("", body, count=1) if body.lstrip().startswith("#") else body
     first, _, rest = body.partition("\n")
     if first.strip("*_ :").casefold() == heading.casefold():
@@ -280,7 +280,7 @@ def build_content(
 def export_answer_pdf(
     answer_md: str, sources_json: list[dict[str, Any]], question: str, chat_id: str | None
 ) -> dict[str, Any]:
-    """Uloží existujúcu odpoveď (napr. deep research) ako branded report."""
+    """Save an existing answer (e.g. deep research) as a branded report."""
     from app.company import load_company
     from app.retrieve.research import sections_from_markdown
 

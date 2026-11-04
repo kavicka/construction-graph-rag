@@ -1,5 +1,5 @@
-"""Vloží súhrn a tabuľky z eval/_runs/results-v2.json (po `make eval`) do README.md
-(značky EVAL_SUMMARY/EVAL_TABLES).
+"""Inserts the summary and tables from eval/_runs/results-v2.json (after `make eval`) into README.md
+(markers EVAL_SUMMARY/EVAL_TABLES).
 
 uv run python -m eval.readme_tables
 """

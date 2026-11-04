@@ -1,9 +1,9 @@
-"""Vzhľad generovaných PDF = téma aplikácie (svetlá), nie nastavenie firmy.
+"""Look of generated PDFs = the app theme (light), not company settings.
 
-Hodnoty zrkadlia `frontend/src/index.css` (`:root`): teplé neutrály, oranžový akcent,
-plochý vzhľad bez tieňov. Font: `system-ui` pre text a JetBrains Mono pre štítky (dátumy,
-čísla, metadáta) — rovnako ako `--font-sans` a `--font-mono` v appke. Test
-`test_theme_matches_frontend` stráži, aby sa tokeny nerozišli s CSS.
+Values mirror `frontend/src/index.css` (`:root`): warm neutrals, orange accent,
+flat look without shadows. Font: `system-ui` for text and JetBrains Mono for labels (dates,
+numbers, metadata) — same as `--font-sans` and `--font-mono` in the app. The test
+`test_theme_matches_frontend` guards against the tokens drifting from the CSS.
 """
 
 from dataclasses import dataclass
@@ -15,10 +15,10 @@ MONO_KEY = "jetbrains-mono"
 
 @dataclass(frozen=True)
 class PdfTheme:
-    # mená tokenov = CSS premenné témy (--foreground, --primary, …)
+    # token names = theme CSS variables (--foreground, --primary, …)
     foreground: str = "#26251d"
     muted_foreground: str = "#8c8b85"
-    background: str = "#ffffff"  # papier — nie krémové pozadie appky
+    background: str = "#ffffff"  # paper — not the app's cream background
     muted: str = "#efeee8"
     border: str = "#edece8"
     input: str = "#cfcdc4"
@@ -33,7 +33,7 @@ class PdfTheme:
     font_mono: str = '"JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'
 
     def font_face_css(self) -> str:
-        """@font-face pre JetBrains Mono — latin + latin-ext (č š ž ľ ť ň ď…)."""
+        """@font-face for JetBrains Mono — latin + latin-ext (č š ž ľ ť ň ď…)."""
         rules = []
         for weight in (400, 700):
             rules.append(
@@ -48,7 +48,7 @@ class PdfTheme:
 
     @property
     def mono(self) -> str:
-        """Mono stack s ext podmnožinou — renderer vyberá glyf po glyfe."""
+        """Mono stack with the ext subset — the renderer picks glyph by glyph."""
         return f'"JetBrains Mono", "JetBrains Mono Ext", {self.font_mono.split(",", 1)[1].strip()}'
 
 

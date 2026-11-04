@@ -1,4 +1,4 @@
-"""Pracovníci: vytvorenie (používateľ + PIN), overenie PIN-u so zámkom, session na mobile."""
+"""Workers: creation (user + PIN), PIN verification with lockout, session on mobile."""
 
 import hashlib
 import json
@@ -43,7 +43,7 @@ def _locked(row: dict[str, Any]) -> bool:
 
 
 def create_worker(name: str, pin: str, professions: list[str]) -> dict[str, Any]:
-    """Pracovník = používateľ s rolou member (bez použiteľného hesla) + PIN."""
+    """Worker = a user with the member role (no usable password) + PIN."""
     validate_pin(pin)
     email = f"w-{secrets.token_hex(6)}@pracovnik.local"
     user = create_user(email, name, secrets.token_urlsafe(32), role="member", groups=[WORKER_GROUP])
@@ -85,9 +85,9 @@ def check_pin(user_id: str, pin: str) -> PinResult:
 
 
 def create_worker_session(user_id: str) -> tuple[str, int]:
-    """→ (token, max_age sekúnd). Dlhšia platnosť než admin session — mobil na stavbe.
+    """→ (token, max_age seconds). Longer validity than an admin session — mobile on a site.
 
-    Hash tokenu musí sedieť s app.auth (SHA-256 hex) — overuje test_workforce_auth."""
+    The token hash must match app.auth (SHA-256 hex) — verified by test_workforce_auth."""
     days = get_workforce_settings().worker_session_days
     token = secrets.token_urlsafe(32)
     expires = datetime.now(UTC) + timedelta(days=days)

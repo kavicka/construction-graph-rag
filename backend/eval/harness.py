@@ -1,14 +1,14 @@
-"""Eval v2 — beží v procese, nezávisle od spusteného servera.
+"""Eval v2 — runs in-process, independent of a running server.
 
-    uv run python -m eval.harness                    # retrieval ablácie
-    uv run python -m eval.harness --generate         # + generačné metriky (Ollama, ~10 min)
-    uv run python -m eval.harness --gate             # porovnaj s eval/baseline.json
-    uv run python -m eval.harness --update-baseline  # ulož aktuálne čísla ako baseline
+    uv run python -m eval.harness                    # retrieval ablations
+    uv run python -m eval.harness --generate         # + generation metrics (Ollama, ~10 min)
+    uv run python -m eval.harness --gate             # compare with eval/baseline.json
+    uv run python -m eval.harness --update-baseline  # save the current numbers as the baseline
 
-Korpus (eval/construction.py) sa zaindexuje do eval/_runs/<variant>/data — každý
-ingest variant (bez / s contextual retrieval) má vlastnú SQLite + LanceDB. Index sa
-použije znova, kým sa nezmení korpus ani kód ingestu (hash v manifest.json).
-Výstup: eval/_runs/results-v2.json (necommituje sa) a eval/REPORT.md (tabuľky do README).
+The corpus (eval/construction.py) is indexed into eval/_runs/<variant>/data — each
+ingest variant (without / with contextual retrieval) has its own SQLite + LanceDB. The index is
+reused until the corpus or the ingest code changes (hash in manifest.json).
+Output: eval/_runs/results-v2.json (not committed) and eval/REPORT.md (tables for the README).
 """
 
 import argparse
@@ -55,11 +55,11 @@ REPORT_PATH = EVAL_DIR / "REPORT.md"
 BASELINE_PATH = EVAL_DIR / "baseline.json"
 APP_DIR = EVAL_DIR.parent / "app"
 
-GATE_TOLERANCE = 0.02  # pokles o viac ako 2 body = regresia
+GATE_TOLERANCE = 0.02  # a drop of more than 2 points = regression
 INGEST_VARIANTS: dict[str, dict[str, str]] = {
     "base": {"RAG_CONTEXTUAL_CHUNKS": "false"},
     "contextual": {"RAG_CONTEXTUAL_CHUNKS": "true"},
-    # produkčné nastavenie + 3 otrávené dokumenty (eval/injection.py)
+    # production setup + 3 poisoned documents (eval/injection.py)
     "injection": {"RAG_CONTEXTUAL_CHUNKS": "true"},
 }
 
@@ -94,14 +94,14 @@ ABLATIONS: list[Ablation] = [
         RetrievalConfig(graph=True, rerank=True, visual=True),
     ),
 ]
-DEFAULT_ABLATION = "contextual + hybrid + graph + rerank"  # = produkčné nastavenie
+DEFAULT_ABLATION = "contextual + hybrid + graph + rerank"  # = production setup
 
 
-# --- prostredie ------------------------------------------------------------------------
+# --- environment ------------------------------------------------------------------------
 
 
 def _activate(variant: str) -> Path:
-    """Prepne settings na dátový adresár variantu (singletony viazané na data_dir sa zahodia)."""
+    """Switches settings to the variant data dir (singletons bound to data_dir are discarded)."""
     data_dir = RUNS_DIR / variant / "data"
     os.environ["RAG_DATA_DIR"] = str(data_dir)
     for key, value in INGEST_VARIANTS[variant].items():
@@ -115,12 +115,12 @@ def _activate(variant: str) -> Path:
 
 
 def _source_hash() -> str:
-    """Korpus + kód ingestu — zmena čohokoľvek z toho = nový index."""
+    """Corpus + ingest code — any change to either = a new index."""
     from eval.construction import CORPUS
     from eval.injection import POISONED
 
     h = hashlib.sha256()
-    # obsah dokumentov, nie celý súbor — úprava očakávaných odpovedí nemá vynútiť re-ingest
+    # document contents, not the whole file — editing expected answers must not force a re-ingest
     h.update(
         json.dumps(
             [(d.filename, d.title, d.pages) for d in CORPUS + POISONED], ensure_ascii=False
@@ -200,7 +200,7 @@ def eval_retrieval(ablation: Ablation, questions: list[EvalQuestion]) -> dict[st
         _ensure_visual_index()
     names = {d["id"]: d["filename"] for d in db.list_documents()}
     answerable = [q for q in questions if q.gold]
-    _ranked(answerable[0].question, ablation.cfg, names)  # warm-up: načítanie modelov
+    _ranked(answerable[0].question, ablation.cfg, names)  # warm-up: model loading
 
     per_q: list[dict[str, Any]] = []
     for q in answerable:
@@ -247,7 +247,7 @@ def eval_retrieval(ablation: Ablation, questions: list[EvalQuestion]) -> dict[st
     }
 
 
-# --- generovanie -----------------------------------------------------------------------
+# --- generation -----------------------------------------------------------------------
 
 
 def eval_generation(ablation: Ablation, questions: list[EvalQuestion]) -> dict[str, Any]:
@@ -329,7 +329,7 @@ def eval_generation(ablation: Ablation, questions: list[EvalQuestion]) -> dict[s
     }
 
 
-# --- report a gate ---------------------------------------------------------------------
+# --- report and gate ---------------------------------------------------------------------
 
 
 def _pct(v: float) -> str:
@@ -442,14 +442,14 @@ def check_gate(results: dict[str, Any]) -> list[str]:
     failures = []
     for key, base in baseline.items():
         if key not in current:
-            continue  # metrika sa v tomto behu nemerala (napr. bez --generate)
+            continue  # the metric was not measured in this run (e.g. without --generate)
         if current[key] < base - GATE_TOLERANCE:
             failures.append(f"{key}: {current[key]:.3f} < baseline {base:.3f}")
     return failures
 
 
 def _merge_previous(results: dict[str, Any]) -> dict[str, Any]:
-    """Beh len s časťou ablácií nezmaže ostatné z predošlého behu (rovnaký korpus/kód)."""
+    """A run with only some ablations keeps the others from the previous run (same corpus/code)."""
     if not RESULTS_PATH.exists():
         return results
     previous = json.loads(RESULTS_PATH.read_text())

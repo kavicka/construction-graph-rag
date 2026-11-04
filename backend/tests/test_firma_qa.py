@@ -1,4 +1,4 @@
-"""Firemné údaje v chate: mená v pádoch, dátumy, typy otázok, šablóny, prístup (PLAN.md §17)."""
+"""Company data in chat: names in cases, dates, question types, templates, access (PLAN.md §17)."""
 
 import json
 import sqlite3
@@ -115,7 +115,7 @@ def ask(question: str, viewer: Viewer = ADMIN, **kw: Any) -> str:
     return result.answer
 
 
-# --- read-only dáta a whitelist stĺpcov -------------------------------------------------
+# --- read-only data and column whitelist ------------------------------------------------
 
 
 FORBIDDEN = (
@@ -170,7 +170,7 @@ def test_connection_is_read_only(firma: dict[str, Any]) -> None:
     assert {w.name for w in qa_data.workers()} >= {"Jozef Mikuš", "Peter Horák"}
 
 
-# --- mená, dátumy, typy otázok ----------------------------------------------------------
+# --- names, dates, question types -------------------------------------------------------
 
 TEAM = [
     WorkerRef("m", "Jozef Mikuš", True),
@@ -200,7 +200,7 @@ def test_worker_names_in_cases(question: str, expected: set[str]) -> None:
 
 
 def test_first_name_with_other_surname_is_someone_else() -> None:
-    # Ján Novotný je v tíme, Ján Novák nie — nesmie dostať Novotného údaje
+    # Ján Novotný is on the team, Ján Novák is not — must not get Novotný's data
     assert not match_workers("Koľko hodín má Ján Novák?", TEAM).workers
     assert {w.id for w in match_workers("Koľko hodín má Ján?", TEAM).workers} == {"j"}
 
@@ -211,7 +211,7 @@ def test_two_jozefs_are_ambiguous() -> None:
     assert {w.id for w in res.ambiguous[0][1]} == {"m", "k"}
 
 
-THU = date(2026, 10, 8)  # štvrtok
+THU = date(2026, 10, 8)  # Thursday
 
 
 @pytest.mark.parametrize(
@@ -269,7 +269,7 @@ def test_document_questions_stay_in_rag(firma: dict[str, Any], question: str) ->
     assert detect(question, qa_data.snapshot(), T) is None
 
 
-# --- odpovede (admin) -------------------------------------------------------------------
+# --- answers (admin) --------------------------------------------------------------------
 
 
 def test_the_reported_question(firma: dict[str, Any]) -> None:
@@ -306,7 +306,7 @@ def test_missing_overdue_blocked_problems(firma: dict[str, Any]) -> None:
 def test_site_and_task_people(firma: dict[str, Any]) -> None:
     site = ask("Kto dnes pracuje na Rovinke?")
     assert "Jozef Mikuš (Murovanie obvodových stien 2. NP)" in site
-    assert "Zateplenie fasády" in site  # otvorená, ale ešte nezačala
+    assert "Zateplenie fasády" in site  # open, but not yet started
     people = ask("Kto robí na murovaní obvodových stien?")
     assert "Jozef Mikuš, Peter Horák" in people
 
@@ -317,7 +317,7 @@ def test_ambiguous_and_unknown(firma: dict[str, Any]) -> None:
     assert "Pracovníka „Ján Novák“ v tíme nemám" in unknown
 
 
-# --- prístup ----------------------------------------------------------------------------
+# --- access -----------------------------------------------------------------------------
 
 
 def test_member_sees_nothing(firma: dict[str, Any]) -> None:
@@ -345,9 +345,9 @@ def test_worker_sees_only_self(firma: dict[str, Any]) -> None:
     assert "Jozef Mikuš" in att and "PN" not in att and "Kráľ" not in att
 
     late = ask("Ktoré úlohy meškajú?", me, worker_context=True)
-    assert "Betonáž" not in late  # cudzia úloha po termíne
+    assert "Betonáž" not in late  # someone else's overdue task
 
-    # cudzia úloha sa správa, akoby ju otázka nespomenula
+    # someone else's task behaves as if the question hadn't mentioned it
     other = ask("Kto robí na betonáži stropu?", me, worker_context=True)
     assert "Kráľ" not in other and "Betonáž" not in other
 
@@ -360,4 +360,4 @@ def test_worker_sees_coworker_names_only(firma: dict[str, Any]) -> None:
     horak = Viewer("worker", firma["horak"])
     text = ask("Aké mám úlohy?", horak, worker_context=True)
     assert "spolu s Jozef Mikuš" in text
-    assert "7:00" not in text and "15:30" not in text  # Mikušova dochádzka nie
+    assert "7:00" not in text and "15:30" not in text  # Mikuš's attendance is not

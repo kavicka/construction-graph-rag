@@ -1,4 +1,4 @@
-"""Voliteľný hlas (extra `voice`): bez Whispera/Pipera sa nič nerozbije, len sa vypne."""
+"""Optional voice (the `voice` extra): without Whisper/Piper nothing breaks, it just turns off."""
 
 from collections.abc import Callable
 from pathlib import Path
@@ -21,7 +21,7 @@ def test_transcribe_without_whisper_is_501(monkeypatch: pytest.MonkeyPatch, tmp_
     with pytest.raises(speech.SpeechUnavailable) as err:
         speech.transcribe(tmp_path / "x.webm")
     assert err.value.status_code == 501
-    assert "prepis reči" in str(err.value)  # čitateľná chyba aj vo výpise na pozadí
+    assert "prepis reči" in str(err.value)  # readable error in the background log too
 
 
 def test_no_piper_means_text_only(monkeypatch: pytest.MonkeyPatch) -> None:

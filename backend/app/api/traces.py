@@ -1,4 +1,4 @@
-"""Vstavaný prehliadač traces + feedback k odpovediam (napojený na trace)."""
+"""Built-in traces viewer + answer feedback (linked to the trace)."""
 
 import json
 from typing import Any, Literal
@@ -31,7 +31,7 @@ class SpanOut(BaseModel):
     span_id: str
     parent_id: str | None
     name: str
-    start_ms: float  # od začiatku trace
+    start_ms: float  # from the start of the trace
     duration_ms: float
     status: str
     attributes: dict[str, Any]
@@ -133,8 +133,8 @@ async def list_feedback(rating: Literal[-1, 1] | None = None) -> list[FeedbackOu
 
 @router.get("/feedback/export")
 async def export_feedback() -> list[dict[str, Any]]:
-    """Negatívne hodnotené odpovede ako kandidáti do golden setu (eval/construction.py
-    formát) — doplní sa len očakávaná odpoveď a gold strany."""
+    """Negatively rated answers as golden-set candidates (eval/construction.py
+    format) — only the expected answer and gold pages need to be filled in."""
     require_admin()
     rows = await run_in_threadpool(db.list_feedback, -1)
     return [

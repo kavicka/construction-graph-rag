@@ -1,4 +1,4 @@
-"""Firma: PIN prihlásenie pracovníkov, pracovníci, profesie, stavby, úlohy (nástenka)."""
+"""Company: worker PIN login, workers, professions, construction sites, tasks (board)."""
 
 from datetime import date
 from typing import Any, Literal
@@ -26,7 +26,7 @@ from app.workforce.workers import (
 router = APIRouter()
 
 
-# --- PIN prihlásenie --------------------------------------------------------------------
+# --- PIN login --------------------------------------------------------------------
 
 
 class WorkerPublic(BaseModel):
@@ -36,7 +36,7 @@ class WorkerPublic(BaseModel):
 
 @router.get("/auth/workers")
 async def login_workers() -> list[WorkerPublic]:
-    """Mená pracovníkov pre prihlasovaciu obrazovku (bez ďalších údajov)."""
+    """Worker names for the login screen (no other details)."""
     if not get_settings().auth_enabled:
         return []
     rows = await run_in_threadpool(store.list_workers, active_only=True)
@@ -79,7 +79,7 @@ async def pin_login(body: PinLoginIn, request: Request, response: Response) -> W
     return WorkerPublic(id=row["id"], name=row["name"])
 
 
-# --- pracovníci a profesie --------------------------------------------------------------
+# --- workers and professions --------------------------------------------------------------
 
 
 class WorkerOut(BaseModel):
@@ -189,7 +189,7 @@ async def set_professions(body: ProfessionsIn) -> list[str]:
     return names
 
 
-# --- stavby -----------------------------------------------------------------------------
+# --- construction sites -----------------------------------------------------------------
 
 
 class SiteOut(BaseModel):
@@ -245,7 +245,7 @@ async def remove_site(site_id: str) -> None:
     await run_in_threadpool(store.delete_site, site_id)
 
 
-# --- úlohy ------------------------------------------------------------------------------
+# --- tasks ------------------------------------------------------------------------------
 
 TaskStatus = Literal["todo", "in_progress", "done", "cancelled"]
 
@@ -270,7 +270,7 @@ class TaskOut(BaseModel):
     source_filename: str | None = None
     source_quote: str | None
     source_page: int | None
-    blocked: bool = False  # čaká na nedokončenú závislosť
+    blocked: bool = False  # waiting for an unfinished dependency
 
 
 class TaskIn(BaseModel):
@@ -336,7 +336,7 @@ async def _validate_task(body: TaskIn, task_id: str | None = None) -> None:
             raise HTTPException(status_code=422, detail="úloha nemôže čakať sama na seba")
         if await run_in_threadpool(store.get_task, body.depends_on) is None:
             raise HTTPException(status_code=422, detail="závislosť neexistuje")
-        # cyklus: A čaká na B, B (nepriamo) na A
+        # cycle: A waits for B, B (indirectly) for A
         current: str | None = body.depends_on
         seen: set[str] = set()
         while current and current not in seen:
@@ -423,7 +423,7 @@ async def edit_task(task_id: str, body: TaskIn) -> TaskOut:
 
 @router.put("/tasks/{task_id}/assignees")
 async def set_assignees(task_id: str, body: AssigneesIn) -> TaskOut:
-    """Nástenka: presun karty medzi stĺpcami pracovníkov."""
+    """Board: move a card between worker columns."""
     require_admin()
     if await run_in_threadpool(store.get_task, task_id) is None:
         raise HTTPException(status_code=404, detail="úloha neexistuje")
@@ -442,7 +442,7 @@ async def remove_task(task_id: str) -> None:
     await run_in_threadpool(store.delete_task, task_id)
 
 
-# --- pracovník: moje úlohy --------------------------------------------------------------
+# --- worker: my tasks --------------------------------------------------------------
 
 
 @router.get("/me/tasks")
@@ -459,13 +459,14 @@ DONE_VISIBLE_DAYS = 14
 
 class MyBoardOut(BaseModel):
     tasks: list[TaskOut]
-    today_ids: list[str]  # úlohy, na ktoré sa pýta dnešný výpis
+    today_ids: list[str]  # tasks that today's report asks about
 
 
 @router.get("/me/board")
 async def my_board() -> MyBoardOut:
-    """Pracovníkova nástenka (len na čítanie): jeho úlohy po stavoch, hotové 14 dní dozadu.
-    Stav sa mení výpisom — pracovník ho nepresúva ručne, aby sa výpis nedal obísť."""
+    """Worker's board (read-only): their tasks by status, done ones for the last 14 days.
+    Status changes through the report — workers don't move it by hand, so the report
+    can't be bypassed."""
     user_id = current_scope().user_id
     if user_id is None:
         return MyBoardOut(tasks=[], today_ids=[])

@@ -1,7 +1,7 @@
-"""Je to firemná otázka, a akého typu? Pravidlá najprv, LLM len keď pravidlá typ nenájdu.
+"""Is it a company question, and of what type? Rules first, LLM only when the rules find no type.
 
-LLM pri fallbacku vidí LEN otázku a vracia hodnotu z pevného zoznamu (JSON enum) — žiadne
-údaje z DB, žiadny voľný text, žiadne SQL.
+In the fallback the LLM sees ONLY the question and returns a value from a fixed list (JSON enum) —
+no DB data, no free text, no SQL.
 """
 
 import logging
@@ -73,8 +73,8 @@ STRONG = re.compile(
     r"nepracoval\w*)\b|\bnebol\w* v praci\b|\bnahlasil\w*|\bnahlasen\w*|"
     r"\bkto (dnes |este |zajtra )?(chyba|chybaju)\b"
 )
-# „výpis“ (denný výpis) vs. „vypíš“ (sloveso) — bez diakritiky sú rovnaké, preto sa podstatné
-# meno hľadá v pôvodnom texte s „ý“ alebo v spojení, kde sloveso nedáva zmysel
+# „výpis“ (daily report, noun) vs. „vypíš“ (verb, "list") — identical without diacritics, so the
+# noun is looked up in the original text with „ý“ or in a phrase where the verb makes no sense
 REPORT_NOUN = re.compile(r"\bvýpis\w*|\bvypis(y|u|om|och|ov)\b")
 REPORT_NOUN_NORM = re.compile(
     r"\b(denn\w*|dnesn\w*|neodovzd\w*|odovzd\w*|bez|nema\w*|chyba\w*) vypis\w*"
@@ -84,8 +84,8 @@ WEAK = re.compile(
     r"\bpostup\w*|\bco sa (robi|deje)|\bako (to )?(ide|vyzera|pokracuje)|\brobi\w*|"
     r"\bpracuj\w*|\bkde\b|\bprehlad\w*|\bmesk\w*|\bdokedy\b"
 )
-# stavba sama o sebe je aj téma dokumentov (zmluva, termín dokončenia) — firemná otázka je
-# to len so slovom o práci na nej
+# a construction site on its own is also a documents topic (contract, completion deadline) — it is
+# a company question only with a word about work on it
 SITE_WEAK = re.compile(
     r"\brobi\w*|\bpracuj\w*|\bco sa (robi|deje|robilo)|\bako (to )?(ide|vyzera|pokracuje)|"
     r"\bstav (prac|stavby|uloh)|\bprehlad\w*|\bhotov\w*|\brozpracovan\w*|\bmesk\w*|"
@@ -193,12 +193,13 @@ class FirmaQuery:
 def _rule_intents(qn: str, *, has_worker: bool, has_tasks: bool, has_sites: bool) -> list[Intent]:
     found: list[Intent] = [intent for intent, rx in RULES if rx.search(qn)]
     if found and any(i in SPECIFIC for i in found):
-        # „ktoré úlohy meškajú“ — slovo úloha je tu len podmet, typ určuje „meškajú“
+        # „ktoré úlohy meškajú“ (which tasks are late) — „úloha“ is just the subject here,
+        # „meškajú“ sets the type
         if {"overdue", "blocked", "task_people"} & set(found):
             found = [i for i in found if i not in ("worker_tasks", "worker_day")]
         found = [i for i in found if i != "site_overview"]
     if "task_people" in found and not has_tasks:
-        # „s kým robím?“ bez konkrétnej úlohy = moje úlohy aj s kolegami
+        # „s kým robím?“ (who do I work with?) without a specific task = my tasks with colleagues
         swap: Intent = "worker_tasks" if has_worker else "site_overview"
         found = [i if i != "task_people" else swap for i in found]
     if not has_worker and "site_overview" in found and "worker_day" in found:
@@ -257,10 +258,10 @@ def llm_intents(question: str) -> list[Intent]:
 def detect(
     question: str, snap: Snapshot, today: date, *, worker_context: bool = False
 ) -> FirmaQuery | None:
-    """None = nie je to otázka na firemné údaje (pokračuje do dokumentov).
+    """None = not a question about company data (continues to documents).
 
-    `worker_context` — mobil pracovníka: firemné údaje sú jediná doména, takže sa skúša
-    každá otázka a „ja / moje“ znamená prihláseného pracovníka."""
+    `worker_context` — the worker's phone: company data is the only domain, so every
+    question is tried and „ja / moje“ (I / mine) means the logged-in worker."""
     qn = norm(question)
     resolved = match_workers(question, snap.workers)
     sites = match_sites(question, snap.sites)
@@ -276,10 +277,13 @@ def detect(
 
     if has_worker:
         if not (strong or weak or period):
-            return None  # „Aký telefón má Mikuš?“ — to je otázka na dokumenty
+            # „Aký telefón má Mikuš?“ (what is Mikuš's phone number?) — that is a documents question
+            return None
     elif worker_context:
         if not (strong or weak or period or self_ref) or (DOC_MARKER.search(qn) and not self_ref):
-            return None  # „Aká je cena betónu?“, „termín podľa zmluvy“ — len nápoveda
+            # „Aká je cena betónu?“ (what is the price of concrete?), „termín podľa zmluvy“
+            # (deadline per the contract) — hint only
+            return None
     elif DOC_MARKER.search(qn) or not (strong or (sites and SITE_WEAK.search(qn))):
         return None
 

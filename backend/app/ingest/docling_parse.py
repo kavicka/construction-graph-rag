@@ -1,7 +1,7 @@
-"""Docling parsing — beží v thread pooli (CPU-bound).
+"""Docling parsing — runs in a thread pool (CPU-bound).
 
-Jeden konvert na dokument: layout + TableFormer + OCR podľa detekcie.
-Výstup: DoclingDocument JSON (lossless), pages metadáta, tabuľky (markdown + parquet).
+One conversion per document: layout + TableFormer + OCR based on detection.
+Output: DoclingDocument JSON (lossless), pages metadata, tables (markdown + parquet).
 """
 
 import json
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 @lru_cache
 def _get_converter() -> Any:
-    """Konverter je drahý (ML modely) — singleton, lazy import kvôli štartu appky."""
+    """The converter is expensive (ML models) — singleton, lazy import for app startup time."""
     from docling.datamodel.base_models import InputFormat
     from docling.datamodel.pipeline_options import (
         OcrMacOptions,
@@ -33,7 +33,7 @@ def _get_converter() -> Any:
     settings = get_settings()
     opts = PdfPipelineOptions()
     opts.do_table_structure = True
-    # high profil = presnejší (pomalší) TableFormer — na M4 Pro bez problémov
+    # high profile = more accurate (slower) TableFormer — fine on an M4 Pro
     accurate = settings.effective_profile == "high"
     opts.table_structure_options = TableStructureOptions(
         mode=TableFormerMode.ACCURATE if accurate else TableFormerMode.FAST
@@ -71,18 +71,18 @@ def _page_text_lengths(document: Any) -> list[tuple[int, int]]:
     return sorted(lengths.items())
 
 
-MAX_HEADING_PAGE_DISTANCE = 2  # nadpis platí max 2 strany dopredu (kartové layouty)
-CARD_PAGE_MAX_CHARS = 60  # strana s jediným krátkym textom = kategóriová karta
+MAX_HEADING_PAGE_DISTANCE = 2  # a heading applies at most 2 pages ahead (card layouts)
+CARD_PAGE_MAX_CHARS = 60  # a page with a single short text = category card
 
 
 def _headings_before_tables(document: Any) -> dict[str, str]:
-    """Tabuľka bez captionu dostane najbližší nadpis pred ňou v reading order.
+    """A table without a caption gets the nearest heading before it in reading order.
 
-    Dizajnové PDF (jedálničky, katalógy) majú kategóriu ako samostatný nadpis
-    nad tabuľkou — bez tohto tabuľka 'nevie', čo obsahuje. Nadpis je buď
-    SECTION_HEADER/TITLE, alebo solo krátky text na inak prázdnej strane
-    („kartová" strana s názvom kategórie). Platnosť nadpisu je obmedzená
-    vzdialenosťou strán — inak leakuje cez celý dokument.
+    Design-heavy PDFs (menus, catalogues) have the category as a separate heading
+    above the table — without this the table 'does not know' what it contains. The heading is either
+    SECTION_HEADER/TITLE, or a lone short text on an otherwise empty page
+    ("card" page with a category name). The heading's validity is limited by
+    page distance — otherwise it leaks across the whole document.
     """
     from docling_core.types.doc import TableItem
     from docling_core.types.doc.labels import DocItemLabel
@@ -99,7 +99,7 @@ def _headings_before_tables(document: Any) -> dict[str, str]:
         if len(texts) <= 2 and sum(len(x) for x in texts) <= CARD_PAGE_MAX_CHARS
     }
 
-    last: tuple[str, int] | None = None  # (nadpis, strana)
+    last: tuple[str, int] | None = None  # (heading, page)
     result: dict[str, str] = {}
     for item, _level in document.iterate_items():
         label = getattr(item, "label", None)
@@ -145,7 +145,7 @@ def _extract_tables(doc_id: str, document: Any) -> int:
             df.to_parquet(pq)
             parquet_path = str(pq)
         except Exception:
-            # markdown je zdroj pravdy pre LLM kontext; parquet je bonus pre presné čísla
+            # markdown is the source of truth for LLM context; parquet is a bonus for exact numbers
             logger.exception("parquet export zlyhal pre tabuľku %s", table_id)
 
         from app.index.chunker import item_boxes
@@ -166,8 +166,8 @@ def _extract_tables(doc_id: str, document: Any) -> int:
 
 
 def parse_document(doc_id: str) -> dict[str, int]:
-    """Synchrónny celý parse jedného dokumentu (PDF, DOCX, PPTX, XLSX, HTML, MD).
-    Volať cez asyncio.to_thread."""
+    """Synchronous full parse of a single document (PDF, DOCX, PPTX, XLSX, HTML, MD).
+    Call via asyncio.to_thread."""
     settings = get_settings()
     doc = db.get_document(doc_id)
     fmt = (doc or {}).get("format") or "pdf"

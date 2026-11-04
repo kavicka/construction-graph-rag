@@ -1,9 +1,8 @@
-"""Prepis reči → štruktúrovaný výpis (LLM s JSON schémou) + overenie každého čísla.
+"""Speech transcript → structured report (LLM with a JSON schema) + verification of every number.
 
-LLM smie len prevádzať text na štruktúru. Časy, hodiny, minúty a percentá, ktoré vráti,
-musia byť podložené prepisom (sk_numbers) — inak sa zahodia a systém sa dopýta. Stav
-úlohy (hotová / rozpracovaná / nerobilo sa) je kategória, tú berieme od LLM.
-"""
+The LLM may only turn text into structure. Times, hours, minutes and percentages it returns must be
+backed by the transcript (sk_numbers) — otherwise they are dropped and the system asks again. Task
+status (done / in progress / not worked on) is a category, which we take from the LLM."""
 
 import json
 import logging
@@ -158,8 +157,9 @@ def _time(value: str | None, text: str, *, afternoon: bool) -> str | None:
 
 
 def _repair_half_hour(hm: tuple[int, int], text: str) -> tuple[int, int] | None:
-    """LLM číta „pol siedmej“ ako 7:30 (o hodinu neskôr). Ak v texte je práve jeden čas
-    s rovnakými minútami a hodinou o 1 nižšie, použije sa ten — hodnota je z textu, nie z LLM."""
+    """The LLM reads „pol siedmej“ (6:30) as 7:30 (an hour later). If the text contains exactly one
+    time with the same minutes and an hour 1 lower, that one is used — the value comes from the
+    text, not the LLM."""
     h, m = hm
     if m == 0:
         return None
@@ -191,8 +191,9 @@ def _words(text: str) -> set[str]:
 
 
 def _related(a: str, b: str) -> bool:
-    """Ten istý slovný základ v inom páde: rámy ↔ rámov, dosku ↔ dosky, základovú ↔ základovej.
-    Spoločný začiatok aspoň 3 znaky a nanajvýš 2 odlišné koncové znaky kratšieho slova."""
+    """The same word stem in another case: rámy ↔ rámov, dosku ↔ dosky, základovú ↔ základovej.
+    Common prefix of at least 3 characters and at most 2 differing trailing characters of the
+    shorter word."""
     n = 0
     for x, y in zip(a, b, strict=False):
         if x != y:
@@ -202,8 +203,9 @@ def _related(a: str, b: str) -> bool:
 
 
 def task_mentioned(title: str, text: str, description: str = "") -> bool:
-    """Spomenul pracovník úlohu? Slovo z názvu alebo popisu musí v texte zaznieť (v hocijakom
-    páde). LLM inak „domyslí“ stav úlohy, o ktorej nepadlo slovo, a otázka sa obíde."""
+    """Did the worker mention the task? A word from the title or description must be spoken in the
+    text (in any case). Otherwise the LLM "infers" the status of a task that was never mentioned,
+    and the question is skipped."""
     task_words = _words(title) | _words(description[:200])
     if not task_words:
         return True
@@ -218,9 +220,9 @@ def merge_extraction(
     refs: dict[str, str],
     titles: dict[str, tuple[str, str]] | None = None,
 ) -> ReportData:
-    """Overené hodnoty z extrakcie prepíšu dáta výpisu; nepodložené sa zahodia.
+    """Verified values from the extraction overwrite the report data; unsupported ones are dropped.
 
-    titles (id → názov) zapne kontrolu, že úloha v texte naozaj zaznela."""
+    titles (id → title) enables the check that the task was actually mentioned in the text."""
     out = data.model_copy(deep=True)
     if x.absent and x.absence_reason.strip():
         out.absent, out.absence_reason = True, x.absence_reason.strip()[:300]
@@ -273,14 +275,15 @@ def merge_extraction(
     return out
 
 
-# koniec vety len pred veľkým písmenom — „nad 4. podlažím“ nie je koniec vety
+# end of a sentence only before a capital letter — „nad 4. podlažím“ (above the 4th floor) is not a
+# sentence end
 SENTENCE_RE = re.compile(r"(?<=[.!?])\s+(?=[A-ZÁÄČĎÉÍĹĽŇÓÔŔŠŤÚÝŽ])")
 CLOCK_RE = re.compile(r"\b\d{1,2}[:.]\d{2}\b")
 
 
 def clean_summary(summary: str, text: str) -> str:
-    """Zhrnutie je voľný text LLM — veta s časom alebo číslom, ktoré nezazneli, sa zahodí
-    (model píše „začal som o 7:30“, keď človek povedal „o pol siedmej“)."""
+    """The summary is free LLM text — a sentence with a time or number that was not spoken is
+    dropped (the model writes "I started at 7:30" when the person said „o pol siedmej“)."""
     numbers = number_candidates(text)
     kept = []
     for sentence in SENTENCE_RE.split(summary.strip()):
@@ -304,7 +307,7 @@ def extract_report(
     )
     x = _llm_json(prompt, EXTRACT_SYSTEM, _Extracted)
     if x is None:
-        x = _Extracted()  # LLM zlyhal — aspoň deterministické záchranné pravidlá nižšie
+        x = _Extracted()  # LLM failed — at least the deterministic fallback rules below
     titles = {t["id"]: (t["title"], t.get("description") or "") for t in tasks}
     out = merge_extraction(data, x, transcript, refs, titles)
     if not out.absent and (out.arrival is None or out.departure is None):
@@ -319,8 +322,9 @@ def extract_report(
 
 
 def _times_from_text(data: ReportData, text: str) -> None:
-    """LLM čas zle prečítal a validácia ho zahodila — ak v texte zazneli presne dva časy,
-    skorší je začiatok a neskorší koniec dňa (jediné poradie, ktoré dáva zmysel)."""
+    """The LLM misread a time and validation dropped it — if exactly two times were spoken in the
+    text, the earlier is the start and the later the end of the day (the only order that makes
+    sense)."""
     cands = sorted(time_candidates(text))
     if len(cands) != 2:
         return
@@ -332,7 +336,7 @@ def _times_from_text(data: ReportData, text: str) -> None:
     if len(set(options)) != 1:
         return
     arrival, departure = options[0]
-    # už overená hodnota musí s textom súhlasiť, inak nič nedopĺňame
+    # an already verified value must agree with the text, otherwise we fill in nothing
     if data.arrival not in (None, arrival) or data.departure not in (None, departure):
         return
     data.arrival, data.departure = arrival, departure
@@ -354,14 +358,15 @@ ABSENCE_LABELS = [
 
 
 def absence_reason(text: str) -> str | None:
-    """Deterministická záloha: „dnes som nebol v práci, mal som dovolenku“ → „Dovolenka“."""
+    """Deterministic fallback: „dnes som nebol v práci, mal som dovolenku“ (I was not at work today,
+    I had a holiday) → „Dovolenka“."""
     norm = normalize(text)
     if len(norm.split()) > 40 or not ABSENCE_RE.search(norm):
-        return None  # dlhý výpis s prácou nie je neprítomnosť
+        return None  # a long report with work is not an absence
     return next((label for key, label in ABSENCE_LABELS if key in norm), "Neprítomnosť")
 
 
-# --- odpovede na doplňujúce otázky ------------------------------------------------------
+# --- answers to follow-up questions -----------------------------------------------------
 
 DONE_RE = re.compile(r"\b(hotov\w*|dokonc\w*|dorobil\w*|dorobene|skoncen\w*|spraven\w*)\b")
 PROGRESS_RE = re.compile(r"\b(rozrob\w*|rozpracov\w*|pokracuj\w*|este nie\w*|nie je hotov\w*)\b")
@@ -389,12 +394,12 @@ prečo sa nerobilo (dôvod). Čo nepovedal, daj null. Čísla si nevymýšľaj."
 def parse_task_answer(
     task: dict[str, Any], question: str, answer: str, detail: str
 ) -> dict[str, Any]:
-    """→ zmeny pre TaskEntry (len overené). Prázdny dict = nerozumel som."""
+    """→ changes for TaskEntry (verified only). Empty dict = not understood."""
     parts = set(detail.split(","))
     cands = sorted(c for c in number_candidates(answer) if c > 0)
     out: dict[str, Any] = {}
 
-    # jednoduché prípady bez LLM: „tri“, „päť hodín“, „80 percent“
+    # simple cases without the LLM: „tri“ (three), „päť hodín“ (five hours), „80 percent“
     if parts == {"hours"} and len(cands) == 1 and cands[0] <= 16:
         return {"hours": cands[0]}
     if parts == {"progress"} and len(cands) == 1 and cands[0] <= 100:
@@ -420,7 +425,8 @@ def parse_task_answer(
             out["note"] = x.note.strip()[:500]
     if status == "not_started" and "note" not in out and len(normalize(answer)) > 12:
         out["note"] = answer.strip()[:500]
-    # „hotová, robil som tri hodiny“ — hodiny bez LLM, ak je číslo jediné
+    # „hotová, robil som tri hodiny“ (done, I worked three hours) — hours without the LLM if the
+    # number is the only one
     if (
         "hours" not in out
         and status in ("done", "in_progress")
@@ -429,7 +435,8 @@ def parse_task_answer(
         and hours_supported(cands[0], answer)
     ):
         out["hours"] = cands[0]
-    # samotná poznámka („robil som tam niečo“) nie je odpoveď — otázka ostane a zostrí sa
+    # a bare note („robil som tam niečo“ — I did something there) is not an answer — the question
+    # stays and gets sharper
     if not (set(out) - {"note"}) and "reason" not in parts:
         return {}
     return out
@@ -479,7 +486,7 @@ has_problems (bool) a problems = zoznam konkrétnych problémov krátkymi vetami
 
 
 def parse_problems_answer(answer: str) -> list[str] | None:
-    """→ [] = žiadne problémy, zoznam = problémy, None = nerozumel som."""
+    """→ [] = no problems, list = problems, None = not understood."""
     text = answer.strip()
     if not text:
         return None
@@ -494,10 +501,10 @@ def parse_problems_answer(answer: str) -> list[str] | None:
 
 
 def parse_time_answer(answer: str, *, afternoon: bool) -> str | None:
-    """Odpoveď na „O koľkej…“ — deterministicky, bez LLM. Musí byť jednoznačná."""
+    """Answer to „O koľkej…“ (At what time…) — deterministic, no LLM. Must be unambiguous."""
     cands = time_candidates(answer)
     if not cands:
-        # „sedem“, „7“ bez predložky
+        # „sedem“, „7“ without a preposition
         nums = [c for c in number_candidates(answer) if c == int(c) and 1 <= c <= 24]
         cands = {(int(n) % 12, 0) for n in nums}
     if len(cands) != 1:

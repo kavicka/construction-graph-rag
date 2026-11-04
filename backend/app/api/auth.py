@@ -1,4 +1,4 @@
-"""Prihlásenie, používatelia, API tokeny a prístup k dokumentom."""
+"""Login, users, API tokens and document access."""
 
 import json
 from typing import Literal
@@ -77,7 +77,7 @@ def record_login_failure(key: str) -> None:
 async def login(body: LoginIn, request: Request, response: Response) -> UserOut:
     client = ensure_login_allowed(request)
     user = await run_in_threadpool(db.get_user_by_email, body.email)
-    # rovnaká chyba aj rovnaký čas pre neexistujúci účet a zlé heslo
+    # same error and same timing for a non-existent account and a wrong password
     stored = user["password_hash"] if user else DUMMY_HASH
     valid = await run_in_threadpool(verify_password, body.password, stored)
     if user is None or not valid:
@@ -125,7 +125,7 @@ class UserUpdate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     role: Literal["admin", "member"]
     groups: list[str] = Field(default_factory=list, max_length=20)
-    # nové heslo (reset adminom); prázdne = bez zmeny
+    # new password (admin reset); empty = unchanged
     password: str | None = Field(default=None, min_length=10, max_length=200)
 
 
@@ -190,12 +190,12 @@ class TokenInfo(BaseModel):
 
 
 class TokenOut(TokenInfo):
-    token: str  # zobrazí sa len raz
+    token: str  # shown only once
 
 
 @router.post("/auth/tokens", status_code=201)
 async def new_token(body: TokenIn) -> TokenOut:
-    """API token pre MCP klienta / skripty — `Authorization: Bearer <token>`."""
+    """API token for an MCP client / scripts — `Authorization: Bearer <token>`."""
     scope = current_scope()
     if not scope.user_id:
         raise HTTPException(status_code=400, detail="bez prihlasovania token netreba")
@@ -238,7 +238,7 @@ class AccessIn(BaseModel):
 
 @router.put("/documents/{doc_id}/access")
 async def set_access(doc_id: str, body: AccessIn) -> dict[str, list[str]]:
-    """Kto dokument vidí: ["*"] = všetci, inak názvy skupín."""
+    """Who can see the document: ["*"] = everyone, otherwise group names."""
     require_admin()
     if await run_in_threadpool(db.get_document, doc_id) is None:
         raise HTTPException(status_code=404, detail="dokument neexistuje")

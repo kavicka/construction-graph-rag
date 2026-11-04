@@ -1,8 +1,8 @@
-"""Kto čo smie vidieť z firemných údajov (rozhodnutie z /ask 2026-10-08).
+"""Who may see what of the company data (decision from /ask 2026-10-08).
 
-admin  — všetko (aj bez prihlasovania: lokálny admin)
-worker — len seba: svoje úlohy, dochádzku, hodiny, výpisy; pri spoločnej úlohe mená kolegov
-member — nič (firemné údaje sú pre majiteľa)
+admin  — everything (even without login: local admin)
+worker — only themselves: own tasks, attendance, hours, reports; on a shared task, colleagues' names
+member — nothing (company data is for the owner)
 """
 
 from dataclasses import dataclass, replace
@@ -58,11 +58,12 @@ def authorize(query: FirmaQuery, viewer: Viewer, snap: Snapshot) -> FirmaQuery |
         if me not in candidates:
             return Denied(OTHERS_DENIED)
     if query.unknown_name:
-        # ten istý text ako pri kolegovi — pracovník sa nedozvie, kto v tíme je a kto nie
+        # same text as for a colleague — the worker can't tell who is on the team and who is not
         return Denied(OTHERS_DENIED)
     if ADMIN_ONLY_INTENTS & set(query.intents):
         return Denied(OTHERS_DENIED)
-    # cudzia úloha sa správa, akoby ju otázka nespomenula — ani jej existencia neunikne
+    # someone else's task behaves as if the question had not mentioned it — its existence
+    # does not leak either
     tasks = [t for t in query.tasks if me.id in t.assignees]
     intents = query.intents
     if query.tasks and not tasks:

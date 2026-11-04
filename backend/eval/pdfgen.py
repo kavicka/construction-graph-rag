@@ -1,7 +1,7 @@
-"""Spoločné renderovanie eval PDF cez reportlab.
+"""Shared rendering of eval PDFs via reportlab.
 
-Predvolený reportlab font (Helvetica, WinAnsi) nemá č, ľ, ť, ŕ, ĺ — PDF by obsahovalo
-diery a Docling by z neho čítal „zh nn a“ namiesto „zhŕňa“. Preto TTF s plnou latinkou.
+The default reportlab font (Helvetica, WinAnsi) lacks č, ľ, ť, ŕ, ĺ — the PDF would contain
+holes and Docling would read "zh nn a" instead of "zhŕňa" from it. Hence a TTF with full Latin.
 """
 
 from collections.abc import Sequence
@@ -36,7 +36,7 @@ FONT_CANDIDATES = [
     ("/usr/share/fonts/dejavu/DejaVuSans.ttf", "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf"),
 ]
 
-# blok stránky: ("h", nadpis) | ("p", odsek) | ("table", riadky)
+# page block: ("h", heading) | ("p", paragraph) | ("table", rows)
 Block = tuple[str, str] | tuple[str, list[list[str]]]
 Page = Sequence[Block]
 
@@ -82,8 +82,8 @@ def _table(rows: list[list[str]]) -> Table:
 
 
 def render_pages(path: Path, title: str, pages: Sequence[Page]) -> None:
-    """Každá položka `pages` je presne jedna strana PDF (explicitný PageBreak) —
-    gold čísla strán v otázkach tak sedia z konštrukcie."""
+    """Each item of `pages` is exactly one PDF page (explicit PageBreak) —
+    so the gold page numbers in the questions are correct by construction."""
     styles = _styles()
     flow: list[Flowable] = [Paragraph(title, styles["title"])]
     for i, page in enumerate(pages):

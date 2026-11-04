@@ -1,7 +1,7 @@
-"""Detekcia OCR enginu pri štarte.
+"""OCR engine detection at startup.
 
-Preferencia: ocrmac (Apple Vision — natívny, rýchly, takmer nulová RAM)
-→ Tesseract so slk dátami → žiadne OCR (varovanie).
+Preference: ocrmac (Apple Vision — native, fast, almost no RAM)
+→ Tesseract with slk data → no OCR (warning).
 """
 
 import shutil
@@ -54,7 +54,7 @@ def detect_ocr() -> OcrInfo:
             langs = (["sk-SK"] if slovak else []) + ["en-US"]
             if slovak:
                 return OcrInfo(engine="ocrmac", languages=langs, slovak=True)
-            # Vision bez slovenčiny — skús tesseract so slk, inak ocrmac len EN
+            # Vision without Slovak — try tesseract with slk, otherwise ocrmac in EN only
             tess = _tesseract_languages()
             if tess and "slk" in tess:
                 return OcrInfo(engine="tesseract", languages=["slk", "eng"], slovak=True)

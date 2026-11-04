@@ -15,9 +15,9 @@ def test_parse_cell_attrs_meal_macros() -> None:
 
 
 def test_parse_cell_attrs_guards_against_false_shorthand() -> None:
-    # samotné 'b' v bežnom texte bez kcal a bez trojice sa nesmie chytiť
+    # a lone 'b' in ordinary text without kcal and without a triple must not match
     assert "b" not in parse_cell_attrs("odstavec b hovorí o miešaní")
-    # jednotky fungujú aj bez kcal
+    # units work without kcal too
     attrs = parse_cell_attrs("toast 2ks 50g, tvaroh 125g")
     assert attrs["val_g"] == 50.0
     assert attrs["val_ks"] == 2.0
@@ -46,7 +46,7 @@ MEAL_MD = """| Číslo | Název jídla | Ingredience | Macra |
 def test_extract_records_from_meal_table() -> None:
     _seed_table("d1", "Oběd varianty", MEAL_MD)
     stored = extract_records("d1")
-    assert stored == 2  # riadok bez čísel sa preskočí
+    assert stored == 2  # a row without numbers is skipped
 
     records = db.list_records("d1")
     by_name = {r["name"]: json.loads(r["attrs_json"]) for r in records}

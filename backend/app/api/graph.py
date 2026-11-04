@@ -1,4 +1,4 @@
-"""Graf API pre vizualizáciu (react-force-graph) a inšpekciu uzlov."""
+"""Graph API for visualisation (react-force-graph) and node inspection."""
 
 import json
 from typing import Any
@@ -68,14 +68,14 @@ def _graph_payload(types: list[str] | None, doc_id: str | None, limit: int) -> G
     g = _build_nx()
     allowed_docs = allowed_doc_ids()
     if allowed_docs is not None:
-        # uzly cudzích dokumentov preč; zdieľané pojmy ostanú, len ak ich niečo povolené drží
+        # drop nodes of foreign documents; shared concepts stay only if something allowed holds them
         hidden = {
             n
             for n, d in g.nodes(data=True)
             if d.get("doc_id") is not None and d["doc_id"] not in allowed_docs
         }
         g.remove_nodes_from(hidden)
-        # zdieľané uzly ostanú, len ak na ne ukazuje povolený dokumentový uzol
+        # shared nodes stay only if an allowed document node points to them
         anchored = {
             nbr
             for n, d in g.nodes(data=True)
@@ -88,7 +88,7 @@ def _graph_payload(types: list[str] | None, doc_id: str | None, limit: int) -> G
 
     if doc_id:
         doc_nodes = {n for n, d in g.nodes(data=True) if d.get("doc_id") == doc_id}
-        # + zdieľané uzly napojené na dokument (koncepty, veličiny, referencie)
+        # + shared nodes attached to the document (concepts, quantities, references)
         shared = {
             nbr
             for n in doc_nodes
@@ -146,7 +146,7 @@ def _node_detail(node_id: str) -> NodeDetail | None:
     nodes = db.get_graph_nodes({e["src"] for e in edges} | neighbor_ids | evidence_ids)
 
     if allowed_docs is not None and node["doc_id"] is None:
-        # zdieľaný pojem: existuje pre používateľa, len ak ho dokladá povolený úsek
+        # shared concept: exists for the user only if an allowed passage backs it
         linked = {
             nodes.get(e["src"], {}).get("doc_id")
             for e in edges
@@ -221,7 +221,7 @@ def _communities(summaries: bool) -> list[CommunityOut]:
 
     names = {d["id"]: d["filename"] for d in db.list_documents()}
     out = []
-    for c in detect_communities():  # už obmedzené na povolené dokumenty
+    for c in detect_communities():  # already restricted to allowed documents
         if summaries:
             summarize_community(c)
         out.append(
@@ -242,5 +242,5 @@ def _communities(summaries: bool) -> list[CommunityOut]:
 
 @router.get("/graph/communities")
 async def get_communities(summaries: bool = False) -> list[CommunityOut]:
-    """Témy knižnice (Louvain nad grafom pojmov); summaries=true dopočíta chýbajúce súhrny."""
+    """Library topics (Louvain over the concept graph); summaries=true fills in missing ones."""
     return await run_in_threadpool(_communities, summaries)

@@ -1,11 +1,11 @@
-"""Pamäť konverzácie — doplňujúca otázka sa prepíše na samostatnú.
+"""Conversation memory — a follow-up question is rewritten into a standalone one.
 
-„A aká je tam pokuta?“ po otázke o zmluve Agátová → „Aká je zmluvná pokuta v zmluve
-o dielo Agátová?“. Retrieval aj odpoveď potom pracujú so samostatnou otázkou; história
-do promptu odpovede nejde (malé kontextové okno patrí zdrojom).
+„A aká je tam pokuta?“ after a question about the Agátová contract → „Aká je zmluvná pokuta v zmluve
+o dielo Agátová?“. Retrieval and the answer then work with the standalone question; history
+does not go into the answer prompt (the small context window belongs to the sources).
 
-LLM sa volá len pri náznaku nadväznosti (zámená, krátka otázka) — samostatné otázky
-prechádzajú bez latencie navyše.
+The LLM is called only on a hint of continuation (pronouns, short question) — standalone
+questions pass through with no extra latency.
 """
 
 import logging
@@ -19,7 +19,7 @@ from app.llm.ollama_client import OllamaError, generate_sync
 
 logger = logging.getLogger(__name__)
 
-HISTORY_TURNS = 3  # posledné 3 výmeny otázka–odpoveď
+HISTORY_TURNS = 3  # last 3 question–answer exchanges
 ANSWER_SNIPPET = 400
 
 FOLLOW_UP = re.compile(
@@ -32,8 +32,8 @@ SHORT_QUESTION_WORDS = 5
 
 
 class _Rewrite(BaseModel):
-    # najprv pomenovať, na čo sa otázka odkazuje — bez tohto kroku malý model otázku
-    # len zopakoval (eval: 5/5 doplňujúcich otázok bez zmeny)
+    # first name what the question refers to — without this step the small model just
+    # repeated the question (eval: 5/5 follow-up questions unchanged)
     refers_to: str = Field(max_length=200)
     question: str = Field(min_length=3, max_length=500)
 
@@ -89,14 +89,15 @@ def _words(text: str) -> set[str]:
 
 
 def _changed(original: str, rewritten: str) -> bool:
-    """Prepis sa počíta, len ak doplnil nové slovo (odkaz z histórie) — vypustenie
-    zámena („ten snímač“ → „snímač“) informáciu nepridá."""
+    """A rewrite counts only if it added a new word (reference from history) — dropping
+    a pronoun („ten snímač“ → „snímač“) adds no information."""
     return bool(_words(rewritten) - _words(original))
 
 
 def rewrite_question(question: str, history: list[dict[str, Any]]) -> str:
-    """LLM prepis; ak model otázku nezmení, spojí sa s predchádzajúcou otázkou
-    („Aký prietok mala A-02? A akú mala teplotu?“) — tomu rozumie retrieval aj LLM."""
+    """LLM rewrite; if the model leaves the question unchanged, it is joined with the
+    previous question („Aký prietok mala A-02? A akú mala teplotu?“) — both retrieval and
+    the LLM understand that."""
     prompt = REWRITE_PROMPT.format(history=_history_text(history), question=question)
     rewritten = question
     try:
@@ -109,7 +110,8 @@ def rewrite_question(question: str, history: list[dict[str, Any]]) -> str:
             timeout=60,
         )
         candidate = _Rewrite.model_validate_json(raw).question.strip()
-        # model občas „odpovie“ namiesto prepisu — prepis musí zostať otázkou rozumnej dĺžky
+        # the model sometimes „answers“ instead of rewriting — the rewrite must remain
+        # a question of reasonable length
         if len(candidate) <= max(300, len(question) * 6):
             rewritten = candidate
     except (OllamaError, ValidationError) as exc:

@@ -18,8 +18,8 @@ def _row(cid: str) -> dict[str, Any]:
 def test_weighted_rrf_downweights_list() -> None:
     a = [_row("x"), _row("y")]
     b = [_row("z"), _row("y")]
-    assert rrf_fuse([a, b], top_k=1)[0]["chunk_id"] == "y"  # v oboch zoznamoch
-    # slabý druhý zoznam: z (1. v b) klesne za x (1. v a), bez váh by s ním remízoval
+    assert rrf_fuse([a, b], top_k=1)[0]["chunk_id"] == "y"  # in both lists
+    # weak second list: z (1st in b) drops behind x (1st in a); without weights it would tie with it
     top = rrf_fuse([a, b], top_k=3, weights=[1.0, 0.1])
     assert [r["chunk_id"] for r in top] == ["y", "x", "z"]
 
@@ -53,7 +53,7 @@ def test_low_reranker_is_permissive_and_routed_by_fastembed_support() -> None:
     from app.config import PROFILE_RERANKER_MODELS
     from app.retrieve.rerank import _fastembed_supports
 
-    # CC-BY-NC (jina-v2) nesmie byť default — repo je MIT
+    # CC-BY-NC (jina-v2) must not be the default — the repo is MIT
     assert PROFILE_RERANKER_MODELS["low"] == "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
     assert not _fastembed_supports(PROFILE_RERANKER_MODELS["low"])  # → sentence-transformers
     assert _fastembed_supports("Xenova/ms-marco-MiniLM-L-6-v2")
@@ -69,7 +69,7 @@ HISTORY = [
     ("question", "expected"),
     [
         ("A aká je tam pokuta?", True),
-        ("A Senec?", True),  # krátka otázka
+        ("A Senec?", True),  # short question
         ("What about the warranty?", True),
         ("Aký je termín dokončenia haly Senec podľa zmluvy ZoD-2026/021?", False),
     ],
@@ -86,8 +86,8 @@ def test_rewrite_question_guards(monkeypatch: pytest.MonkeyPatch) -> None:
         lambda *a, **k: '{"refers_to": "Agátová", "question": "Aká je zmluvná pokuta Agátová?"}',
     )
     assert rewrite_question("A pokuta?", HISTORY) == "Aká je zmluvná pokuta Agátová?"
-    # model odpovedal namiesto prepisu / zlyhal / otázku nezmenil → spojenie
-    # s predchádzajúcou otázkou, aby retrieval vedel, o čom je reč
+    # model answered instead of rewriting / failed / left the question unchanged → join
+    # with the previous question so retrieval knows what is being discussed
     fallback = "Aká je cena diela Agátová? A pokuta?"
     monkeypatch.setattr(
         memory,
@@ -104,7 +104,7 @@ def test_rewrite_question_guards(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_openai_compatible_provider(monkeypatch: pytest.MonkeyPatch) -> None:
-    """RAG_LLM_PROVIDER=openai: chat/completions, json_schema response_format, usage do spanu."""
+    """RAG_LLM_PROVIDER=openai: chat/completions, json_schema response_format, usage in the span."""
     from app.llm import ollama_client
 
     seen: dict[str, Any] = {}

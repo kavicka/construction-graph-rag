@@ -46,7 +46,7 @@ def _login(client: TestClient, email: str, password: str) -> None:
 
 
 def _seed_docs() -> None:
-    """A = stavba, B = financie (najlepšia zhoda na 'prietok'), C = všetci."""
+    """A = "stavba", B = "financie" (best match for 'prietok'), C = everyone."""
     for doc_id, access, vec in (
         ("A", ["stavba"], [0.6, 0.4]),
         ("B", ["financie"], [1.0, 0.0]),
@@ -145,7 +145,7 @@ def test_retrieval_prefilters_by_access(secured: None) -> None:
         sources = retrieve_sources("prietok", k=3)
     finally:
         reset_scope(token)
-    # B je najbližší vektor, ale filter je vo vyhľadávaní → B sa vôbec neobjaví
+    # B is the nearest vector, but the filter is applied in the search → B never shows up
     assert {s.doc_id for s in sources} == {"A", "C"}
     # fail closed: with login on, code running outside a request scope sees nothing
     assert retrieve_sources("prietok", k=3) == []
@@ -216,7 +216,7 @@ def test_admin_can_reset_password_and_revokes_sessions(secured: None) -> None:
             )
             assert ok.status_code == 200
             assert ok.json()["groups"] == ["financie", "stavba"] and ok.json()["name"] == "Eva N."
-        assert eva.get("/api/documents").status_code == 401  # stará session zrušená
+        assert eva.get("/api/documents").status_code == 401  # old session revoked
         old = eva.post(
             "/api/auth/login", json={"email": "eva@firma.sk", "password": "povodne-heslo-1"}
         )
@@ -224,7 +224,7 @@ def test_admin_can_reset_password_and_revokes_sessions(secured: None) -> None:
         _login(eva, "eva@firma.sk", "nove-heslo-12345")
     with TestClient(app) as admin3:
         _login(admin3, *ADMIN)
-        # bez hesla v tele sa heslo nemení
+        # without a password in the body the password is unchanged
         keep = admin3.put(
             f"/api/users/{uid}", json={"name": "Eva N.", "role": "member", "groups": []}
         )

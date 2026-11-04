@@ -1,5 +1,5 @@
-"""Fázy 5–7: denný výpis — extrakcia s overením čísel, doplňujúce otázky, nejasné odpovede
-→ tlačidlá, blokovanie odovzdania, stav úloh, PDF za pracovníka a súhrnný denný výpis."""
+"""Phases 5–7: daily report — extraction with number checks, follow-up questions, unclear answers
+→ buttons, submit blocking, task status, per-worker PDF and the summary daily report."""
 
 import time
 import wave
@@ -71,8 +71,12 @@ def test_full_dialog(client: TestClient, fake_llm: FakeLLM, setup: dict[str, str
                     "hours": 5,
                     "note": "murovanie priečok",
                 },
-                {"ref": "T2", "status": "done", "hours": 3},  # okná nespomenul → celé sa zahodí
-                {"ref": "T9", "status": "done"},  # neexistujúca úloha
+                {
+                    "ref": "T2",
+                    "status": "done",
+                    "hours": 3,
+                },  # did not mention the windows → the whole entry is dropped
+                {"ref": "T9", "status": "done"},  # non-existent task
             ],
             "summary": "Murovanie priečok.",
         },
@@ -91,7 +95,7 @@ def test_full_dialog(client: TestClient, fake_llm: FakeLLM, setup: dict[str, str
     assert kinds == ["break", "task", "problems"]
     assert "Osadenie okien" in open_question(report, "task")["text"]
 
-    # odovzdanie s otvorenými otázkami → 409
+    # submission with open questions → 409
     resp = client.post(f"/api/attendance/reports/{rid}/submit")
     assert resp.status_code == 409 and set(resp.json()["detail"]["open"]) == {
         "break",
@@ -99,7 +103,7 @@ def test_full_dialog(client: TestClient, fake_llm: FakeLLM, setup: dict[str, str
         "problems",
     }
 
-    # prestávka — deterministicky
+    # break — deterministic
     q = open_question(report, "break")
     client.post(
         f"/api/attendance/reports/{rid}/questions/{q['id']}/text", json={"text": "pol hodiny"}
@@ -107,7 +111,7 @@ def test_full_dialog(client: TestClient, fake_llm: FakeLLM, setup: dict[str, str
     report = wait_done(client, rid)
     assert report["data"]["break_minutes"] == 30
 
-    # nejasná odpoveď 2× → konkrétnejšia otázka → tlačidlá
+    # unclear answer 2× → more specific question → buttons
     q = open_question(report, "task")
     assert q["detail"] == "status" and q["mode"] == "open"
     fake_llm.push("_XTaskAnswer", {"status": None})
@@ -130,7 +134,7 @@ def test_full_dialog(client: TestClient, fake_llm: FakeLLM, setup: dict[str, str
     )
     report = wait_done(client, rid)
 
-    # problémy cez LLM
+    # problems via LLM
     q = open_question(report, "problems")
     fake_llm.push("_XProblems", {"has_problems": True, "problems": ["Chýbalo lepidlo na obklad."]})
     client.post(
@@ -140,7 +144,7 @@ def test_full_dialog(client: TestClient, fake_llm: FakeLLM, setup: dict[str, str
     report = wait_done(client, rid)
     assert report["data"]["problems"] == ["Chýbalo lepidlo na obklad."]
 
-    # 8 h odpracované, pri úlohách 6 h → otázka na hodiny
+    # 8 h worked, 6 h on tasks → hours question
     assert report["worked_hours"] == 8 and report["reported_hours"] == 6
     q = open_question(report, "hours")
     assert "8 h" in q["text"] and "6 h" in q["text"]
@@ -175,7 +179,7 @@ def test_full_dialog(client: TestClient, fake_llm: FakeLLM, setup: dict[str, str
     history = client.get(f"/api/tasks/{setup['t2']}").json()["history"]
     assert history[0]["entry"]["status"] == "done"
 
-    # súhrnný denný výpis
+    # summary daily report
     day = client.get(f"/api/attendance/days/{TODAY}").json()
     row = day["rows"][0]
     assert row["status"] == "submitted" and row["worked_hours"] == 8
@@ -190,16 +194,16 @@ def test_hallucinated_times_dropped(
     client: TestClient, fake_llm: FakeLLM, setup: dict[str, str]
 ) -> None:
     rid = _start(client, setup["jano"])["id"]
-    # „pol ôsmej“ = 7:30; LLM tvrdí 8:30 a odchod, ktorý nezaznel
+    # „pol ôsmej“ = 7:30; the LLM claims 8:30 and a departure that was never mentioned
     fake_llm.push("_Extracted", {"arrival": "08:30", "departure": "17:00", "break_minutes": 45})
     client.post(
         f"/api/attendance/reports/{rid}/text",
         json={"text": "Prišiel som o pol ôsmej a murovali sme."},
     )
     report = wait_done(client, rid)
-    # 8:30 je klasický posun „pol ôsmej“ o hodinu → opravené na čas, ktorý v texte je
+    # 8:30 is the classic „pol ôsmej“ one-hour shift → corrected to the time in the text
     assert report["data"]["arrival"] == "07:30"
-    assert report["data"]["departure"] is None  # odchod vôbec nezaznel
+    assert report["data"]["departure"] is None  # departure was never mentioned
     assert report["data"]["break_minutes"] is None
     q = open_question(report, "departure")
     client.post(
@@ -270,7 +274,7 @@ def test_audio_input_and_speech(
     )
     assert empty.status_code == 422
 
-    # retencia: staré nahrávky preč, prepis ostáva
+    # retention: old recordings gone, transcript stays
     from datetime import UTC, datetime, timedelta
 
     assert cleanup_audio(datetime.now(UTC) + timedelta(days=31)) == 1
@@ -308,7 +312,7 @@ def test_owner_edit_and_worker_isolation(
 
     client.post("/api/auth/pin", json={"worker_id": jano, "pin": "1111"})
     mine = client.get("/api/attendance/today", params={"worker_id": fero}).json()
-    assert mine["user_id"] == jano  # worker_id pracovník nemôže podvrhnúť
+    assert mine["user_id"] == jano  # a worker cannot forge worker_id
     assert client.get(f"/api/attendance/reports/{fero_report['id']}").status_code == 404
     assert client.get(f"/api/attendance/days/{TODAY}").status_code == 403
     assert client.put(f"/api/attendance/reports/{mine['id']}", json={"data": {}}).status_code == 403
@@ -347,12 +351,12 @@ def test_daily_tick(
     monkeypatch.setenv("RAG_DAILY_SUMMARY_TIME", "18:30")
     get_workforce_settings.cache_clear()
     wednesday = datetime(2026, 10, 7, 18, 0)
-    assert daily_tick(wednesday) is False  # ešte nie je čas
+    assert daily_tick(wednesday) is False  # not time yet
     assert daily_tick(wednesday.replace(hour=19)) is True
     assert store.get_daily_summary("2026-10-07") is not None
-    assert daily_tick(wednesday.replace(hour=20)) is False  # nič sa nezmenilo
+    assert daily_tick(wednesday.replace(hour=20)) is False  # nothing changed
     saturday = datetime(2026, 10, 10, 19, 0)
-    assert daily_tick(saturday) is False  # víkend bez výpisov
+    assert daily_tick(saturday) is False  # weekend without reports
 
 
 def test_vague_task_answer_keeps_note_and_counts_attempt(
@@ -370,7 +374,7 @@ def test_vague_task_answer_keeps_note_and_counts_attempt(
     report = wait_done(client, rid)
     q = next(q for q in report["questions"] if q["task_id"] == setup["t1"])
     assert q["detail"] == "progress"
-    # LLM z nejasnej odpovede vyrobí len poznámku — to nie je odpoveď
+    # from an unclear answer the LLM produces only a note — that is not an answer
     fake_llm.push("_XTaskAnswer", {"status": "in_progress", "note": "Urobil niečo."})
     client.post(
         f"/api/attendance/reports/{rid}/questions/{q['id']}/text",
@@ -384,13 +388,13 @@ def test_vague_task_answer_keeps_note_and_counts_attempt(
 
 
 def test_rules_from_real_model_runs() -> None:
-    """Poučenia z behov s qwen3/Whisper — časy „pol X“ posunuté o hodinu, skloňované názvy
-    úloh, neprítomnosť, ktorú LLM prehliadol."""
+    """Lessons from qwen3/Whisper runs — „pol X“ times shifted by an hour, inflected task names,
+    an absence the LLM overlooked."""
     from app.workforce.extract import _time, absence_reason, task_mentioned
 
     assert _time("07:30", "prišiel som o pol siedmej", afternoon=False) == "06:30"
     assert _time("16:30", "odišiel som o pol štvrtej", afternoon=True) == "15:30"
-    assert _time("08:30", "prišiel som o siedmej", afternoon=False) is None  # nič na opravu
+    assert _time("08:30", "prišiel som o siedmej", afternoon=False) is None  # nothing to correct
     assert task_mentioned("Osadenie okenných rámov", "okná neprišli, rámy sa nerobili")
     assert task_mentioned("Betonáž základovej dosky", "debnenie na základovú dosku")
     assert not task_mentioned("Osadenie okenných rámov", "murovali sme priečky celý deň")
@@ -401,7 +405,7 @@ def test_rules_from_real_model_runs() -> None:
 def test_absence_fallback_and_escape_hatch(
     client: TestClient, fake_llm: FakeLLM, setup: dict[str, str]
 ) -> None:
-    # LLM zlyhá → deterministická záloha spozná neprítomnosť
+    # LLM fails → deterministic fallback detects the absence
     rid = _start(client, setup["jano"])["id"]
     fake_llm.push("_Extracted", None)
     client.post(
@@ -438,7 +442,7 @@ def test_two_times_fallback_and_done_task_not_asked(
     data = ReportData()
     _times_from_text(data, "Prišiel som o 7. Odišiel som o pol štvrtej.")
     assert (data.arrival, data.departure) == ("07:00", "15:30")
-    # úloha uzavretá dnes (napr. majiteľom) sa v dnešnom výpise nepýta
+    # a task closed today (e.g. by the owner) is not asked about in today's report
     store.update_task(setup["t2"], {"status": "done", "progress": 100, "done_on": TODAY})
     rid = _start_any(client, setup["jano"])
     fake_llm.push(

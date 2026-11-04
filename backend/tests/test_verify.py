@@ -5,7 +5,7 @@ from app.retrieve.verify import split_sentences, verify_sentences
 
 
 class KeywordEmbedder:
-    """Deterministický embedder: vektor = výskyt kľúčových slov."""
+    """Deterministic embedder: vector = occurrence of keywords."""
 
     KEYS = ("cena", "pokuta", "stavbyved", "hronec", "betón", "lešen", "2030", "holcim")
 
@@ -61,11 +61,11 @@ def test_statuses() -> None:
     ]
     answer = (
         "Cena diela je 4 860 000 EUR bez DPH [1]. "
-        "Zmluvná pokuta je 0,07 % z ceny za deň [1]. "  # číslo nesedí
+        "Zmluvná pokuta je 0,07 % z ceny za deň [1]. "  # number doesn't match
         "Stavbyvedúcim zhotoviteľa je Ing. Peter Hronec [2]. "
-        "Betón dodáva firma Holcim zo Senca [2]. "  # zdroj o tom nič nehovorí
+        "Betón dodáva firma Holcim zo Senca [2]. "  # the source says nothing about it
         "Dielo bude odovzdané v roku 2030 bez citácie. "
-        "Podklady neuvádzajú, kto dodá výťah."  # odmietnutie sa nehodnotí
+        "Podklady neuvádzajú, kto dodá výťah."  # a refusal is not evaluated
     )
     checks = verify_sentences(answer, sources)
     assert [(c.status, c.citations) for c in checks] == [

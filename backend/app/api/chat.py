@@ -1,4 +1,4 @@
-"""Chat endpoint — SSE stream udalostí z orchestrátora + perzistencia správ."""
+"""Chat endpoint — SSE stream of orchestrator events + message persistence."""
 
 import json
 import logging
@@ -151,7 +151,7 @@ async def get_chat_messages(chat_id: str) -> list[MessageOut]:
 
 @router.post("/messages/{message_id}/export")
 async def export_message(message_id: str) -> dict[str, Any]:
-    """Odpoveď z chatu → branded PDF (nadpisy ## sa stanú sekciami, citácie ostanú)."""
+    """Chat answer → branded PDF (## headings become sections, citations are kept)."""
     message = await run_in_threadpool(ensure_message, message_id)
     if message["role"] != "assistant":
         raise HTTPException(status_code=404, detail="odpoveď neexistuje")

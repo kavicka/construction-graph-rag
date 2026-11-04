@@ -1,4 +1,4 @@
-"""Fáza 2: stavby, úlohy, priradenia (nástenka), závislosti, aktívne úlohy dňa."""
+"""Phase 2: sites, tasks, assignments (board), dependencies, the day's active tasks."""
 
 from datetime import date, timedelta
 
@@ -51,7 +51,7 @@ def test_task_validation(client: TestClient) -> None:
     a = make_task(client, sid, "Základy", [jano])
     b = make_task(client, sid, "Murovanie", [jano], depends_on=a["id"])
     assert b["depends_on_title"] == "Základy" and b["blocked"] is True
-    # cyklus A → B → A
+    # cycle A → B → A
     cyc = client.put(
         f"/api/tasks/{a['id']}",
         json={"site_id": sid, "title": "Základy", "assignees": [jano], "depends_on": b["id"]},
@@ -80,7 +80,7 @@ def test_board_move_and_filters(client: TestClient) -> None:
     )
     make_task(client, sid, "Hotová vec", [jano], status="done")
 
-    # presun Jano → Fero, potom Alt+drag pridá Jana späť
+    # move Jano → Fero, then Alt+drag adds Jano back
     moved = client.put(f"/api/tasks/{t['id']}/assignees", json={"user_ids": [fero]}).json()
     assert moved["assignees"] == [fero]
     both = client.put(f"/api/tasks/{t['id']}/assignees", json={"user_ids": [fero, jano]}).json()
@@ -132,13 +132,13 @@ def test_active_tasks_rules(client: TestClient) -> None:
     assert active == {"Po termíne", "Základy"}
     assert future["id"] and cancelled["id"]
 
-    # závislosť dokončená dnes → nadväzujúca úloha začína až zajtra
+    # dependency finished today → the follow-up task starts only tomorrow
     apply_report_statuses([{"task_id": base["id"], "status": "done"}], _iso(TODAY))
     today_active = {t["title"] for t in active_tasks_for(jano, TODAY)}
-    assert today_active == {"Po termíne", "Základy"}  # hotová dnes ostáva v dnešnom výpise
+    assert today_active == {"Po termíne", "Základy"}  # finished today stays in today's report
     tomorrow = {t["title"] for t in active_tasks_for(jano, TODAY + timedelta(1))}
     assert tomorrow == {"Po termíne", "Murovanie"}
-    assert client.get("/api/me/tasks").json() == []  # bez prihlásenia nie je „ja“
+    assert client.get("/api/me/tasks").json() == []  # without login there is no „me“
 
     apply_report_statuses(
         [{"task_id": overdue["id"], "status": "in_progress", "progress": 60}], _iso(TODAY)
@@ -151,6 +151,6 @@ def test_active_tasks_rules(client: TestClient) -> None:
 def test_overlaps() -> None:
     task = {"date_from": "2026-10-10", "date_to": "2026-10-12", "status": "todo"}
     assert overlaps(task, date(2026, 10, 12), date(2026, 10, 20))
-    assert overlaps(task, date(2026, 10, 13), date(2026, 10, 20))  # po termíne, ale otvorená
+    assert overlaps(task, date(2026, 10, 13), date(2026, 10, 20))  # overdue but still open
     assert not overlaps({**task, "status": "done"}, date(2026, 10, 13), date(2026, 10, 20))
     assert not overlaps(task, date(2026, 10, 1), date(2026, 10, 9))

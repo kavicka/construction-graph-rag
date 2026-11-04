@@ -16,7 +16,7 @@ from app.index.lancedb_store import replace_document_chunks
 
 
 def _seed() -> None:
-    """Dva dokumenty o betóne, jeden o žeriave; 'zariadenie' je všade (hub)."""
+    """Two documents about concrete, one about a crane; 'zariadenie' is everywhere (hub)."""
     get_settings().ensure_dirs()
     db.init_db()
     topics = {
@@ -62,10 +62,10 @@ def test_communities_split_topics_and_drop_hubs() -> None:
     concept_sets = [set(c.concepts) for c in found]
     assert {"betón", "pevnosť", "kocky", "trhlina"} in concept_sets
     assert {"žeriav", "prehliadka", "zaťaženie"} in concept_sets
-    assert all("zariadenie" not in s for s in concept_sets)  # generický hub preč
+    assert all("zariadenie" not in s for s in concept_sets)  # generic hub gone
     concrete = next(c for c in found if "betón" in c.concepts)
     assert set(concrete.documents) == {"a", "b"}
-    assert found[0] is concrete  # viac dokumentov → vyššie
+    assert found[0] is concrete  # more documents → ranked higher
 
 
 def test_summary_is_cached_and_used(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -82,7 +82,7 @@ def test_summary_is_cached_and_used(monkeypatch: pytest.MonkeyPatch) -> None:
     again = next(c for c in detect_communities() if "betón" in c.concepts)
     assert (again.title, again.summary) == ("Kvalita betónu", "Skúšky pevnosti kociek.")
     summarize_community(again)
-    assert len(calls) == 1  # druhýkrát z cache
+    assert len(calls) == 1  # second time from cache
 
     sources, messages = global_context("Hlavné témy?", [again])
     assert {s.filename for s in sources} == {"a.pdf", "b.pdf"}

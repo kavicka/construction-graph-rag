@@ -129,7 +129,7 @@ def test_chat_generates_branded_document(
         assert doc["pages"] >= 1
 
         verify = next(e for e in events if e["type"] == "verify")
-        assert verify["ok"] is True  # 12.4 je v zdroji
+        assert verify["ok"] is True  # 12.4 is in the source
 
         answer = "".join(e["text"] for e in events if e["type"] == "delta")
         assert "Report o prietoku" in answer
@@ -211,7 +211,7 @@ def test_feedback_roundtrip(client: TestClient) -> None:
 
         assert client.delete(f"/api/messages/{message_id}/feedback").status_code == 204
         assert client.get("/api/feedback").json() == []
-        # feedback len na odpovede asistenta
+        # feedback only on assistant answers
         user_msg = client.get(f"/api/chats/{done['chat_id']}").json()[0]["id"]
         assert (
             client.put(f"/api/messages/{user_msg}/feedback", json={"rating": 1}).status_code == 404

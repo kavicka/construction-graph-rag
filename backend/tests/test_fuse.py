@@ -10,7 +10,7 @@ def test_rrf_overlap_wins() -> None:
     fts = _rows(["b", "d"])
     fused = rrf_fuse([dense, fts], top_k=4)
     ids = [r["chunk_id"] for r in fused]
-    assert ids[0] == "b"  # v oboch zoznamoch → najvyššie RRF
+    assert ids[0] == "b"  # in both lists → highest RRF
     assert set(ids) == {"a", "b", "c", "d"}
     assert fused[0]["rrf_score"] > fused[-1]["rrf_score"]
 

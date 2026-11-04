@@ -1,12 +1,11 @@
-"""Reč: prepis (mlx-whisper) a syntéza (Piper) — obe lokálne, modely sa načítajú lenivo.
+"""Speech: transcription (mlx-whisper) and synthesis (Piper) — both local, models are loaded lazily.
 
-Obe knižnice sú voliteľné (`uv sync --extra voice`; mlx-whisper len na Apple Silicon).
-Bez Pipera sú otázky len textové, bez Whispera prepis vráti 501 s vysvetlením.
+Both libraries are optional (`uv sync --extra voice`; mlx-whisper only on Apple Silicon). Without
+Piper the questions are text-only, without Whisper transcription returns 501 with an explanation.
 
-Prepis: ľubovoľný formát z mobilu (webm/opus, mp4/aac, ogg, m4a, wav) → ffmpeg → 16 kHz mono
-wav → Whisper so slovenčinou a slovníkom stavby (initial_prompt: názvy stavieb a úloh),
-aby lepšie trafil žargón. Jeden prepis naraz — MLX model zdieľa GPU pamäť.
-"""
+Transcription: any format from a phone (webm/opus, mp4/aac, ogg, m4a, wav) → ffmpeg → 16 kHz mono
+wav → Whisper with Slovak and a site vocabulary (initial_prompt: site and task names), so it better
+catches jargon. One transcription at a time — the MLX model shares GPU memory."""
 
 import hashlib
 import importlib.util
@@ -31,7 +30,7 @@ _tts_lock = threading.Lock()
 MAX_AUDIO_SECONDS = 15 * 60
 PROMPT_MAX_CHARS = 600
 
-# Whisper si na tichu vymýšľa titulkové frázy — tie do výpisu nepatria
+# Whisper invents subtitle phrases on silence — they do not belong in the report
 HALLUCINATIONS = re.compile(
     r"(titulky|subtitles|ďakujem za pozornosť|ďakujem za sledovanie|www\.\S+|amara\.org)"
     r"[^.!?]*[.!?]?",
@@ -44,7 +43,8 @@ class SpeechError(RuntimeError):
 
 
 class SpeechUnavailable(HTTPException):
-    """Chýba voliteľná závislosť — API ju vráti ako 501, prepis na pozadí ako chybu výpisu."""
+    """An optional dependency is missing — the API returns 501, background transcription records a
+    report error."""
 
     def __init__(self, detail: str) -> None:
         super().__init__(status_code=501, detail=detail)
@@ -62,7 +62,7 @@ def stt_available() -> bool:
 
 
 def to_wav16k(src: Path, dst: Path) -> float:
-    """→ dĺžka v sekundách. ffmpeg zvládne všetko, čo nahrá prehliadač alebo telefón."""
+    """→ duration in seconds. ffmpeg handles anything a browser or phone records."""
     try:
         subprocess.run(
             [
@@ -99,13 +99,13 @@ def clean_transcript(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-# Vzor časov slovami: bez neho turbo prepíše „o pol siedmej“ ako „o 05.07“ (overené na
-# nahrávkach) — Whisper drží štýl promptu a čas potom ostane v slovách, ktoré vieme čítať.
+# Time pattern in words: without it turbo transcribes „o pol siedmej“ as „o 05.07“ (verified on
+# recordings) — Whisper keeps the prompt's style and the time then stays in words we can read.
 TIME_STYLE = "Časy hovor slovami: o pol siedmej, o siedmej, o štvrť na päť, o pol štvrtej."
 
 
 def vocabulary_prompt(sites: list[str], tasks: list[str], names: list[str]) -> str:
-    """Krátky „slovník“ pre Whisper — názvy, ktoré inak prepíše zle, a vzor časov."""
+    """Short "vocabulary" for Whisper — names it would otherwise get wrong, and the time pattern."""
     parts = [TIME_STYLE]
     if sites:
         parts.append("Stavby: " + ", ".join(dict.fromkeys(sites)) + ".")
@@ -117,7 +117,7 @@ def vocabulary_prompt(sites: list[str], tasks: list[str], names: list[str]) -> s
 
 
 def transcribe(audio_path: Path, prompt: str | None = None) -> str:
-    """Audio súbor → slovenský text."""
+    """Audio file → Slovak text."""
     if not stt_available():
         raise SpeechUnavailable(
             "prepis reči nie je na tomto serveri dostupný (vyžaduje Apple Silicon "
@@ -138,7 +138,7 @@ def transcribe(audio_path: Path, prompt: str | None = None) -> str:
                 initial_prompt=prompt or None,
                 condition_on_previous_text=False,
                 hallucination_silence_threshold=2.0,
-                word_timestamps=True,  # vyžaduje ho hallucination_silence_threshold
+                word_timestamps=True,  # required by hallucination_silence_threshold
             )
     return clean_transcript(str(result.get("text", "")))
 
@@ -169,7 +169,7 @@ def tts_available() -> bool:
 
 
 def synthesize(text: str) -> Path:
-    """Text → wav (cache podľa hlasu a textu — tá istá otázka sa negeneruje znova)."""
+    """Text → wav (cached by voice and text — the same question is not generated again)."""
     settings = get_workforce_settings()
     settings.ensure_dirs()
     key = hashlib.sha256(f"{settings.tts_voice}\n{text}".encode()).hexdigest()[:32]

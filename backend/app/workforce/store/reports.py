@@ -172,7 +172,7 @@ def update_question(question_id: str, **fields: Any) -> None:
 
 
 def task_history(task_id: str) -> list[dict[str, Any]]:
-    """Odovzdané výpisy, v ktorých sa úloha spomína (pre detail karty)."""
+    """Submitted reports that mention the task (for the card detail)."""
     with get_conn() as conn:
         rows = conn.execute(
             """SELECT r.id AS report_id, r.day, u.name AS worker_name, t.value AS entry_json

@@ -1,8 +1,8 @@
-"""Deterministický vzorkový korpus pre eval — 3 PDF s prekrývajúcimi sa konceptmi.
+"""Deterministic sample corpus for the eval — 3 PDFs with overlapping concepts.
 
-meranie-sk.pdf     SK meranie prietoku + tabuľka hodnôt
-calibration-en.pdf EN kalibrácia snímača prietoku + tabuľka tolerancií (cross-doc koncept)
-skladovanie-sk.pdf SK šum — nesúvisiaca téma (test presnosti)
+meranie-sk.pdf     SK flow measurement + a table of values
+calibration-en.pdf EN flow sensor calibration + a tolerance table (cross-doc concept)
+skladovanie-sk.pdf SK noise — an unrelated topic (precision test)
 """
 
 from pathlib import Path
@@ -70,8 +70,8 @@ def generate_corpus(out_dir: Path) -> list[Path]:
 
 
 def _meal_plan(path: Path) -> None:
-    """Jedálniček s kategóriami ako nadpismi NAD tabuľkami — testuje caption backfill,
-    records extrakciu a filter/compose otázky."""
+    """Menu with categories as headings ABOVE the tables — tests caption backfill,
+    records extraction and filter/compose questions."""
     header = ["Číslo", "Název jídla", "Ingredience", "Macra"]
     page: Page = [
         ("h", "Obedy"),

@@ -1,7 +1,6 @@
-"""Firma: pracovníci (PIN), stavby a úlohy, import úloh z dokumentov, hlasová dochádzka
-s denným výpisom pre majiteľa.
+"""Firma (company) module: workers (PIN), sites and tasks, task import from documents, voice
+attendance with a daily report for the owner.
 
-Všetko, čo rozhoduje (aktívne úlohy, chýbajúce údaje, termíny, priradenie, súčty hodín),
-počíta kód. LLM len prevádza voľný text na štruktúru a každé jeho číslo sa overuje
-voči tomu, čo človek naozaj povedal alebo čo stojí v dokumente.
-"""
+Everything that decides (active tasks, missing data, deadlines, assignment, hour totals) is computed
+by code. The LLM only turns free text into structure, and every number it returns is checked against
+what the person actually said or what the document states."""

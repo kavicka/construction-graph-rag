@@ -31,7 +31,7 @@ def insert_document(
 
 
 def delete_document(doc_id: str) -> None:
-    """Riadok dokumentu + všetko, čo naň odkazuje (pages, tables_meta, records cez CASCADE)."""
+    """The document row plus everything referencing it (pages, tables_meta, records via CASCADE)."""
     with get_conn() as conn:
         conn.execute("DELETE FROM chunk_boxes WHERE doc_id = ?", (doc_id,))
         conn.execute("DELETE FROM documents WHERE id = ?", (doc_id,))
@@ -79,7 +79,7 @@ def set_document_status(
 
 
 def set_pages(doc_id: str, pages: list[tuple[int, int]]) -> None:
-    """pages: zoznam (page_no, text_len)."""
+    """pages: list of (page_no, text_len)."""
     with get_conn() as conn:
         conn.execute("DELETE FROM pages WHERE doc_id = ?", (doc_id,))
         conn.executemany(

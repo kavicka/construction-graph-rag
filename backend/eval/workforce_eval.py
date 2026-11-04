@@ -1,20 +1,21 @@
-"""Eval modulu Firma — výber lokálnych modelov podľa merania, nie podľa dojmu.
+"""Eval of the Firma module — choosing local models by measurement, not by impression.
 
-    uv run python -m eval.workforce_eval                 # STT + extrakcia + import
-    uv run python -m eval.workforce_eval --only stt      # len prepis reči
+    uv run python -m eval.workforce_eval                 # STT + extraction + import
+    uv run python -m eval.workforce_eval --only stt      # speech transcription only
     uv run python -m eval.workforce_eval --models qwen3:14b,gemma3:12b
 
-STT: slovenské vety stavbárov → `say -v Laura` (macOS) a Piper `sk_SK-lili-medium`
-→ Whisper turbo vs large-v3, WER na normalizovaných slovách + čas.
+STT: Slovak sentences from builders → `say -v Laura` (macOS) and Piper `sk_SK-lili-medium`
+→ Whisper turbo vs large-v3, WER on normalised words + time.
 
-Extrakcia výpisu: prepisy s ručne overenými hodnotami (časy, hodiny, stavy úloh). Pre každý
-model: koľko polí trafil (po validácii), koľko by bez validácie prešlo zle (LLM tvrdil iné
-číslo než človek povedal) a koľko polí ostalo prázdnych (→ doplňujúca otázka).
+Report extraction: transcripts with manually verified values (times, hours, task states). For each
+model: how many fields it got right (after validation), how many would have passed wrongly without
+validation (the LLM claimed a different number than the person said) and how many fields stayed
+empty (→ follow-up question).
 
-Import úloh: texty od dodávateľov s očakávanými úlohami a termínmi; zhoda názvov (kľúčové
-slová), správne termíny, odfiltrované halucinácie (úloha bez citátu v texte).
+Task import: texts from suppliers with expected tasks and deadlines; title match (keyword
+words), correct deadlines, filtered-out hallucinations (a task without a quote in the text).
 
-Výstup: eval/WORKFORCE.md + eval/_runs/results-workforce.json.
+Output: eval/WORKFORCE.md + eval/_runs/results-workforce.json.
 """
 
 import argparse
@@ -92,7 +93,7 @@ def eval_stt() -> list[dict[str, Any]]:
         for model in STT_MODELS:
             os.environ["RAG_STT_MODEL"] = model
             get_workforce_settings.cache_clear()
-            speech.transcribe(clips[0][2], STT_PROMPT)  # zahriatie (načítanie modelu)
+            speech.transcribe(clips[0][2], STT_PROMPT)  # warm-up (model loading)
             for voice in ("Laura (macOS)", "Piper lili"):
                 errs, secs = [], 0.0
                 for v, sentence, path in clips:
@@ -118,7 +119,7 @@ def eval_stt() -> list[dict[str, Any]]:
     return rows
 
 
-# --- extrakcia výpisu --------------------------------------------------------------------
+# --- report extraction --------------------------------------------------------------------
 
 TASKS = [
     {"id": "t1", "title": "Murovanie priečok 2. NP", "site_name": "RD Rovinka", "description": ""},
@@ -135,7 +136,7 @@ TASKS = [
 @dataclass
 class Case:
     text: str
-    expected: dict[str, Any]  # pole → hodnota; tasks: id → (status, hours, progress)
+    expected: dict[str, Any]  # field → value; tasks: id → (status, hours, progress)
     tasks: dict[str, tuple[str | None, float | None, int | None]] = field(default_factory=dict)
 
 
@@ -181,7 +182,7 @@ CASES = [
 
 
 def _score_case(case: Case, data: Any, raw: Any) -> dict[str, int]:
-    """correct / wrong (prešlo zle) / missing (→ otázka) / blocked (validácia zastavila zlé)."""
+    """correct / wrong (passed wrongly) / missing (→ question) / blocked (validation stopped it)."""
     s = {"correct": 0, "wrong": 0, "missing": 0, "blocked": 0}
     for key, want in case.expected.items():
         got = getattr(data, key)
@@ -268,7 +269,7 @@ def eval_extraction(models: list[str]) -> list[dict[str, Any]]:
     return rows
 
 
-# --- import úloh -------------------------------------------------------------------------
+# --- task import -------------------------------------------------------------------------
 
 DOCS: list[tuple[str, list[tuple[str, str | None]]]] = [
     (
@@ -374,7 +375,7 @@ def eval_import(models: list[str]) -> list[dict[str, Any]]:
 def write_report(
     stt: list[dict[str, Any]], ext: list[dict[str, Any]], imp: list[dict[str, Any]]
 ) -> None:
-    # čiastočný beh (--only) ponechá ostatné sekcie z minulého behu
+    # a partial run (--only) keeps the other sections from the previous run
     previous_path = EVAL_DIR / "_runs" / "results-workforce.json"
     if previous_path.exists():
         previous = json.loads(previous_path.read_text(encoding="utf-8"))
@@ -446,7 +447,7 @@ def main() -> None:
     models = [m for m in args.models.split(",") if m]
     with tempfile.TemporaryDirectory() as tmp:
         os.environ["RAG_DATA_DIR"] = tmp
-        os.environ["RAG_TRACING"] = "false"  # dočasná DB nemá tabuľku spanov
+        os.environ["RAG_TRACING"] = "false"  # the temporary DB has no spans table
         voices = Path(__file__).resolve().parents[2] / "data" / "voices"
         if voices.exists():
             (Path(tmp) / "voices").symlink_to(voices)

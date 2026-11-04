@@ -1,7 +1,7 @@
-"""Agent slučka pre kompozičné otázky — LLM plánuje, nástroje počítajú.
+"""Agent loop for composition questions — the LLM plans, tools compute.
 
-Model dostane nástroje (Ollama tool-calling); každé číslo v odpovedi pochádza
-z výsledku nástroja. Max AGENT_MAX_STEPS kôl — ochrana pred zacyklením.
+The model gets tools (Ollama tool-calling); every number in the answer comes
+from a tool result. At most AGENT_MAX_STEPS rounds — protection against looping.
 """
 
 import json
@@ -104,7 +104,7 @@ class AgentResult:
     answer: str
     sources: list[Source]
     trace: list[dict[str, str]] = field(default_factory=list)
-    evidence: list[str] = field(default_factory=list)  # výstupy nástrojov pre self-check
+    evidence: list[str] = field(default_factory=list)  # tool outputs for the self-check
 
 
 def _renumber(sources: list[Source]) -> list[Source]:
@@ -118,7 +118,7 @@ def _renumber(sources: list[Source]) -> list[Source]:
 
 
 class ToolRuntime:
-    """Vykonáva nástroje a zbiera zdroje na citovanie."""
+    """Executes tools and collects sources to cite."""
 
     def __init__(self) -> None:
         self.sources: list[Source] = []

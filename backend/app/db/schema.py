@@ -156,7 +156,7 @@ CREATE TABLE IF NOT EXISTS generated_documents (
 """
 
 
-# stĺpce pridané po prvom release — CREATE TABLE IF NOT EXISTS ich do starej DB nedostane
+# columns added after the first release — CREATE TABLE IF NOT EXISTS won't add them to an old DB
 MIGRATIONS: list[tuple[str, str, str]] = [
     ("messages", "document_json", "TEXT"),
     ("messages", "trace_id", "TEXT"),

@@ -1,5 +1,6 @@
-"""Otázky na firemné údaje v chate a v mobile pracovníka (PLAN.md §17).
+"""Questions about company data in the chat and on the worker's phone (PLAN.md §17).
 
-Kód rozhodne o všetkom — kto, kedy, aký typ otázky, kto smie čo vidieť — a odpoveď
-poskladá šablóna z read-only dát. LLM nanajvýš zaradí otázku do pevného typu.
+Code decides everything — who, when, what type of question, who may see what — and the
+answer is assembled by a template from read-only data. The LLM at most assigns the question
+to a fixed type.
 """

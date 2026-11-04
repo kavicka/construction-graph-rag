@@ -1,10 +1,10 @@
-"""Read-only prístup chatu k firemným údajom — len povolené stĺpce, nikdy citlivé polia.
+"""Read-only access of the chat to company data — only allowed columns, never sensitive fields.
 
-Chat dostane údaje VÝHRADNE cez tento modul:
-- spojenie je read-only (`mode=ro` + `PRAGMA query_only`), zápis zlyhá už v SQLite,
-- SELECTy menujú stĺpce explicitne (žiadne `SELECT *`) — `pin_hash`, `password_hash`,
-  `email`, sessions, API tokeny ani prepis reči sa sem nedostanú; test to kontroluje,
-- výsledky sú frozen DTO, ktoré iné polia ani nemajú.
+The chat gets data EXCLUSIVELY through this module:
+- the connection is read-only (`mode=ro` + `PRAGMA query_only`), a write fails already in SQLite,
+- SELECTs name columns explicitly (no `SELECT *`) — `pin_hash`, `password_hash`,
+  `email`, sessions, API tokens and speech transcripts never get here; a test checks it,
+- results are frozen DTOs that have no other fields at all.
 """
 
 import json
@@ -50,7 +50,7 @@ class TaskFact:
     assignees: tuple[str, ...]
 
     def as_dict(self) -> dict[str, Any]:
-        """Tvar, ktorý čaká `tasks.is_active_on`."""
+        """The shape that `tasks.is_active_on` expects."""
         return {
             "id": self.id,
             "status": self.status,
@@ -112,7 +112,7 @@ def _query(sql: str, params: tuple[Any, ...] = ()) -> list[sqlite3.Row]:
         try:
             return conn.execute(sql, params).fetchall()
         except sqlite3.OperationalError as exc:
-            if "no such table" in str(exc):  # modul Firma ešte nebol inicializovaný
+            if "no such table" in str(exc):  # the Firma module has not been initialised yet
                 return []
             raise
 
@@ -162,8 +162,8 @@ def reports(start: date, end: date) -> list[ReportFact]:
 
 @dataclass
 class Snapshot:
-    """Všetko, čo jedna odpoveď potrebuje — načítané naraz (firma má desiatky až stovky
-    úloh, nie milióny)."""
+    """Everything one answer needs — loaded at once (a company has tens to hundreds of
+    tasks, not millions)."""
 
     workers: list[WorkerRef]
     sites: list[SiteRef]

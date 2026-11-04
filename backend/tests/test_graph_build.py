@@ -12,7 +12,7 @@ class FakeEmbedder:
     model_name = "fake"
 
     def _vec(self, text: str) -> list[float]:
-        # 'prietok' aj 'flow rate' → rovnaký vektor — simulácia cross-lingual priestoru
+        # 'prietok' and 'flow rate' → same vector — simulates a cross-lingual space
         return [1.0, 0.0] if ("prietok" in text.lower() or "flow" in text.lower()) else [0.0, 1.0]
 
     def embed_passages(self, texts: list[str]) -> list[list[float]]:
@@ -70,8 +70,8 @@ def test_cross_document_same_as(graph_env: pytest.MonkeyPatch) -> None:
 
 
 def test_same_doc_concepts_never_same_as(graph_env: pytest.MonkeyPatch) -> None:
-    """Spolu-spomínané pojmy v jednom dokumente nesmú dostať SAME_AS
-    ani pri vysokej embedding podobnosti (falošné páry typu zariadenie↔materiál)."""
+    """Co-mentioned concepts in one document must not get SAME_AS
+    even with high embedding similarity (false pairs like zariadenie↔materiál)."""
     db.insert_document("d1", "d1.pdf", "sha-d1")
     db.set_pages("d1", [(1, 50)])
     replace_document_chunks(
@@ -79,7 +79,7 @@ def test_same_doc_concepts_never_same_as(graph_env: pytest.MonkeyPatch) -> None:
         [Chunk("d1:t0", "d1", "prietok a flow rate spolu", "…", 1, 1, "", "text", None)],
         [[1.0, 0.0]],
     )
-    # dva koncepty s identickým fake-vektorom (oba obsahujú 'prietok'/'flow')
+    # two concepts with an identical fake vector (both contain 'prietok'/'flow')
     graph_env.setattr(
         "app.graph.build.extract_concepts_llm",
         lambda t: [

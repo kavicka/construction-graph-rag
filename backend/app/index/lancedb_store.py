@@ -1,6 +1,6 @@
-"""LanceDB — embedded vektorová DB (dáta = súbory na disku, žiadny server).
+"""LanceDB — embedded vector DB (data = files on disk, no server).
 
-Jedna tabuľka `chunks`: dense vektor + text s natívnym FTS (BM25) indexom.
+One `chunks` table: dense vector + text with a native FTS (BM25) index.
 """
 
 import logging
@@ -51,7 +51,7 @@ def _get_or_create_table(dim: int) -> Any:
 
 
 def replace_document_chunks(doc_id: str, chunks: list[Chunk], vectors: list[list[float]]) -> int:
-    """Idempotentné — pri re-ingeste sa staré chunky dokumentu zmažú."""
+    """Idempotent — on re-ingest the document's old chunks are deleted."""
     assert len(chunks) == len(vectors)
     if not vectors:
         return 0
@@ -74,7 +74,7 @@ def replace_document_chunks(doc_id: str, chunks: list[Chunk], vectors: list[list
             for c, vec in zip(chunks, vectors, strict=True)
         ]
     )
-    # FTS index prebudujeme po každom ingeste — pri stovkách dokumentov sekundy
+    # rebuild the FTS index after every ingest — seconds for hundreds of documents
     tbl.create_fts_index("text", replace=True)
     return len(chunks)
 
@@ -123,8 +123,8 @@ def _doc_filter(doc_ids: set[str]) -> str:
 def search_dense(
     vector: list[float], k: int = 24, doc_ids: set[str] | None = None
 ) -> list[dict[str, Any]]:
-    """doc_ids = prístupové obmedzenie — filtruje sa vo vektorovom dotaze (prefilter),
-    takže top-k je vždy z povolených dokumentov, nie orezaný výsledok."""
+    """doc_ids = access restriction — filtered in the vector query (prefilter),
+    so top-k always comes from allowed documents, not a trimmed result."""
     tbl = _table_or_none()
     if tbl is None or doc_ids == set():
         return []
@@ -160,7 +160,7 @@ def get_chunks_by_ids(chunk_ids: list[str]) -> list[dict[str, Any]]:
 
 
 def document_chunks(doc_id: str) -> list[dict[str, Any]]:
-    """Všetky chunky dokumentu v poradí vzniku (index z chunk_id suffixu)."""
+    """All chunks of the document in creation order (index from the chunk_id suffix)."""
     tbl = _table_or_none()
     if tbl is None:
         return []
@@ -175,7 +175,7 @@ def document_chunks(doc_id: str) -> list[dict[str, Any]]:
 
 
 def chunks_on_pages(pages: list[tuple[str, int]], per_page: int = 2) -> list[dict[str, Any]]:
-    """Textové chunky, ktoré pokrývajú dané strany — v poradí strán (vizuálny retrieval)."""
+    """Text chunks covering the given pages — in page order (visual retrieval)."""
     tbl = _table_or_none()
     if tbl is None or not pages:
         return []

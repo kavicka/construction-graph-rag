@@ -1,8 +1,9 @@
-"""Dochádzka: denný výpis hlasom/textom, doplňujúce otázky, odovzdanie, PDF výpisy.
+"""Attendance: daily report by voice/text, follow-up questions, submission, PDF reports.
 
-Pracovník (PIN) vidí len svoj dnešný výpis. Majiteľ (admin) vidí všetky dni a výpisy,
-môže výpis vyplniť za pracovníka (worker_id) a opraviť ho aj po odovzdaní.
-Spracovanie hlasu a LLM beží na pozadí — klient sa pýta na stav (status = processing).
+A worker (PIN) sees only their own report for today. The owner (admin) sees all days and reports,
+can fill in a report on behalf of a worker (worker_id) and correct it even after submission.
+Voice processing and the LLM run in the background — the client polls the status
+(status = processing).
 """
 
 import re
@@ -52,7 +53,7 @@ def _is_admin() -> bool:
 
 
 def _subject(worker_id: str | None) -> str:
-    """Za koho sa výpis robí: pracovník vždy sám za seba, majiteľ za zvoleného pracovníka."""
+    """Whom the report is for: a worker always for themselves, the owner for the chosen worker."""
     scope = current_scope()
     if scope.user_id and is_worker(scope.user_id):
         return scope.user_id
@@ -133,7 +134,8 @@ def report_out(report: dict[str, Any]) -> ReportOut:
     questions = store.list_questions(report["id"])
     shown = [q for q in questions if q["status"] != "obsolete"]
     open_count = sum(q["status"] == "open" for q in questions)
-    # hotová úloha, o ktorej pracovník nehovoril, do jeho výpisu nepatrí (pýtame sa len na otvorené)
+    # a finished task the worker didn't mention doesn't belong in their report
+    # (we only ask about open ones)
     mentioned = {e.task_id for e in data.tasks}
     tasks = [
         t for t in dialog.report_tasks(report) if t["status"] != "done" or t["id"] in mentioned
@@ -389,7 +391,7 @@ async def input_audio(input_id: str) -> FileResponse:
     )
 
 
-# --- majiteľ ----------------------------------------------------------------------------
+# --- owner ----------------------------------------------------------------------------
 
 
 def _require_admin() -> None:
@@ -503,9 +505,9 @@ async def owner_edit(report_id: str, body: OwnerEdit) -> ReportOut:
     return await _out(report_id)
 
 
-# --- otázky na vlastné údaje z mobilu (PLAN.md §17) -------------------------------------
-# Pracovník smie len /api/attendance/* (WorkerGuard) — toto je jeho jediná cesta k otázkam.
-# Rovnaká brána ako chat + firemné údaje s Viewer=worker (len on sám); dokumenty nie.
+# --- questions about own data from mobile (PLAN.md §17) -------------------------------------
+# A worker may only use /api/attendance/* (WorkerGuard) — this is their only route to questions.
+# Same gate as chat + company data with Viewer=worker (only themselves); no documents.
 
 
 class AskIn(BaseModel):
@@ -515,7 +517,7 @@ class AskIn(BaseModel):
 class AskOut(BaseModel):
     question: str
     answer: str
-    speech_text: str  # bez markdownu — na prečítanie nahlas
+    speech_text: str  # no markdown — meant to be read aloud
     tts: bool
 
 
@@ -553,7 +555,7 @@ async def ask(body: AskIn) -> AskOut:
 
 
 def _ask_vocabulary() -> str:
-    """Slovník pre Whisper: stavby a úlohy, ktoré pýtajúci vidí, a mená kolegov z nich."""
+    """Vocabulary for Whisper: sites and tasks the asker can see, plus colleagues' names."""
     viewer = viewer_from_scope()
     snap = qa_data.snapshot()
     tasks = [
@@ -580,7 +582,7 @@ async def ask_audio(file: UploadFile) -> AskOut:
     if not data:
         raise HTTPException(status_code=422, detail="prázdna nahrávka")
     prompt = await run_in_threadpool(_ask_vocabulary)
-    # otázka sa neukladá — nahrávka žije len počas prepisu
+    # the question is not stored — the recording lives only during transcription
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / f"otazka.{ext}"
         path.write_bytes(data)

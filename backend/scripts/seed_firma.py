@@ -1,12 +1,13 @@
-"""Naplní bežiaci backend firmou Stavby Kráľ: pracovníci, stavby a úlohy importované z
-dokumentov skutočným AI importom (rovnaká cesta ako „Nahrať dokument“ v UI).
+"""Fill a running backend with the company Stavby Kráľ: workers, sites and tasks imported from
+documents via the real AI import (the same path as „Nahrať dokument“ in the UI).
 
     uv run python scripts/seed_firma.py                 # http://localhost:8000
-    uv run python scripts/seed_firma.py --api http://…  # iný backend
+    uv run python scripts/seed_firma.py --api http://…  # another backend
 
-Majiteľa prihlási údajmi z backend/.env (RAG_ADMIN_EMAIL / RAG_ADMIN_PASSWORD). PIN-y
-pracovníkov vygeneruje náhodne a uloží do data/workforce/piny-pracovnikov.txt (len pre teba).
-Dokumenty zo zápisov uloží do data/seed-docs/. Návrhy úloh nechá na schválenie — vypíše ich.
+Logs in the owner with credentials from backend/.env (RAG_ADMIN_EMAIL / RAG_ADMIN_PASSWORD). Worker
+PINs are generated randomly and saved to data/workforce/piny-pracovnikov.txt (for you only).
+Documents from the minutes are saved to data/seed-docs/. Task proposals are left for
+approval — it prints them.
 """
 
 import argparse

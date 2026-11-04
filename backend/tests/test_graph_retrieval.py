@@ -1,4 +1,4 @@
-"""Cross-doc retrieval cez graf: dopyt trafí doc1, graf pritiahne doc2."""
+"""Cross-doc retrieval via the graph: the query hits doc1, the graph pulls in doc2."""
 
 import pytest
 
@@ -34,12 +34,12 @@ def two_docs(monkeypatch: pytest.MonkeyPatch) -> None:
         )
         build_document_graph(doc_id)
 
-    # doc1 SK — vektor blízky dopytu; doc2 EN — vektor ďaleko (dense ho netrafí)
+    # doc1 SK — vector close to the query; doc2 EN — vector far away (dense misses it)
     seed("d1", "Prietok chladiaceho média bol 12.4 l/min.", "prietok chladiaceho média", [1.0, 0.0])
     seed("d2", "The coolant flow rate must be calibrated monthly.", "coolant flow rate", [0.0, 1.0])
 
-    # padding: 30 chunkov bližších k dopytu než d2 → d2 vypadne z dense top-24
-    # a bez grafu sa k nemu retrieval nedostane
+    # padding: 30 chunks closer to the query than d2 → d2 drops out of dense top-24
+    # and without the graph retrieval never reaches it
     db.insert_document("pad", "pad.pdf", "sha-pad")
     pad_chunks = [
         Chunk(f"pad:t{i}", "pad", f"výplňový text {i}", f"výplň {i}", 1, 1, "", "text", None)
@@ -70,8 +70,8 @@ def test_pipeline_flag_controls_expansion(two_docs: None, monkeypatch: pytest.Mo
 
 
 def test_graph_gated_to_relational_queries(two_docs: None) -> None:
-    """Default: graf len pri otázkach na súvislosti — na faktografických otázkach
-    eval ukázal, že grafové kandidáty zhoršujú poradie (MRR 72 → 50 %)."""
+    """Default: graph only for relationship questions — on factual questions
+    eval showed that graph candidates worsen the ranking (MRR 72 → 50 %)."""
     factual = retrieve_sources("prietok chladiaceho média", k=4)
     assert "d2" not in {s.doc_id for s in factual}
     relational = retrieve_sources("Aký je súvis medzi dokumentmi o prietoku?", k=6)

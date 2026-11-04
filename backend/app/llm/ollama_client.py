@@ -1,11 +1,11 @@
-"""LLM klient — Ollama (default, lokálne) alebo ľubovoľné OpenAI-kompatibilné API.
+"""LLM client — Ollama (default, local) or any OpenAI-compatible API.
 
-RAG_LLM_PROVIDER=openai + RAG_OPENAI_BASE_URL / RAG_OPENAI_API_KEY prepne generovanie
-na hostovaný model (OpenAI, Groq, Together, vLLM, LM Studio…); embeddingy a reranker
-ostávajú lokálne. Názvy modelov sa berú z RAG_ANSWER_MODEL / RAG_EXTRACT_MODEL.
+RAG_LLM_PROVIDER=openai + RAG_OPENAI_BASE_URL / RAG_OPENAI_API_KEY switches generation
+to a hosted model (OpenAI, Groq, Together, vLLM, LM Studio…); embeddings and reranker
+stay local. Model names come from RAG_ANSWER_MODEL / RAG_EXTRACT_MODEL.
 
-Sync `generate_sync` pre indexovacie thready, async `chat_stream` pre odpovede,
-`chat_with_tools` pre agenta. Každé volanie je OTel span s gen_ai.* atribútmi.
+Sync `generate_sync` for indexing threads, async `chat_stream` for answers,
+`chat_with_tools` for the agent. Every call is an OTel span with gen_ai.* attributes.
 """
 
 import json
@@ -31,7 +31,7 @@ from app.obs.tracing import (
 
 
 class OllamaError(RuntimeError):
-    """Chyba LLM volania (názov historický — platí pre všetkých providerov)."""
+    """LLM call error (name is historical — applies to all providers)."""
 
 
 LLMError = OllamaError
@@ -80,7 +80,7 @@ def generate_sync(
     timeout: float = 120.0,
     think: bool = False,
 ) -> str:
-    """Jeden non-stream generate. Qwen3: think=False vypína reasoning režim (rýchlosť)."""
+    """One non-stream generate. Qwen3: think=False turns off reasoning mode (speed)."""
     with span(f"generate {model}") as s:
         set_attrs(
             s,
@@ -176,8 +176,8 @@ async def chat_stream(
     think: bool = False,
     parent: Context | None = None,
 ) -> AsyncIterator[str]:
-    """Streamuje tokeny odpovede. Span sa uzavrie po poslednom tokene (alebo chybe);
-    `parent` explicitne, lebo volajúci async generátor nemá span ako current."""
+    """Streams answer tokens. The span is closed after the last token (or on error);
+    `parent` is explicit because the calling async generator has no current span."""
     s = get_tracer().start_span(f"chat {model}", context=parent)
     set_attrs(s, **_llm_span_attrs("chat", model, temperature), rag__messages=len(messages))
     chars = 0
@@ -287,11 +287,11 @@ class ToolCall:
 
 @dataclass
 class ToolTurn:
-    """Jedno kolo agenta: text odpovede alebo volania nástrojov + správa na históriu."""
+    """One agent turn: answer text or tool calls + a message for the history."""
 
     content: str
     calls: list[ToolCall] = field(default_factory=list)
-    message: dict[str, Any] = field(default_factory=dict)  # natívny formát providera
+    message: dict[str, Any] = field(default_factory=dict)  # provider-native format
 
 
 def tool_result_message(call: ToolCall, content: str) -> dict[str, Any]:

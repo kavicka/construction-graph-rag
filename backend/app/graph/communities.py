@@ -1,12 +1,12 @@
-"""Témy celej knižnice — komunity konceptov v grafe (LazyGraphRAG prístup).
+"""Themes of the whole library — concept communities in the graph (LazyGraphRAG approach).
 
-Koncepty, ktoré sa vyskytujú v rovnakom úseku textu (alebo sú SAME_AS), tvoria graf;
-Louvain ho rozdelí na komunity = témy naprieč dokumentmi. Na rozdiel od klasického
-GraphRAG sa súhrny NErobia pri ingeste pre všetky komunity (drahé), ale až keď ich otázka
-potrebuje — a cachujú sa podľa zloženia komunity.
+Concepts that occur in the same chunk of text (or are SAME_AS) form a graph;
+Louvain splits it into communities = themes across documents. Unlike classic
+GraphRAG, summaries are NOT built at ingest for all communities (expensive), but only
+when a question needs them — and they are cached by community composition.
 
-Použitie: otázky na celý korpus („aké sú hlavné témy dokumentov?“), na ktoré top-k
-retrieval nestačí, lebo odpoveď nie je v žiadnom jednom úseku.
+Use: questions about the whole corpus („aké sú hlavné témy dokumentov?“) that top-k
+retrieval cannot answer, because the answer is not in any single chunk.
 """
 
 import hashlib
@@ -34,10 +34,10 @@ from app.retrieve.secrets import redact_secrets
 logger = logging.getLogger(__name__)
 
 MIN_COMMUNITY_CONCEPTS = 3
-# koncept vo väčšine dokumentov („zariadenie“, „Cena“) nesie málo informácie a zlepí
-# nesúvisiace témy do jednej komunity — rovnaká logika ako IDF
+# a concept present in most documents („zariadenie“, „Cena“) carries little information and glues
+# unrelated themes into one community — same logic as IDF
 HUB_DOC_SHARE = 0.35
-# typy z extrakcie, ktoré malý model občas vráti ako „koncept“ — nenesú tému
+# types from extraction that the small model sometimes returns as a "concept" — they carry no theme
 GENERIC_LABELS = {
     "zariadenie",
     "zariadenia",
@@ -56,7 +56,7 @@ GENERIC_LABELS = {
 }
 TOP_CONCEPTS = 10
 REPRESENTATIVE_CHUNKS = 4
-# „hlavné témy všetkých dokumentov“ je podobné každej téme rovnako — rozhodne pokrytie
+# „hlavné témy všetkých dokumentov“ is equally similar to every theme — coverage decides
 COVERAGE_WEIGHT = 0.15
 GLOBAL_QUERY = re.compile(
     r"hlavn\w* tém|hlavn\w* oblast|o čom (sú|je|hovoria)|prehľad (celej|všetk\w*|knižnic)|"
@@ -70,10 +70,10 @@ GLOBAL_QUERY = re.compile(
 @dataclass
 class Community:
     key: str
-    concepts: list[str]  # štítky, zoradené podľa centrality
+    concepts: list[str]  # labels, sorted by centrality
     concept_ids: list[str]
-    documents: dict[str, int]  # doc_id → počet úsekov
-    chunk_ids: list[str]  # reprezentatívne úseky
+    documents: dict[str, int]  # doc_id → number of chunks
+    chunk_ids: list[str]  # representative chunks
     title: str | None = None
     summary: str | None = None
     extra: dict[str, Any] = field(default_factory=dict)
@@ -100,13 +100,14 @@ def detect_communities() -> list[Community]:
         if e["type"] in (MENTIONS, DEFINES) and e["dst"] in nodes and e["src"].startswith("chunk:"):
             chunk_id = e["src"].removeprefix("chunk:")
             if allowed is not None and chunk_id.split(":", 1)[0] not in allowed:
-                continue  # témy len z dokumentov, ktoré používateľ smie vidieť
+                continue  # themes only from documents the user may see
             chunk_concepts[chunk_id].add(e["dst"])
         elif e["type"] == SAME_AS and e["src"] in nodes and e["dst"] in nodes:
             same_as.append((e["src"], e["dst"]))
 
     if allowed is not None:
-        # pojmy len z povolených dokumentov — inak by štítok tému cudzieho dokumentu prezradil
+        # terms only from allowed documents — otherwise the label would leak the theme of
+        # a foreign document
         visible = {c for concepts in chunk_concepts.values() for c in concepts}
         nodes = {k: v for k, v in nodes.items() if k in visible}
         same_as = [(a, b) for a, b in same_as if a in nodes and b in nodes]
@@ -147,8 +148,8 @@ def detect_communities() -> list[Community]:
         documents: Counter[str] = Counter()
         for chunk_id in chunk_score:
             documents[chunk_docs[chunk_id]] += 1
-        # kľúč cache = pojmy + dokumenty, z ktorých súhrn vznikol: rovnaká množina pojmov
-        # u iného používateľa (iné povolené dokumenty) nesmie dostať cudzí súhrn
+        # cache key = terms + documents the summary came from: the same set of terms
+        # for another user (different allowed documents) must not get a foreign summary
         scope_docs = "|".join(sorted(documents))
         key = hashlib.sha256(("|".join(sorted(members)) + "#" + scope_docs).encode()).hexdigest()[
             :12
@@ -176,7 +177,7 @@ class _Summary(BaseModel):
 
 
 def summarize_community(community: Community) -> Community:
-    """LLM súhrn témy (lenivo, cache podľa zloženia komunity)."""
+    """LLM summary of a theme (lazy, cached by community composition)."""
     if community.summary:
         return community
     rows = get_chunks_by_ids(community.chunk_ids)
@@ -206,7 +207,7 @@ def summarize_community(community: Community) -> Community:
         logger.warning("súhrn komunity %s zlyhal: %s", community.key, exc)
         community.title = ", ".join(community.concepts[:3])
         community.summary = "Pojmy: " + ", ".join(community.concepts)
-        return community  # fallback sa necachuje — skúsi sa nabudúce
+        return community  # the fallback is not cached — retried next time
     db.set_community_summary(community.key, community.title, community.summary)
     return community
 
@@ -218,8 +219,8 @@ def _cosine(a: list[float], b: list[float]) -> float:
 
 
 def rank_communities(question: str, communities: list[Community], top: int) -> list[Community]:
-    """Bez súhrnov (lazy): poradie podľa podobnosti otázky so štítkami konceptov,
-    vážené počtom pokrytých dokumentov — široké témy sú pre globálne otázky dôležitejšie."""
+    """Without summaries (lazy): ranked by similarity of the question to concept labels,
+    weighted by the number of documents covered — broad themes matter more for global questions."""
     if len(communities) <= top:
         return communities
     embedder = get_embedder()
@@ -240,7 +241,7 @@ pojmov naprieč dokumentmi) so súhrnmi a ukážkové zdroje. Pravidlá:
 
 
 def global_context(question: str, top: list[Community]) -> tuple[list[Any], list[dict[str, str]]]:
-    """Zdroje (1–2 reprezentatívne úseky na tému) + správy pre LLM."""
+    """Sources (1–2 representative chunks per theme) + messages for the LLM."""
     from app.retrieve.pipeline import Source
 
     names = {d["id"]: d["filename"] for d in db.list_documents()}

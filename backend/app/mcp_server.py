@@ -1,11 +1,11 @@
-"""MCP server — knižnica dokumentov ako nástroje pre Claude Desktop / Claude Code / Cursor.
+"""MCP server — the document library as tools for Claude Desktop / Claude Code / Cursor.
 
-Transporty:
+Transports:
   stdio            uv run --directory backend python -m app.mcp_server
-  streamable HTTP  http://localhost:8000/mcp (beží spolu s API, app.main)
+  streamable HTTP  http://localhost:8000/mcp (runs together with the API, app.main)
 
-Nástroje vracajú štruktúrované dáta s citovateľnými zdrojmi (súbor + strana), takže
-klient môže odpovedať s odkazmi rovnako ako vstavaný chat.
+Tools return structured data with citable sources (file + page), so
+the client can answer with references just like the built-in chat.
 """
 
 from typing import Any
@@ -100,7 +100,7 @@ def _connections(topic: str, max_documents: int) -> dict[str, Any]:
     if concept_ids:
         rows = concept_evidence_chunks(concept_ids, cap=40)
     else:
-        # téma nie je pomenovaný koncept → seed z vyhľadávania a expanzia cez graf
+        # the topic is not a named concept → seed from search and expand via the graph
         seeds = rank_chunks(topic, k=6)
         rows = seeds + expand_via_graph([r["chunk_id"] for r in seeds], cap=30)
 
@@ -129,7 +129,8 @@ def _connections(topic: str, max_documents: int) -> dict[str, Any]:
                     "snippet": redact_secrets(r["raw_text"])[:300],
                 }
             )
-    # len pojmy doložené povoleným úsekom — inak by štítok prezradil obsah cudzieho dokumentu
+    # only concepts backed by an allowed passage — otherwise the label would leak the
+    # content of another document
     visible_chunks = {f"chunk:{r['chunk_id']}" for r in rows}
     evidenced = {
         e["dst"]
@@ -248,7 +249,7 @@ async def generate_document(request: str) -> dict[str, Any]:
 
 
 def mcp_transport_security() -> TransportSecuritySettings:
-    """DNS-rebinding ochrana: len localhost + hosty z RAG_MCP_ALLOWED_HOSTS (Docker, LAN)."""
+    """DNS-rebinding protection: only localhost + hosts from RAG_MCP_ALLOWED_HOSTS (Docker, LAN)."""
     extra = [h.strip() for h in get_settings().mcp_allowed_hosts.split(",") if h.strip()]
     hosts = ["127.0.0.1:*", "localhost:*", "[::1]:*", *extra]
     return TransportSecuritySettings(

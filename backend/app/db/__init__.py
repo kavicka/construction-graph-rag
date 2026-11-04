@@ -1,4 +1,4 @@
-"""SQLite vrstva — synchrónna, volaná cez run_in_threadpool z async handlerov.
+"""SQLite layer — synchronous, called via run_in_threadpool from async handlers.
 
 One module per aggregate; this package re-exports the public functions so callers keep
 using `from app import db` / `db.get_document(...)`:

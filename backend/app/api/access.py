@@ -1,4 +1,4 @@
-"""Kontroly prístupu pre endpointy — 404 namiesto 403, aby API neprezrádzalo, čo existuje."""
+"""Access checks for endpoints — 404 instead of 403 so the API doesn't reveal what exists."""
 
 from typing import Any
 
@@ -22,7 +22,7 @@ def ensure_document(doc_id: str) -> dict[str, Any]:
 
 def chat_visible(chat: dict[str, Any]) -> bool:
     scope = current_scope()
-    # bez prihlasovania (user_id None) vidno všetko; inak len vlastné chaty
+    # without login (user_id None) everything is visible; otherwise only own chats
     return scope.user_id is None or chat.get("user_id") == scope.user_id
 
 

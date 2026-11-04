@@ -1,4 +1,4 @@
-"""Nastavenia firmy: údaje, hlavička/pätička a náhľad PDF (vzhľad dáva téma aplikácie)."""
+"""Company settings: details, header/footer and PDF preview (the look comes from the app theme)."""
 
 from fastapi import APIRouter, HTTPException
 from fastapi.concurrency import run_in_threadpool
@@ -79,7 +79,7 @@ def preview_content(company: CompanySettings) -> tuple[DocumentContent, list[Sou
 
 @router.post("/preview")
 async def preview_pdf(data: CompanySettings) -> Response:
-    """Náhľad s neuloženými hodnotami z formulára — logo sa berie aktuálne nahraté."""
+    """Preview with the unsaved values from the form — the currently uploaded logo is used."""
     content, sources = preview_content(data)
     try:
         rendered = await run_in_threadpool(render_document, content, data, sources)

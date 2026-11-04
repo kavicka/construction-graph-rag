@@ -16,7 +16,7 @@ def test_defaults_then_roundtrip(client: TestClient) -> None:
         initial = client.get("/api/company").json()
         assert initial["name"] == ""
         assert initial["show_page_numbers"] is True
-        # vzhľad (logo, farby, font) nie je v nastaveniach — dáva ho téma aplikácie
+        # appearance (logo, colours, font) is not in settings — it comes from the app theme
         assert not {"logo", "has_logo", "primary_color", "accent_color", "font"} & set(initial)
 
         payload = {
@@ -29,7 +29,7 @@ def test_defaults_then_roundtrip(client: TestClient) -> None:
         saved = client.put("/api/company", json=payload)
         assert saved.status_code == 200
         body = saved.json()
-        assert body["ico"] == "12345678"  # medzery preč
+        assert body["ico"] == "12345678"  # spaces stripped
         assert body["iban"] == "SK3112000000198742637541"
 
         again = client.get("/api/company").json()
@@ -54,7 +54,7 @@ def test_validation_rejects(client: TestClient, field: str, value: str) -> None:
 
 
 def test_legacy_branding_fields_are_ignored(client: TestClient) -> None:
-    """Uložené nastavenia z čias, keď tu bolo logo/farby/font, sa načítajú bez nich."""
+    """Saved settings from when logo/colours/font were still here load without them."""
     with client:
         client.get("/api/company")  # init DB
         legacy = (
@@ -82,7 +82,7 @@ def test_preview_renders_pdf(client: TestClient) -> None:
         assert resp.status_code == 200
         assert resp.headers["content-type"] == "application/pdf"
         assert resp.content.startswith(b"%PDF")
-        # náhľad nič neukladá
+        # the preview saves nothing
         assert client.get("/api/company").json()["name"] == ""
 
 

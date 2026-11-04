@@ -1,7 +1,8 @@
-"""Deň alebo obdobie z otázky — „dnes“, „v piatok“, „minulý týždeň“, „za september“.
+"""Day or period from the question — „dnes“, „v piatok“, „minulý týždeň“, „za september“.
 
-Na rozdiel od `sk_dates.parse_term` (termíny v dokumentoch smerujú do budúcnosti) sa tu
-pozerá aj dozadu: „čo robil v piatok“ = posledný piatok, „čo bude robiť v piatok“ = najbližší.
+Unlike `sk_dates.parse_term` (deadlines in documents point to the future) this also
+looks backwards: „čo robil v piatok“ (what he did on Friday) = last Friday,
+„čo bude robiť v piatok“ (what he will do on Friday) = the next one.
 """
 
 import calendar
@@ -29,7 +30,7 @@ MONTH_GEN = [
     "decembra",
 ]
 
-# minulý čas → deň v týždni sa hľadá dozadu
+# past tense → the weekday is looked up backwards
 PAST = re.compile(
     r"\b(robil\w*|bol[aio]?|boli|prisiel|prisl\w*|odisiel|odisl\w*|odpracoval\w*|chybal\w*|"
     r"nahlasil\w*|pracoval\w*|stihol|stihl\w*|spravil\w*|urobil\w*|mal[aio]?|mali|"
@@ -46,7 +47,7 @@ DAY_MONTH_RE = re.compile(r"\b(\d{1,2})\s*\.?\s*(" + "|".join(MONTHS) + r")\b")
 class Period:
     start: date
     end: date
-    explicit: bool  # obdobie bolo v otázke (inak predvolené podľa typu otázky)
+    explicit: bool  # a period was in the question (otherwise the default by question type)
 
     @property
     def single_day(self) -> bool:
@@ -112,7 +113,7 @@ def _safe(y: int, m: int, d: int) -> date | None:
 
 
 def _year_for(month: int, day: int, today: date, past: bool) -> int:
-    """Dátum bez roka: pri minulom čase posledný výskyt, inak najbližší (±6 mesiacov)."""
+    """Date without a year: past tense → last occurrence, otherwise the nearest (±6 months)."""
     candidate = _safe(today.year, month, min(day, 28) if month == 2 else day)
     if candidate is None:
         return today.year
@@ -149,7 +150,7 @@ def _number(token: str) -> int | None:
 
 
 def resolve_period(qn: str, today: date) -> Period | None:
-    """`qn` = normalizovaná otázka (bez diakritiky). None = v otázke nie je deň ani obdobie."""
+    """`qn` = normalised question (no diacritics). None = the question has no day or period."""
     past = bool(PAST.search(qn)) and not FUTURE.search(qn)
 
     dates = _explicit_dates(qn, today, past)

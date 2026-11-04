@@ -11,7 +11,7 @@ def test_health_ok() -> None:
     assert body["status"] == "ok"
     assert body["ram_profile"] in ("low", "high")
     assert body["embedding_model"]
-    # ollama môže byť down — endpoint musí aj tak odpovedať 200
+    # ollama may be down — the endpoint must still answer 200
     assert set(body["ollama"].keys()) == {"up", "models"}
 
 

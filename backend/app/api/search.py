@@ -1,4 +1,4 @@
-"""Debug/dev vyhľadávanie — fáza 3 na tomto postaví chat retrieval."""
+"""Debug/dev search — phase 3 builds chat retrieval on top of this."""
 
 from typing import Any, Literal
 

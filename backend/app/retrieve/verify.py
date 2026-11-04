@@ -1,14 +1,15 @@
-"""Overenie odpovede po vetách — má každá veta oporu v zdroji, ktorý cituje?
+"""Sentence-by-sentence answer verification — does each sentence have support in its cited source?
 
-Pre vetu s citáciami [n] sa nájde najpodobnejšia veta v citovaných zdrojoch
-(embedding, kosínus) a skontrolujú sa jej čísla. Výsledok na vetu:
-  supported   — podobná veta v citovanom zdroji a čísla sedia
-  weak        — citácia je, ale zdroj vete zjavne nezodpovedá (nízka podobnosť / iné číslo)
-  uncited     — faktická veta bez citácie
-Odmietnutia („podklady to neuvádzajú“) a krátke spojovacie vety sa nehodnotia.
+For a sentence with citations [n], the most similar sentence in the cited sources is found
+(embedding, cosine) and its numbers are checked. Per-sentence result:
+  supported   — a similar sentence in the cited source and the numbers match
+  weak        — a citation exists, but the source clearly does not match the sentence
+                (low similarity / different number)
+  uncited     — a factual sentence without a citation
+Refusals („podklady to neuvádzajú“) and short connecting sentences are not evaluated.
 
-Je to lacná heuristika (žiadne LLM volanie), nie dôkaz — UI ňou len upozorní,
-ktoré vety si treba overiť v PDF.
+It is a cheap heuristic (no LLM call), not proof — the UI only uses it to flag
+which sentences should be checked in the PDF.
 """
 
 import math
@@ -21,7 +22,7 @@ from app.retrieve.selfcheck import NUM_RE
 
 CITE = re.compile(r"\[(\d+(?:\s*,\s*\d+)*)\]")
 BOUNDARY = re.compile(r"[.!?…]\s+(?=[A-ZÁČĎÉÍĽĹŇÓÔŔŠŤÚÝŽ0-9\-•*\[])")
-# bodka za týmito slovami nekončí vetu („Ing. Peter Hronec“, „č. 3“, „s.r.o. Žilina“)
+# a dot after these words does not end a sentence („Ing. Peter Hronec“, „č. 3“, „s.r.o. Žilina“)
 ABBREVIATIONS = {
     "ing",
     "mgr",
@@ -62,7 +63,7 @@ ABBREVIATIONS = {
     "approx",
     "st",
 }
-SUPPORT_THRESHOLD = 0.65  # bge-m3: podporené vety ≥ 0.78, nepodporené ≤ 0.56 (eval korpus)
+SUPPORT_THRESHOLD = 0.65  # bge-m3: supported sentences ≥ 0.78, unsupported ≤ 0.56 (eval corpus)
 MIN_FACT_CHARS = 25
 MAX_SENTENCES = 30
 REFUSAL = re.compile(
@@ -84,15 +85,15 @@ class SentenceCheck:
 
 
 def _ends_sentence(text: str, dot: int) -> bool:
-    """Bodka na pozícii `dot` — koniec vety, alebo skratka / radová číslovka?"""
+    """Is the dot at position `dot` a sentence end, or an abbreviation / ordinal number?"""
     if text[dot] != ".":
         return True
     word = re.search(r"(\S+)$", text[:dot])
     token = word.group(1).casefold() if word else ""
     if token.strip("(") in ABBREVIATIONS:
         return False
-    # radová číslovka / dátum: „2. NP“, „30. 11. 2027“ — za číslom nasleduje číslo alebo
-    # skratka veľkými písmenami
+    # ordinal number / date: „2. NP“, „30. 11. 2027“ — the number is followed by a number or
+    # an abbreviation in capitals
     nxt = text[dot + 1 :].lstrip()
     return not (token.isdigit() and re.match(r"(\d|[A-Z]{1,3}\b)", nxt))
 
@@ -125,7 +126,7 @@ def verify_sentences(answer: str, sources: list[Source]) -> list[SentenceCheck]:
     by_n = {s.n: s for s in sources}
     sentences = split_sentences(answer)[:MAX_SENTENCES]
     checks: list[SentenceCheck] = []
-    to_score: list[tuple[int, str, list[str]]] = []  # (index v checks, veta, vety zdrojov)
+    to_score: list[tuple[int, str, list[str]]] = []  # (index in checks, sentence, source sentences)
 
     for sentence in sentences:
         cites = [int(n) for m in CITE.finditer(sentence) for n in m.group(1).split(",")]
@@ -167,5 +168,5 @@ def verify_sentences(answer: str, sources: list[Source]) -> list[SentenceCheck]:
 
 
 def is_refusal_answer(answer: str) -> bool:
-    """Krátka odpoveď typu „podklady to neuvádzajú“."""
+    """A short answer such as „podklady to neuvádzajú“."""
     return len(answer.strip()) <= 300 and bool(REFUSAL.search(answer))

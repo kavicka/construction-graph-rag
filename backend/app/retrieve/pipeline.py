@@ -1,14 +1,14 @@
 """Retrieval pipeline (query time).
 
-Tok: dopyt → dense + BM25 + grafová expanzia (flag RAG_GRAPH_EXPANSION)
-→ RRF fúzia → [cross-encoder rerank, flag RAG_RERANK] → table routing
-→ očíslované zdroje pre prompt.
+Flow: query → dense + BM25 + graph expansion (flag RAG_GRAPH_EXPANSION)
+→ RRF fusion → [cross-encoder rerank, flag RAG_RERANK] → table routing
+→ numbered sources for the prompt.
 
-Graf vetva: expanzia entít z top seedov cez SAME_AS klaster; pri relačnej otázke
-navyše graf-first dôkazy konceptov spomenutých priamo v otázke.
+Graph branch: entity expansion from the top seeds via the SAME_AS cluster; for a relational
+question additionally graph-first evidence for concepts mentioned directly in the question.
 
-Table routing: ak hit je table_summary, do kontextu ide sumár + PLNÁ tabuľka
-v markdowne (s capom) — presné čísla pochádzajú z parsera, nie z LLM.
+Table routing: if a hit is a table_summary, the context gets the summary + the FULL table
+in markdown (capped) — exact numbers come from the parser, not from the LLM.
 """
 
 import json
@@ -34,10 +34,10 @@ from app.retrieve.injection import guard_source_text
 from app.retrieve.rerank import rerank_rows
 from app.retrieve.secrets import redact_secrets
 
-MAX_CONTEXT_CHARS = 14_000  # ≈ 3,5k tokenov — disciplína KV cache
+MAX_CONTEXT_CHARS = 14_000  # ≈ 3.5k tokens — KV cache discipline
 TABLE_MD_CAP = 6_000
 CANDIDATES = 24
-RERANK_POOL = 20  # koľko fúzovaných kandidátov dostane cross-encoder
+RERANK_POOL = 20  # how many fused candidates the cross-encoder gets
 GRAPH_WEIGHT = 1.0
 
 
@@ -51,10 +51,10 @@ class Source:
     page_to: int
     type: str
     table_id: str | None
-    text: str  # čo ide do promptu
-    snippet: str  # krátky náhľad pre UI
+    text: str  # what goes into the prompt
+    snippet: str  # short preview for the UI
     boxes: list[list[float]] = field(default_factory=list)  # [strana, x0, y0, x1, y1]
-    flagged: bool = False  # úsek vyzerá ako prompt injection (app.retrieve.injection)
+    flagged: bool = False  # chunk looks like prompt injection (app.retrieve.injection)
 
     def to_json(self) -> dict[str, Any]:
         d = asdict(self)
@@ -69,13 +69,13 @@ def _table_context(table_id: str, summary_text: str) -> str:
     md_path = Path(meta["markdown_path"])
     markdown = md_path.read_text(encoding="utf-8") if md_path.exists() else ""
     if len(markdown) > TABLE_MD_CAP:
-        # hlavička + prvé riadky; presné čísla nad rámec capu rieši TableViewer/parquet
+        # header + first rows; exact numbers beyond the cap are handled by TableViewer/parquet
         markdown = markdown[:TABLE_MD_CAP] + "\n… (tabuľka skrátená)"
     return f"{summary_text}\n\nCelá tabuľka:\n{markdown}"
 
 
 def _graph_candidates(query: str, dense: list[dict], fts: list[dict]) -> list[dict]:  # type: ignore[type-arg]
-    """Tretí zoznam do fúzie: grafová expanzia seedov + graf-first pri relačnej otázke."""
+    """Third list for fusion: graph expansion of seeds + graph-first for a relational question."""
     seed_ids = [r["chunk_id"] for r in rrf_fuse([dense, fts], top_k=6)]
     rows = expand_via_graph(seed_ids, cap=10)
     if is_relational_query(query):
@@ -92,7 +92,7 @@ def _graph_candidates(query: str, dense: list[dict], fts: list[dict]) -> list[di
 
 @dataclass(frozen=True)
 class RetrievalConfig:
-    """Ktoré vetvy retrievalu bežia — default zo settings, eval ich prepína pre ablácie."""
+    """Which retrieval branches run — default from settings, eval toggles them for ablations."""
 
     dense: bool = True
     fts: bool = True
@@ -100,8 +100,8 @@ class RetrievalConfig:
     rerank: bool = False
     candidates: int = CANDIDATES
     rerank_pool: int = RERANK_POOL
-    # váha grafového zoznamu v RRF — pri 1.0 na všetkých otázkach graf prebil dense/BM25
-    # (eval: MRR 71.8 → 50.0); pomáha len otázkam naprieč dokumentmi
+    # weight of the graph list in RRF — at 1.0 the graph outranked dense/BM25 on all questions
+    # (eval: MRR 71.8 → 50.0); it only helps cross-document questions
     graph_weight: float = GRAPH_WEIGHT
     graph_relational_only: bool = True
     visual: bool = False
@@ -119,9 +119,9 @@ class RetrievalConfig:
 
 
 def rank_chunks(query: str, k: int = 8, cfg: RetrievalConfig | None = None) -> list[dict]:  # type: ignore[type-arg]
-    """Zoradené LanceDB riadky (top k) — bez skladania kontextu pre prompt."""
+    """Ranked LanceDB rows (top k) — without assembling the prompt context."""
     cfg = cfg or RetrievalConfig.from_settings()
-    allowed = allowed_doc_ids()  # None = bez obmedzenia (lokálne / admin)
+    allowed = allowed_doc_ids()  # None = unrestricted (local / admin)
     dense: list[dict] = []  # type: ignore[type-arg]
     fts: list[dict] = []  # type: ignore[type-arg]
     if cfg.dense:
@@ -141,7 +141,9 @@ def rank_chunks(query: str, k: int = 8, cfg: RetrievalConfig | None = None) -> l
     if use_graph and lists:
         with span("retrieve.graph") as s:
             graph_rows = _graph_candidates(query, dense, fts)
-            if allowed is not None:  # graf je zdieľaný — expanzia nesmie vyniesť cudzí dokument
+            if (
+                allowed is not None
+            ):  # the graph is shared — expansion must not surface a foreign document
                 graph_rows = [r for r in graph_rows if r["doc_id"] in allowed]
             set_attrs(s, rag__hits=len(graph_rows), rag__relational=is_relational_query(query))
         if graph_rows:
@@ -185,7 +187,7 @@ def retrieve_sources(query: str, k: int = 8, cfg: RetrievalConfig | None = None)
         else:
             text = row["text"]
 
-        # tajomstvá z dokumentu (heslo k WiFi, kód od brány…) sa do promptu nedostanú
+        # secrets from the document (WiFi password, gate code…) never reach the prompt
         text = redact_secrets(text)
         flagged = False
         if guard:
@@ -193,7 +195,7 @@ def retrieve_sources(query: str, k: int = 8, cfg: RetrievalConfig | None = None)
 
         if len(text) > budget:
             if len(sources) >= 3:
-                continue  # základné pokrytie máme, ďalší veľký zdroj preskoč
+                continue  # we already have basic coverage, skip another large source
             text = text[:budget]
         budget -= len(text)
 
@@ -214,7 +216,7 @@ def retrieve_sources(query: str, k: int = 8, cfg: RetrievalConfig | None = None)
         )
         if budget <= 0:
             break
-    # čísla zdrojov po filtrácii preindexuj na 1..n (model cituje presne tieto)
+    # renumber sources to 1..n after filtering (the model cites exactly these)
     boxes = db.get_chunk_boxes([s.chunk_id for s in sources])
     for idx, s in enumerate(sources, start=1):
         s.n = idx
@@ -245,7 +247,7 @@ def system_prompt() -> str:
 def format_source(s: Source) -> str:
     pages = f"{s.page_from}" + (f"–{s.page_to}" if s.page_to != s.page_from else "")
     if get_settings().injection_guard:
-        # názov súboru aj text pochádzajú od používateľa — nesmú zavrieť značku <zdroj>
+        # file name and text come from the user — they must not close the <zdroj> tag
         name = s.filename.replace('"', "'").replace("<", "‹").replace(">", "›")
         body = re.sub(r"</?\s*zdroj", "‹zdroj", s.text, flags=re.IGNORECASE)
         return f'<zdroj n="{s.n}" subor="{name}" strana="{pages}">\n{body}\n</zdroj>'

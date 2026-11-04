@@ -41,7 +41,7 @@ def meals() -> None:
 
 
 def test_category_does_not_leak_across_generic_word(meals: None) -> None:
-    """'Oběd varianty' nesmie pustiť 'Večeře varianty' (spoločné slovo 'varianty')."""
+    """'Oběd varianty' must not let 'Večeře varianty' through (shared word 'varianty')."""
     db.insert_table("t-vecere", "d1", 16, "Večeře varianty", 1, 4, "/tmp/v.md", None)
     existing = db.list_records("d1")
     db.replace_document_records(
@@ -79,7 +79,7 @@ def test_run_filter_exact(meals: None) -> None:
     plan = QueryPlan(
         mode="filter",
         constraints=[Constraint("kcal", "<=", 870)],
-        categories=["obed"],  # fuzzy trafí 'Oběd varianty'
+        categories=["obed"],  # fuzzy matches 'Oběd varianty'
     )
     matched, nearest = run_filter(plan)
     assert [h.name for h in matched] == ["Těstoviny", "Kuřecí rizoto"]
@@ -120,7 +120,7 @@ def test_pick_items_exact_combo(meals: None) -> None:
     )
     assert combo is not None
     picks = dict(combo.picks)
-    # obed ≤870 s max bielkovinami = Kuřecí rizoto (829, 74b); zvyšok 471 → Ovesná kaše
+    # lunch ≤870 with max protein = Kuřecí rizoto (829, 74b); remainder 471 → Ovesná kaše
     assert picks["Oběd varianty"].name == "Kuřecí rizoto"
     assert picks["Snídaně"].name == "Ovesná kaše"
     assert combo.total["kcal"] == 829 + 447
@@ -130,5 +130,5 @@ def test_pick_items_impossible_budget_returns_nearest(meals: None) -> None:
     combo = pick_items([Slot("Oběd varianty"), Slot("Snídaně")], budget_attr="kcal", budget_max=500)
     assert combo is not None
     assert combo.within_budget is False
-    # najmenší možný súčet: Těstoviny 820 + Ovesná kaše 447
+    # smallest possible sum: Těstoviny 820 + Ovesná kaše 447
     assert combo.total["kcal"] == 820 + 447

@@ -94,7 +94,7 @@ async def test_http_endpoint_mounted() -> None:
 
     from app.main import app
 
-    for _ in range(2):  # lifespan sa dá spustiť opakovane (nová MCP appka pri každom štarte)
+    for _ in range(2):  # lifespan can be started repeatedly (a new MCP app on every start)
         with TestClient(app, base_url="http://localhost:8000") as client:
             resp = client.post(
                 "/mcp",
@@ -116,4 +116,4 @@ async def test_http_endpoint_mounted() -> None:
             assert resp.status_code == 200, resp.text
             assert "rag" in resp.text
         with TestClient(app, base_url="http://evil.example") as client:
-            assert client.post("/mcp", json={}).status_code == 421  # DNS rebinding ochrana
+            assert client.post("/mcp", json={}).status_code == 421  # DNS rebinding protection

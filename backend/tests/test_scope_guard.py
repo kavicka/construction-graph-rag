@@ -1,4 +1,4 @@
-"""Brána pred routerom — tajomstvá, vnútro systému, otázky mimo účelu (PLAN.md §17)."""
+"""Gate in front of the router — secrets, system internals, off-purpose questions (PLAN.md §17)."""
 
 import pytest
 
@@ -120,7 +120,7 @@ def test_classifier(monkeypatch: pytest.MonkeyPatch) -> None:
         raise OllamaError("model nebeží")
 
     monkeypatch.setattr(scope_guard, "generate_sync", broken)
-    assert classify_scope("Koľko gólov dal Messi?", []) == "ok"  # fail open do RAG
+    assert classify_scope("Koľko gólov dal Messi?", []) == "ok"  # fail open to RAG
 
     monkeypatch.setenv("RAG_SCOPE_CLASSIFIER", "false")
     get_settings.cache_clear()

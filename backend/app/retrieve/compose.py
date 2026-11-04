@@ -1,9 +1,9 @@
-"""Kompozičné otázky: plan-then-execute namiesto voľnej agent slučky.
+"""Composition questions: plan-then-execute instead of a free agent loop.
 
-LLM urobí JEDINÚ vec — priradí čísla z otázky ku kategóriám (schema-forced JSON,
-žiadna aritmetika). Validácia: každé číslo plánu MUSÍ byť v otázke — ak si model
-niečo dopočítal, plán sa zahodí a padá sa na agent slučku. Výber kombinácie
-a odpoveď sú potom čisto deterministické (pick_items + šablóna).
+The LLM does ONE thing — assigns numbers from the question to categories (schema-forced JSON,
+no arithmetic). Validation: every number in the plan MUST be in the question — if the model
+computed something itself, the plan is discarded and we fall back to the agent loop. Picking the
+combination and the answer are then purely deterministic (pick_items + template).
 """
 
 import logging
@@ -29,7 +29,7 @@ ATTR_LABELS = {"kcal": "kcal", "b": "bielkoviny (g)", "s": "sacharidy (g)", "t":
 
 class ComposeSlot(BaseModel):
     category: str
-    max_value: float | None = None  # limit budget atribútu pre tento slot
+    max_value: float | None = None  # limit of the budget attribute for this slot
 
 
 class ComposePlan(BaseModel):
@@ -58,10 +58,10 @@ def _question_numbers(question: str) -> set[float]:
     return {float(n.replace(",", ".")) for n in NUM_RE.findall(question)}
 
 
-# Prah kosínusu pre embedding fallback podľa modelu (kalibrované na SK/CZ kategóriách
-# jedál: raňajky→Snídaně 0.84 áno, večeře→Snídaně 0.74 a vymyslená 0.39 nie).
-# E5 má anizotropný priestor — každá dvojica slov skončí na ~0.77–0.89 a raňajky sú
-# bližšie k obedu než k snídani, takže žiadny prah nerozlíši → fallback vypnutý (None).
+# Cosine threshold for the embedding fallback by model (calibrated on SK/CZ meal categories:
+# raňajky→Snídaně 0.84 yes, večeře→Snídaně 0.74 and the made-up one 0.39 no).
+# E5 has an anisotropic space — every pair of words ends up at ~0.77–0.89 and raňajky are
+# closer to obed than to snídaně, so no threshold separates them → fallback disabled (None).
 CATEGORY_SIM_FLOOR: dict[str, float | None] = {
     "BAAI/bge-m3": 0.80,
     "intfloat/multilingual-e5-small": None,
@@ -74,8 +74,8 @@ def _category_sim_floor(model_name: str) -> float | None:
 
 
 def _match_known_category(name: str, known: list[str]) -> str | None:
-    """Lexikálne (token_set) → fallback embedding — SK↔CZ synonymá
-    (raňajky ↔ snídaně) lexika nevyrieši, multilingválny priestor áno."""
+    """Lexical (token_set) → embedding fallback — SK↔CZ synonyms
+    (raňajky ↔ snídaně) are not solved by lexicon, a multilingual space solves them."""
     best, best_score = None, 0.0
     for cat in known:
         score = fuzz.token_set_ratio(_norm(name), _norm(cat))
@@ -121,19 +121,19 @@ def extract_compose_plan(question: str, known_categories: list[str]) -> ComposeP
         logger.warning("compose plán zlyhal: %s", exc)
         return None
 
-    # tvrdá validácia: model nesmie vymýšľať čísla
+    # hard validation: the model must not invent numbers
     allowed = _question_numbers(question)
     if plan.budget_max not in allowed:
         logger.warning("compose plán: budget %s nie je v otázke %s", plan.budget_max, allowed)
         return None
-    # vymyslený per-slot limit (model rád dopočítava rozdiely) nezahadzuje celý
-    # plán — limit sa len zmaže; korektnosť drží budget_max v pick_items
+    # an invented per-slot limit (the model likes to compute differences) does not discard the whole
+    # plan — the limit is just cleared; correctness is held by budget_max in pick_items
     for slot in plan.slots:
         if slot.max_value is not None and slot.max_value not in allowed:
             logger.warning("compose plán: slot limit %s mimo otázky — mažem", slot.max_value)
             slot.max_value = None
 
-    # kategórie namapuj na známe (model môže vrátiť 'obed' → 'Oběd varianty')
+    # map categories to known ones (the model may return 'obed' → 'Oběd varianty')
     for slot in plan.slots:
         matched = _match_known_category(slot.category, known_categories)
         if matched is None:
@@ -176,7 +176,7 @@ def format_combo_answer(plan: ComposePlan, combo: Combo, sources: list[Source]) 
 def run_compose(
     question: str, known_categories: list[str]
 ) -> tuple[str, list[Source], list[str]] | None:
-    """→ (odpoveď, zdroje, evidence) alebo None → fallback na agent slučku."""
+    """→ (answer, sources, evidence) or None → fall back to the agent loop."""
     plan = extract_compose_plan(question, known_categories)
     if plan is None:
         return None

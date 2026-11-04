@@ -1,11 +1,11 @@
-"""Cross-encoder reranking fúzovaných kandidátov.
+"""Cross-encoder reranking of fused candidates.
 
-RRF spája poradia, ale nevidí dvojicu otázka–text naraz; cross-encoder áno, preto
-presnejšie zoradí top kandidátov (najmä pri podobných dokumentoch dvoch projektov).
-Model podľa RAM profilu, oba multilingválne (SK otázka nad EN dokumentom a naopak):
-  low  → cross-encoder/mmarco-mMiniLMv2-L12-H384-v1 (malý, Apache-2.0)
-  high → BAAI/bge-reranker-v2-m3 (pár k bge-m3)
-Modely, ktoré fastembed pozná, bežia cez ONNX; ostatné cez sentence-transformers (MPS).
+RRF merges rankings but does not see the question–text pair together; a cross-encoder does,
+so it orders the top candidates more precisely (especially for similar documents of two projects).
+Model by RAM profile, both multilingual (SK question over an EN document and vice versa):
+  low  → cross-encoder/mmarco-mMiniLMv2-L12-H384-v1 (small, Apache-2.0)
+  high → BAAI/bge-reranker-v2-m3 (pairs with bge-m3)
+Models that fastembed knows run via ONNX; others via sentence-transformers (MPS).
 """
 
 import logging
@@ -16,7 +16,9 @@ from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-MAX_PASSAGE_CHARS = 1200  # ~300 tokenov; cross-encoder (max 512) by dlhší text aj tak orezal
+MAX_PASSAGE_CHARS = (
+    1200  # ~300 tokens; the cross-encoder (max 512) would truncate longer text anyway
+)
 
 
 class Reranker(Protocol):
@@ -45,7 +47,7 @@ class SentenceTransformersReranker:
         self.model_name = model_name
         self._model = CrossEncoder(model_name, device=device, max_length=384)
         if device == "mps":
-            self._model.model.half()  # fp16 na Apple GPU — ~2× rýchlejšie, poradie rovnaké
+            self._model.model.half()  # fp16 on Apple GPU — ~2× faster, same ranking
 
     def score(self, query: str, passages: list[str]) -> list[float]:
         scores = self._model.predict(

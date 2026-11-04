@@ -1,7 +1,7 @@
-"""SQLite vrstva modulu Firma — vlastná schéma (tabuľky wf_*), hlúpe CRUD funkcie.
+"""SQLite layer of the Firma module — its own schema (wf_* tables), plain CRUD functions.
 
-Pracovník je bežný používateľ (users, rola member) + riadok vo wf_workers s PIN-om
-a profesiami; prihlásenie a session zdieľa s hlavným auth.
+A worker is an ordinary user (users, role member) + a wf_workers row with a PIN
+and professions; login and session are shared with the main auth.
 
 One module per aggregate (`schema`, `workers`, `sites`, `tasks`, `imports`, `reports`);
 callers keep using `from app.workforce import store; store.get_task(...)`.

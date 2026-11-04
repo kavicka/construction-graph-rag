@@ -1,8 +1,8 @@
-"""Presná poloha citátu v PDF — riadky textovej vrstvy, nie celý blok z Doclingu.
+"""Exact position of a quote in a PDF — text-layer lines, not the whole Docling block.
 
-Docling niekedy zlúči viac odsekov do jedného bloku; zvýraznenie by potom pokrylo polovicu
-strany. Tu sa citát fuzzy zarovná na text strany (pypdfium2) a vrátia sa obdĺžniky
-presne tých znakov. Skeny bez textovej vrstvy → None (volajúci použije box z Doclingu).
+Docling sometimes merges several paragraphs into one block; the highlight would then cover half of
+the page. Here the quote is fuzzy-aligned to the page text (pypdfium2) and rectangles of exactly
+those characters are returned. Scans without a text layer → None (the caller uses the Docling box).
 """
 
 import logging
@@ -17,12 +17,12 @@ MAX_RECTS = 12
 
 
 def _flat(text: str) -> str:
-    # rovnaká dĺžka ako originál — indexy sa dajú mapovať späť na znaky strany
+    # same length as the original — indices can be mapped back to page characters
     return text.lower().replace("\r", " ").replace("\n", " ")
 
 
 def locate_quote(pdf_path: Path, page_no: int, quote: str) -> list[list[float]] | None:
-    """→ [[strana, x0, y0, x1, y1], …] relatívne 0..1, počiatok vľavo hore; alebo None."""
+    """→ [[page, x0, y0, x1, y1], …] relative 0..1, origin top left; or None."""
     if not quote.strip() or not pdf_path.exists():
         return None
     try:
@@ -47,7 +47,8 @@ def locate_quote(pdf_path: Path, page_no: int, quote: str) -> list[list[float]] 
             for i in range(min(count, MAX_RECTS)):
                 left, bottom, right, top = textpage.get_rect(i)
                 x0, x1 = left / width, right / width
-                y0, y1 = (height - top) / height, (height - bottom) / height  # PDF má počiatok dole
+                # PDF origin is at the bottom
+                y0, y1 = (height - top) / height, (height - bottom) / height
                 boxes.append(
                     [
                         float(page_no),
@@ -60,6 +61,6 @@ def locate_quote(pdf_path: Path, page_no: int, quote: str) -> list[list[float]] 
             return boxes or None
         finally:
             pdf.close()
-    except Exception:  # noqa: BLE001 — zvýraznenie je bonus, import nesmie spadnúť
+    except Exception:  # noqa: BLE001 — the highlight is a bonus, the import must not crash
         logger.warning("citát sa v PDF nepodarilo lokalizovať", exc_info=True)
         return None

@@ -1,8 +1,8 @@
-"""Termíny z dokumentov dodávateľov → (od, do). Deterministicky, relatívne k dátumu dokumentu.
+"""Deadlines from supplier documents → (from, to). Deterministic, relative to the document date.
 
-LLM z dokumentu len doslovne vytiahne text termínu („do konca mesiaca“, „15.–18. 10.“,
-„v 43. týždni“). Prepočet robí tento kód — LLM s kalendárom zle počíta.
-"""
+The LLM only extracts the deadline text verbatim from the document („do konca mesiaca“ — by the end
+of the month, „15.–18. 10.“, „v 43. týždni“ — in week 43). This code does the computation — the LLM
+miscalculates with calendars."""
 
 import calendar
 import re
@@ -99,7 +99,8 @@ def _year(raw: str | None, ref: date, month: int, day: int) -> int:
     if raw:
         y = int(raw)
         return y + 2000 if y < 100 else y
-    # bez roka: najbližší výskyt od dátumu dokumentu (dokument z decembra → január = nový rok)
+    # without a year: the nearest occurrence from the document date (December document → January =
+    # next year)
     candidate = date(ref.year, month, min(day, calendar.monthrange(ref.year, month)[1]))
     return ref.year + 1 if candidate < ref - timedelta(days=60) else ref.year
 
@@ -120,7 +121,7 @@ def _week_bounds(year: int, week: int) -> tuple[date, date] | None:
         start = date.fromisocalendar(year, week, 1)
     except ValueError:
         return None
-    return start, start + timedelta(days=4)  # pracovný týždeň po–pi
+    return start, start + timedelta(days=4)  # working week Mon–Fri
 
 
 def _number(token: str) -> int | None:
@@ -130,7 +131,7 @@ def _number(token: str) -> int | None:
 
 
 def parse_term(text: str | None, ref: date) -> DateRange:
-    """Text termínu → rozsah. Chýbajúci začiatok dopĺňa volajúci (dátum dokumentu/dnes)."""
+    """Deadline text → range. A missing start is filled in by the caller (document date/today)."""
     if not text or not text.strip():
         return DateRange(None, None, "none")
     norm = normalize(text).replace(":", ".")
@@ -175,7 +176,7 @@ def parse_term(text: str | None, ref: date) -> DateRange:
 
 
 def _with_direction(norm: str, d: date) -> DateRange:
-    """„do 20. 10.“ = koniec, „od 12. 10.“ = začiatok, samotný dátum = jednodňová úloha."""
+    """„do 20. 10.“ = end, „od 12. 10.“ = start, a bare date = a one-day task."""
     if re.search(r"\b(do|najneskor|termin dokoncenia|dokoncit|ukoncit)\b", norm):
         return DateRange(None, d, "absolute")
     if re.search(r"\b(od|zaciatok|zacat|nastup)\b", norm):

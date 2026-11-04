@@ -1,6 +1,6 @@
-"""Integračný test s reálnym Doclingom — pomalý (prvý beh sťahuje ML modely).
+"""Integration test with a real Docling — slow (first run downloads ML models).
 
-Spúšťa sa len s RUN_DOCLING=1:  RUN_DOCLING=1 uv run pytest tests/test_ingest_real.py -v
+Runs only with RUN_DOCLING=1:  RUN_DOCLING=1 uv run pytest tests/test_ingest_real.py -v
 """
 
 import os

@@ -1,16 +1,16 @@
-"""Records store — štruktúrované záznamy z riadkov tabuliek.
+"""Records store — structured records from table rows.
 
-Tretí index popri vektoroch a grafe. Filter/agregačné otázky („obed do 870 kcal",
-„vzorky s pevnosťou pod 38 MPa", „položky rozpočtu nad 400 000 EUR") sa riešia kódom
-nad týmito záznamami — LLM čísla nikdy neporovnáva.
+A third index next to vectors and the graph. Filter/aggregation questions („obed do 870 kcal",
+„vzorky s pevnosťou pod 38 MPa", „položky rozpočtu nad 400 000 EUR") are solved by code
+over these records — the LLM never compares numbers.
 
-Dva zdroje atribútov:
-- číselné stĺpce podľa hlavičky („Pevnosť (MPa)" → pevnost [MPa]) — ľubovoľná doména,
-- bunky s jednotkami („829 kcal 74b, 84s, 17t") — jedálničky a podobné voľné zápisy.
-Register atribútov (štítok + jednotka) používa router na rozpoznanie podmienok.
+Two sources of attributes:
+- numeric columns by header („Pevnosť (MPa)" → pevnost [MPa]) — any domain,
+- cells with units („829 kcal 74b, 84s, 17t") — menus and similar free-form notation.
+The router uses the attribute registry (label + unit) to recognise conditions.
 
-Extrakcia je deterministická (regex + heuristiky nad hlavičkami), žiadny LLM:
-opakovateľná, testovateľná, nula halucinácií.
+Extraction is deterministic (regex + heuristics over headers), no LLM:
+repeatable, testable, zero hallucinations.
 """
 
 import json
@@ -25,10 +25,10 @@ from app import db
 
 logger = logging.getLogger(__name__)
 
-# "548 kcal 61b, 49s, 10t" — kcal + skratkové makrá (b=bielkoviny, s=sacharidy, t=tuky)
+# "548 kcal 61b, 49s, 10t" — kcal + abbreviated macros (b=protein, s=carbohydrates, t=fat)
 KCAL_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*(?:kcal|kkal)\b", re.IGNORECASE)
 MACRO_SHORT_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*([bst])\b", re.IGNORECASE)
-# všeobecné jednotky: "55 g bílkovin", "500ml", "0.5 %"
+# general units: "55 g bílkovin", "500ml", "0.5 %"
 UNIT_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*(g|kg|mg|ml|l|%|ks)\b", re.IGNORECASE)
 NAMEISH_HEADERS = (
     "nazev",
@@ -46,7 +46,7 @@ NAMEISH_HEADERS = (
     "sensor",
     "claim",
 )
-# celá bunka je číslo: „1 742 300", „41.2", „0,5", „12 %"
+# the whole cell is a number: „1 742 300", „41.2", „0,5", „12 %"
 NUMERIC_CELL = re.compile(r"^\s*(-?\d{1,3}(?:[ \u00a0]\d{3})+|-?\d+)([.,]\d+)?\s*%?\s*$")
 HEADER_UNIT = re.compile(r"\(([^)]{1,15})\)\s*$")
 CODE_HEADERS = (
@@ -78,8 +78,8 @@ def _norm(s: str) -> str:
 
 
 def parse_cell_attrs(text: str) -> dict[str, float]:
-    """Vytiahne číselné atribúty z bunky. kcal + b/s/t skratky len ak je pri nich kcal
-    alebo tvoria makro-trojicu (ochrana pred falošnými 'b' v bežnom texte)."""
+    """Extract numeric attributes from a cell. kcal + b/s/t abbreviations only if kcal is present
+    or they form a macro triple (guards against false 'b' in ordinary text)."""
     attrs: dict[str, float] = {}
     kcal = KCAL_RE.search(text)
     if kcal:
@@ -103,19 +103,19 @@ def parse_numeric_cell(text: str) -> float | None:
 
 
 def header_attr(header: str) -> tuple[str, str, str | None] | None:
-    """„Pevnosť (MPa)" → ("pevnost", "Pevnosť", "MPa"); identifikátory (IČO, č.) → None."""
+    """„Pevnosť (MPa)" → ("pevnost", "Pevnosť", "MPa"); identifiers (IČO, č.) → None."""
     unit_m = HEADER_UNIT.search(header)
     unit = unit_m.group(1).strip() if unit_m else None
     label = HEADER_UNIT.sub("", header).strip(" :")
     key = re.sub(r"[^a-z0-9]+", "_", _norm(label)).strip("_")
-    # jednopísmenové („Č.") a identifikátory nie sú merateľné atribúty
+    # single-letter („Č.") and identifier headers are not measurable attributes
     if len(key) < 2 or key in CODE_HEADERS or len(key) > 40:
         return None
     return key, label, unit
 
 
 def _read_table_rows(meta: dict[str, Any]) -> tuple[list[str], list[list[str]]]:
-    """→ (hlavičky, riadky) — z parquetu; fallback markdown."""
+    """→ (headers, rows) — from parquet; markdown fallback."""
     if meta["parquet_path"] and Path(meta["parquet_path"]).exists():
         import pyarrow.parquet as pq
 
@@ -139,7 +139,7 @@ def _name_column(headers: list[str], rows: list[list[str]]) -> int | None:
     for i, h in enumerate(headers):
         if any(k in _norm(h) for k in NAMEISH_HEADERS):
             return i
-    # fallback: prvý stĺpec, kde prevažuje neprázdny nečíselný text
+    # fallback: first column where non-empty non-numeric text predominates
     for i in range(len(headers)):
         cells = [r[i] for r in rows if i < len(r) and r[i].strip()]
         if cells and sum(1 for c in cells if not c.replace(".", "").isdigit()) > len(cells) / 2:
@@ -150,7 +150,7 @@ def _name_column(headers: list[str], rows: list[list[str]]) -> int | None:
 def _numeric_columns(
     headers: list[str], rows: list[list[str]], name_col: int | None
 ) -> dict[int, tuple[str, str, str | None]]:
-    """Stĺpce, kde je väčšina neprázdnych buniek čisté číslo a hlavička nie je kód."""
+    """Columns where most non-empty cells are plain numbers and the header is not a code."""
     out: dict[int, tuple[str, str, str | None]] = {}
     for i, header in enumerate(headers):
         if i == name_col:
@@ -164,7 +164,7 @@ def _numeric_columns(
 
 
 def extract_records(doc_id: str) -> int:
-    """Rozloží tabuľky dokumentu na záznamy. Idempotentné (replace)."""
+    """Break the document's tables into records. Idempotent (replace)."""
     out: list[dict[str, Any]] = []
     registry: dict[str, tuple[str, str | None]] = {}
     for meta in db.list_tables(doc_id):
@@ -188,7 +188,7 @@ def extract_records(doc_id: str) -> int:
                     attrs.setdefault(k, v)
             raw = " | ".join(c for c in row if c.strip())
             if not attrs or not raw:
-                continue  # riadok bez čísel filter nezaujíma
+                continue  # a row without numbers is of no interest to a filter
             name = ""
             if name_col is not None and name_col < len(row):
                 name = row[name_col].strip()
@@ -207,7 +207,7 @@ def extract_records(doc_id: str) -> int:
                     "raw_text": raw[:500],
                 }
             )
-    # dedup — tabuľka pokračujúca na ďalšej strane vyrába duplicitné riadky
+    # dedup — a table continuing on the next page produces duplicate rows
     seen: set[tuple[str, str | None, str]] = set()
     unique: list[dict[str, Any]] = []
     for r in out:

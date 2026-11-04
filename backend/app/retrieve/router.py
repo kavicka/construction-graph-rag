@@ -1,14 +1,14 @@
-"""Query router — rozhodne, ktorou cestou otázka pôjde.
+"""Query router — decides which path a question takes.
 
-lookup  → klasický RAG (retrieve → generate)
-filter  → SQL nad records: číselné podmienky počíta kód, nie LLM
-compose → agent slučka (výber kombinácie položiek do rozpočtu)
-generate → branded PDF dokument z nájdených zdrojov (app.docgen)
-research → deep research: podotázky → retrieval → zistenia → štruktúrovaná správa
-global   → otázka na celú knižnicu: komunity pojmov v grafe + ich súhrny (LazyGraphRAG)
+lookup  → classic RAG (retrieve → generate)
+filter  → SQL over records: numeric conditions are computed by code, not the LLM
+compose → agent loop (choosing a combination of items within a budget)
+generate → branded PDF document from the found sources (app.docgen)
+research → deep research: sub-questions → retrieval → findings → structured report
+global   → question about the whole library: graph concept communities + summaries (LazyGraphRAG)
 
-Heuristiky first (deterministické, zadarmo), LLM fallback len keď je v otázke
-číslo, ale heuristika nevie určiť podmienku.
+Heuristics first (deterministic, free), LLM fallback only when the question contains
+a number but the heuristics cannot determine the condition.
 """
 
 import logging
@@ -47,9 +47,11 @@ class QueryPlan:
     mode: Mode
     constraints: list[Constraint] = field(default_factory=list)
     categories: list[str] = field(default_factory=list)
-    maximize: str | None = None  # atribút na maximalizáciu (napr. najviac bielkovín)
-    doc_ids: list[str] = field(default_factory=list)  # filter obmedzený na dokumenty z otázky
-    doc_type: DocType | None = None  # len pre mode="generate"
+    maximize: str | None = None  # attribute to maximise (e.g. most protein)
+    doc_ids: list[str] = field(
+        default_factory=list
+    )  # filter restricted to the documents from the question
+    doc_type: DocType | None = None  # only for mode="generate"
     lang: Lang = "sk"
 
 
@@ -66,7 +68,7 @@ GE_RE = (
     r"(?:viac ako|vice nez|vyss\w* ako|vacs\w* ako|drahs\w* ako|more than|higher than|"
     r"greater than|at least|minimalne|alespon|aspon|over|above|min|nad)"
 )
-# „400 000" (oddeľovač tisícov) aj „36,4"
+# „400 000" (thousands separator) and „36,4"
 NUM = r"(\d{1,3}(?:[ \u00a0]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?)"
 
 ATTR_HINTS: dict[str, tuple[str, ...]] = {
@@ -98,7 +100,7 @@ def _value(token: str) -> float:
 
 
 def _attr_vocab() -> dict[str, tuple[tuple[str, ...], tuple[str, ...]]]:
-    """atribút → (štítkové kmene, jednotky). Pevné makrá + register z tabuliek knižnice."""
+    """attribute → (label stems, units). Fixed macros + registry from the library's tables."""
     vocab: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
         k: (hints, ()) for k, hints in ATTR_HINTS.items()
     }
@@ -116,9 +118,10 @@ def _attr_vocab() -> dict[str, tuple[tuple[str, ...], tuple[str, ...]]]:
 def _attr_near(
     text: str, start: int, end: int, vocab: dict[str, tuple[tuple[str, ...], tuple[str, ...]]]
 ) -> str | None:
-    """Atribút podmienky: jednotka hneď za číslom (3), štítok za číslom (2), pred ním (1).
-    „do 820 kalórií a nad 50 g bielkovín": pri 50 vyhrajú bielkoviny za číslom nad
-    kalóriami pred ním."""
+    """Attribute of a condition: unit right after the number (3), label after the number (2),
+    before it (1).
+    „do 820 kalórií a nad 50 g bielkovín": for 50, protein after the number beats
+    calories before it."""
     after = text[end : end + 30]
     before = text[max(0, start - 45) : start]
     best: tuple[int, str] | None = None
@@ -126,7 +129,7 @@ def _attr_near(
         score = 0
         if any(re.match(rf"\s*{re.escape(u)}(?![a-z])", after) for u in units):
             score += 3
-        # kmeň len na začiatku slova — „hodno“ (Hodnotenie) nesmie trafiť „vyhodnotenia“
+        # stem only at the start of a word — „hodno“ (Hodnotenie) must not hit „vyhodnotenia“
         if any(re.search(rf"\b{re.escape(h)}", after) for h in stems):
             score += 2
         elif any(re.search(rf"\b{re.escape(h)}", before) for h in stems):
@@ -150,8 +153,9 @@ def _heuristic_constraints(qn: str) -> list[Constraint]:
 
 
 def _match_documents(qn: str) -> list[str]:
-    """Dokumenty, ktorých názov súboru otázka spomína („v rozpočte Agátová") — filter sa
-    obmedzí na ne. Zhoda na 5-znakovom kmeni kvôli skloňovaniu (Agátovej ↔ agatova)."""
+    """Documents whose file name the question mentions („v rozpočte Agátová") — the filter is
+    restricted to them. Match on a 5-character stem because of Slovak inflection
+    (Agátovej ↔ agatova)."""
     q_stems = {t[:5] for t in re.findall(r"[a-z0-9]{4,}", qn)}
     scored: list[tuple[int, str]] = []
     for d in db.list_documents():
@@ -172,7 +176,7 @@ def known_categories() -> list[str]:
 
 
 def _match_categories(qn: str) -> list[str]:
-    """Kategórie z DB spomenuté v otázke — data-driven, žiadne hardcoded slová."""
+    """Categories from the DB mentioned in the question — data-driven, no hardcoded words."""
     matched = []
     for cat in known_categories():
         cat_n = _norm(cat)
@@ -183,21 +187,24 @@ def _match_categories(qn: str) -> list[str]:
 
 
 def mentions_library(question: str) -> bool:
-    """Spomína otázka niečo z knižnice — dokument, kategóriu záznamov, pojem z grafu?
-    Vtedy je určite v rozsahu a LLM klasifikátor rozsahu sa nevolá."""
+    """Does the question mention anything from the library — a document, record category,
+    graph concept?
+    Then it is definitely in scope and the LLM scope classifier is not called."""
     qn = _norm(question)
     if _match_documents(qn) or _match_categories(qn):
         return True
     for node in db.list_graph_nodes(types=[CONCEPT]):
         label = _norm(node["label"])
-        # krátke štítky („C30“, „NP“) by sa našli v hocičom
+        # short labels („C30“, „NP“) would be found in anything
         if len(label) >= 5 and fuzz.partial_ratio(label, qn) >= 90:
             return True
     return False
 
 
 class _LlmPlan(BaseModel):
-    mode: Literal["lookup", "filter", "compose"]  # generate/research sa určujú deterministicky
+    mode: Literal[
+        "lookup", "filter", "compose"
+    ]  # generate/research are determined deterministically
     constraints: list[dict[str, str | float]] = Field(default_factory=list, max_length=4)
 
 
@@ -226,7 +233,7 @@ def _llm_fallback(question: str) -> QueryPlan | None:
     for c in parsed.constraints:
         try:
             attr, op, value = str(c["attr"]), str(c["op"]), float(c["value"])
-            if attr in ATTR_HINTS and op in ("<=", ">=", "<", ">"):  # LLM fallback = makrá
+            if attr in ATTR_HINTS and op in ("<=", ">=", "<", ">"):  # LLM fallback = macros
                 constraints.append(Constraint(attr, op, value))
         except (KeyError, TypeError, ValueError):
             continue
@@ -236,7 +243,7 @@ def _llm_fallback(question: str) -> QueryPlan | None:
 
 
 def route_query(question: str) -> QueryPlan:
-    # príkaz na dokument má prednosť — „sprav ponuku do 500 kcal“ je stále dokument
+    # a document command takes precedence — „sprav ponuku do 500 kcal“ is still a document
     if intent := detect_generate_intent(question):
         return QueryPlan(mode="generate", doc_type=intent.doc_type, lang=intent.lang)
     if is_research_request(question):
@@ -252,7 +259,7 @@ def route_query(question: str) -> QueryPlan:
     )
 
     if not constraints and not maximize:
-        # číslo v otázke, ale heuristika podmienku nenašla → skús LLM
+        # a number in the question but the heuristics found no condition → try the LLM
         if re.search(rf"{NUM}\s*(kcal|g\b)", qn):
             llm_plan = _llm_fallback(question)
             if llm_plan is not None:

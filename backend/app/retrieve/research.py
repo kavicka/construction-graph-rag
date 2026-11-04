@@ -1,9 +1,9 @@
-"""Rozklad otázok a deep research.
+"""Question decomposition and deep research.
 
-1) Zložená otázka („Kto je stavbyvedúci a aká je pokuta?“) → podotázky → retrieval pre
-   každú zvlášť → zlúčené zdroje. Jedno vyhľadávanie by našlo len jednu polovicu.
-2) Deep research: plán podotázok → paralelný retrieval → krátke zistenie ku každej
-   podotázke → syntéza do štruktúrovanej správy s citáciami (exportovateľnej do PDF).
+1) Compound question („Kto je stavbyvedúci a aká je pokuta?“) → sub-questions → retrieval for
+   each separately → merged sources. A single search would find only one half.
+2) Deep research: sub-question plan → parallel retrieval → a short finding per
+   sub-question → synthesis into a structured report with citations (exportable to PDF).
 """
 
 import logging
@@ -50,7 +50,7 @@ CONJUNCTION = re.compile(r"\s(?:a|aj|and|ako aj)\s+(?:tiež\s+|also\s+)?", re.IG
 
 
 def _split_heuristic(question: str) -> list[str]:
-    """Rozdelí na otáznikoch a pred spojkou s opytovacím slovom („… a aká je …“)."""
+    """Splits on question marks and before a conjunction + interrogative („… a aká je …“)."""
     pieces: list[str] = []
     for segment in re.split(r"\?\s*", question):
         last = 0
@@ -64,7 +64,7 @@ def _split_heuristic(question: str) -> list[str]:
 
 
 def decompose(question: str, *, research: bool = False) -> list[str]:
-    """→ samostatné podotázky. Pri deep research aj rozšírenie témy, inak len rozdelenie."""
+    """→ standalone sub-questions. Deep research also expands the topic; otherwise it splits."""
     if research:
         instruction = (
             "Navrhni 3 až 5 samostatných podotázok, ktoré treba zodpovedať z firemných "
@@ -98,7 +98,7 @@ def decompose(question: str, *, research: bool = False) -> list[str]:
 
 
 def merge_sources(per_query: list[list[Source]], *, cap: int = MAX_MERGED_SOURCES) -> list[Source]:
-    """Round-robin cez podotázky — každá dostane svoje najlepšie zdroje do kontextu."""
+    """Round-robin over sub-questions — each gets its best sources into the context."""
     merged: list[Source] = []
     seen: set[str] = set()
     depth = max((len(s) for s in per_query), default=0)
@@ -172,7 +172,7 @@ def synthesis_messages(
 
 
 def sections_from_markdown(markdown: str) -> list[tuple[str, str]]:
-    """'## Nadpis\\ntext' → [(nadpis, text)] — na export odpovede do PDF."""
+    """'## Heading\\ntext' → [(heading, text)] — for exporting the answer to PDF."""
     sections: list[tuple[str, str]] = []
     heading: str | None = None
     body: list[str] = []

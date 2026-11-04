@@ -1,13 +1,14 @@
-"""Voliteľné prihlasovanie a prístupové práva k dokumentom (RAG_AUTH_ENABLED).
+"""Optional login and per-document access rights (RAG_AUTH_ENABLED).
 
-- Používatelia (admin / member) so skupinami; heslá cez scrypt (stdlib).
-- Session = náhodný token v HttpOnly cookie, v DB len jeho SHA-256.
-- API tokeny (Bearer) pre MCP klientov a skripty.
-- Dokument má zoznam skupín, ktoré ho vidia (["*"] = všetci).
+- Users (admin / member) with groups; passwords hashed with scrypt (stdlib).
+- Session = random token in an HttpOnly cookie; only its SHA-256 is stored in the DB.
+- API tokens (Bearer) for MCP clients and scripts.
+- A document has a list of groups that can see it (["*"] = everyone).
 
-Vynucovanie: middleware nastaví `access scope` (contextvar) pre celý request — retrieval,
-graf, záznamy, témy aj MCP si z neho prečítajú povolené dokumenty a filtrujú PRIAMO v
-dotaze (LanceDB where / SQL), nie až výsledky. Bez prihlasovania je scope neobmedzený.
+Enforcement: middleware sets the `access scope` (contextvar) for the whole request — retrieval,
+graph, records, topics and MCP read the allowed documents from it and filter DIRECTLY in
+the query (LanceDB where / SQL), not the results afterwards. Without login the scope is
+unrestricted.
 """
 
 import hashlib
@@ -49,7 +50,7 @@ class AccessScope:
 
 
 LOCAL_ADMIN = AccessScope(user_id=None, email=None, role="admin")
-# neprihlásený request na verejnú cestu pri zapnutom prihlasovaní — nevidí nič
+# unauthenticated request to a public path with login on — sees nothing
 NO_ACCESS = AccessScope(user_id="", email=None, role="member")
 _scope: ContextVar[AccessScope | None] = ContextVar("rag_access_scope", default=None)
 
@@ -71,7 +72,7 @@ def reset_scope(token: object) -> None:
 
 
 def allowed_doc_ids() -> set[str] | None:
-    """None = bez obmedzenia; inak množina dokumentov, ktoré smie aktuálny používateľ vidieť."""
+    """None = unrestricted; otherwise the set of documents the current user may see."""
     scope = current_scope()
     if scope.unrestricted:
         return None
@@ -88,7 +89,7 @@ def can_access_document(doc_id: str) -> bool:
     return allowed is None or doc_id in allowed
 
 
-# --- heslá a tokeny -------------------------------------------------------------------
+# --- passwords and tokens -------------------------------------------------------------------
 
 
 def hash_password(password: str) -> str:
@@ -173,25 +174,25 @@ def create_user(
 
 
 def set_password(user_id: str, password: str) -> None:
-    """Zmena hesla: nový hash + všetky existujúce session a API tokeny používateľa zrušiť."""
+    """Password change: store the new hash and revoke all of the user's sessions and API tokens."""
     db.update_user_password(user_id, hash_password(password))
 
 
 def ensure_bootstrap_admin() -> None:
-    """Prvý admin z RAG_ADMIN_EMAIL / RAG_ADMIN_PASSWORD, ak ešte žiadny admin neexistuje.
+    """First admin from RAG_ADMIN_EMAIL / RAG_ADMIN_PASSWORD, if no admin exists yet.
 
-    Kontroluje sa admin, nie hocijaký používateľ — pracovníci dochádzky (PIN) sú tiež
-    používatelia a majiteľ, ktorý zapne prihlasovanie až po ich pridaní, by sa zamkol von."""
+    It checks for an admin, not any user — attendance workers (PIN) are users too,
+    and an owner who turns login on only after adding them would be locked out."""
     settings = get_settings()
     if not (settings.admin_email and settings.admin_password):
         return
     if any(u["role"] == "admin" for u in db.list_users()):
         return
     if db.get_user_by_email(settings.admin_email):
-        return  # e-mail už má iný (neadmin) účet — nič neprepisujeme
+        return  # the e-mail already belongs to another (non-admin) account — we overwrite nothing
     create_user(settings.admin_email, "Admin", settings.admin_password, role="admin")
 
 
-# pre neexistujúci e-mail sa overí heslo proti tomuto hashu — login trvá rovnako dlho
-# a podľa času odpovede sa nedá zistiť, ktoré účty existujú
+# for a non-existent e-mail the password is checked against this hash — login takes equally long
+# so the response time does not reveal which accounts exist
 DUMMY_HASH = hash_password(secrets.token_urlsafe(16))

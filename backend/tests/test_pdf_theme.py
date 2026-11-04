@@ -1,4 +1,4 @@
-"""Téma PDF = téma aplikácie: tokeny sa nesmú rozísť s frontend/src/index.css."""
+"""PDF theme = app theme: tokens must not drift from frontend/src/index.css."""
 
 import re
 from pathlib import Path
@@ -9,7 +9,7 @@ from app.docgen.theme import FONTS_DIR, MONO_KEY, THEME
 
 INDEX_CSS = Path(__file__).resolve().parents[2] / "frontend" / "src" / "index.css"
 
-# PdfTheme pole → CSS premenná v :root
+# PdfTheme field → CSS variable in :root
 TOKENS = {
     "foreground": "--foreground",
     "muted_foreground": "--muted-foreground",

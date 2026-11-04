@@ -1,5 +1,5 @@
-"""Fázy 3–4: import úloh z dokumentu — citáty, termíny, závislosti, návrh pracovníka,
-schválenie, nová verzia dokumentu (nové / zmenené / zrušené / bez zmeny)."""
+"""Phases 3–4: task import from a document — quotes, deadlines, dependencies, worker suggestion,
+approval, new document version (new / changed / cancelled / unchanged)."""
 
 from datetime import date
 from typing import Any
@@ -50,7 +50,7 @@ def _seed_source(
 
 @pytest.fixture
 def no_embed(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Podobnosť len fuzzy — testy nesťahujú bge-m3."""
+    """Similarity is fuzzy only — tests do not download bge-m3."""
 
     def broken() -> None:
         raise RuntimeError("bez embedderu")
@@ -62,7 +62,7 @@ def test_quote_verification_and_windows() -> None:
     window = make_windows([Segment("Murovanie priečok na 2. NP do piatku.", 3)])[0]
     seg = verify_quote("murovanie priecok na 2. NP", window)
     assert seg is not None and seg.page == 3
-    assert verify_quote("Montáž strešnej krytiny", window) is None  # halucinácia
+    assert verify_quote("Montáž strešnej krytiny", window) is None  # hallucination
     assert verify_quote("krátke", window) is None
     big = make_windows([Segment("riadok\n" * 1500, 1)], limit=1000)
     assert len(big) > 5 and all(len(w.text) <= 1100 for w in big)
@@ -96,7 +96,7 @@ def test_assignment_rules() -> None:
         workers=workers,
         tasks=busy,
     )
-    assert s.user_id == "f" and "0 úloh v termíne" in s.reason  # Ján je vyťažený
+    assert s.user_id == "f" and "0 úloh v termíne" in s.reason  # Ján is fully booked
     on_site = [
         {
             "id": "y",
@@ -163,12 +163,12 @@ def test_import_pipeline(
                 ),
                 _task(
                     "Montáž strechy", "Montáž strechy do 30.11.", work_type="pokrývač"
-                ),  # nie je v texte
+                ),  # not in the text
                 _task(
                     "Betonáž základovej dosky",
                     "treba dokončiť betonáž základovej dosky",
                     work_type="betonár",
-                ),  # duplicita
+                ),  # duplicate
             ],
         },
     )
@@ -194,7 +194,7 @@ def test_import_pipeline(
     assert elec["assignees"] == [peter] and elec["assign_basis"] == "named"
     assert all(d["kind"] == "new" and d["decision"] == "pending" for d in detail["drafts"])
 
-    # nerozhodnuté → apply odmietne
+    # undecided → apply refuses
     resp = client.post(f"/api/task-imports/{src}/apply")
     assert resp.status_code == 409
     client.post(f"/api/task-imports/{src}/decide-all", json={"decision": "approved"})
@@ -227,10 +227,10 @@ def test_draft_without_term_blocks_apply(
     assert draft["data"]["confidence"] == "low"
     assert "chýba termín" in draft["data"]["issues"]
     assert "nikto nenavrhnutý" in draft["data"]["issues"]
-    # „schváliť všetko“ preskočí návrh bez termínu
+    # „schváliť všetko“ skips a suggestion without a deadline
     client.post(f"/api/task-imports/{src}/decide-all", json={"decision": "approved"})
     assert client.get(f"/api/task-imports/{src}").json()["drafts"][0]["decision"] == "pending"
-    # majiteľ doplní termín a schváli
+    # the owner adds a deadline and approves
     resp = client.put(
         f"/api/task-imports/{src}/drafts/{draft['id']}",
         json={
@@ -271,7 +271,7 @@ def test_new_version_diff(
     )
     run_import(v1)
     client.post(f"/api/task-imports/{v1}/decide-all", json={"decision": "approved"})
-    # omietky nemajú pracovníka, ale termín áno → schválené; apply
+    # plastering has no worker but has a deadline → approved; apply
     assert client.post(f"/api/task-imports/{v1}/apply").status_code == 200
     by_title = {t["title"]: t for t in store.list_tasks(site_id=site)}
     store.update_task(by_title["Postavenie lešenia"]["id"], {"status": "in_progress"})
@@ -314,7 +314,7 @@ def test_new_version_diff(
         "2026-10-20",
         "2026-10-27",
     ]
-    assert kinds["Murovanie priečok 2. NP"]["data"]["assignees"] == [jan]  # ponechaný
+    assert kinds["Murovanie priečok 2. NP"]["data"]["assignees"] == [jan]  # kept
     assert kinds["Omietky 1. NP"]["kind"] == "unchanged"
     assert kinds["Omietky 1. NP"]["decision"] == "approved"
     assert kinds["Obklady kúpeľne"]["kind"] == "new"
@@ -424,7 +424,9 @@ def test_term_prefix_and_typo_tolerant_diff(no_embed: None) -> None:
         }
     )
     out = diff_with_previous([new], old)
-    assert out[0].kind == "unchanged"  # preklep, iný popis ani dopočítaný začiatok nie sú zmena
+    assert (
+        out[0].kind == "unchanged"
+    )  # a typo, a different description or a derived start are not a change
     assert out[0].data["title"] == "Betonáž základovej dosky"
     assert out[0].data["description"] == "pôvodný popis"
 

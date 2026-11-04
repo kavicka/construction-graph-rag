@@ -1,19 +1,19 @@
-"""Redakcia tajomstiev — heslá, PIN-y, prístupové kódy, kľúče a tokeny sa nikdy nevypíšu.
+"""Secret redaction — passwords, PINs, access codes, keys and tokens are never printed.
 
-Dve vrstvy:
-1. vzory, ktoré sú tajomstvom samy osebe (hash hesla, API token, privátny kľúč, JWT…),
-2. návestie + hodnota („Heslo k WiFi: Kral-2026“, „PIN 4821“, „api_key=…“).
+Two layers:
+1. patterns that are secrets by themselves (password hash, API token, private key, JWT…),
+2. label + value („Heslo k WiFi: Kral-2026“, „PIN 4821“, „api_key=…“).
 
-Redakcia beží na texte zdrojov PRED promptom (LLM tajomstvo nikdy nevidí), na priebežnom
-streame odpovede, na finálnej odpovedi a na všetkom, čo chat, MCP a vyhľadávanie vracajú.
-IBAN, rodné čísla a telefóny sa NEredigujú — v zmluvách sú bežné (rozhodnutie z /ask).
+Redaction runs on source text BEFORE the prompt (the LLM never sees the secret), on the live
+answer stream, on the final answer and on everything chat, MCP and search return.
+IBANs, national ID numbers and phones are NOT redacted — common in contracts (decision from /ask).
 """
 
 import re
 
 MASK = "••••••"
 
-# --- tajomstvá podľa tvaru ---------------------------------------------------------------
+# --- secrets by shape ---------------------------------------------------------------
 
 _SHAPES = [
     r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)",
@@ -32,7 +32,7 @@ _SHAPES = [
 ]
 _SHAPE_RE = re.compile("|".join(f"(?:{p})" for p in _SHAPES))
 
-# --- návestie + hodnota ------------------------------------------------------------------
+# --- label + value ------------------------------------------------------------------
 
 _LABELS = (
     r"hesl[oáa]\w*|password\w*|passwd|passphrase|pwd|pin(?:[ \-]?k[óo]d\w*)?|"
@@ -43,14 +43,15 @@ _LABELS = (
     r"access[ _\-]?(?:token|key|code)|token|wpa2?(?:[ _\-]?k[ľl][úu][čc]\w*)?"
 )
 _LABEL_RE = re.compile(rf"(?<![\w-])(?:{_LABELS})(?![\w-])", re.IGNORECASE)
-# „Heslo k WiFi na stavbe: Kral-2026“ — medzi návestím a oddeľovačom max. 4 slová
+# „Heslo k WiFi na stavbe: Kral-2026“ — at most 4 words between the label and the separator
 _EXPLICIT_RE = re.compile(
     rf"(?P<label>(?<![\w-])(?:{_LABELS})(?![\w-]))"
     r"(?P<mid>(?:[ \t]+[^\s:=*()\[\]]{1,20}){0,4}?[ \t]*(?:[:=]|\s[–-]\s)[ \t]*\n?[ \t]*)"
     r"(?P<val>[\"'„“]?[^\s\"'„“”]{3,}[\"'“”]?)",
     re.IGNORECASE,
 )
-# „heslo je Kral2026!“, „the password is …“ — hodnota sa začierni, len ak vyzerá ako tajomstvo
+# „heslo je Kral2026!“, „the password is …“ — the value is blacked out only if it looks like
+# a secret
 _VERB_RE = re.compile(
     rf"(?P<label>(?<![\w-])(?:{_LABELS})(?![\w-]))"
     r"(?P<mid>(?:[ \t]+[^\s:=*()\[\]]{1,20}){0,3}?[ \t]+(?:je|bude|znie|is|was|equals)[ \t]+)"
@@ -81,7 +82,7 @@ def _mask_value(m: re.Match[str], *, strict: bool) -> str:
 
 
 def redact_secrets(text: str) -> str:
-    """Text bez tajomstiev. Idempotentné — zamaskovaný text sa druhým prechodom nezmení."""
+    """Text without secrets. Idempotent — masked text does not change on a second pass."""
     if not text:
         return text
     text = _SHAPE_RE.sub(MASK, text)
@@ -95,13 +96,13 @@ def contains_secret(text: str) -> bool:
 
 
 class SecretStreamFilter:
-    """Priebežná redakcia streamu tokenov.
+    """Live redaction of the token stream.
 
-    Vypúšťa text len po poslednú medzeru (celé slová → tvarové tajomstvá sa nerozseknú)
-    a chvost od posledného návestia („heslo“, „PIN“…) drží, kým nepríde hodnota — inak by
-    „Heslo: “ odišlo v jednom kúsku a „Kral-2026“ v ďalšom, mimo dosahu redakcie."""
+    Emits text only up to the last space (whole words → shape-based secrets are not split)
+    and holds the tail from the last label („heslo“, „PIN“…) until the value arrives — otherwise
+    „Heslo: “ would go out in one piece and „Kral-2026“ in the next, beyond redaction's reach."""
 
-    HOLD_CHARS = 90  # návestie + oddeľovač + hodnota sa zmestia do tohto okna
+    HOLD_CHARS = 90  # label + separator + value fit into this window
 
     def __init__(self) -> None:
         self._buf = ""

@@ -57,7 +57,7 @@ def set_source_status(
 
 
 def source_chain(source_id: str) -> list[str]:
-    """Id zdroja + všetkých jeho predošlých verzií (najnovšia prvá)."""
+    """Id of the source + all its previous versions (newest first)."""
     chain: list[str] = []
     current: str | None = source_id
     while current and current not in chain:

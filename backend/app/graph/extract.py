@@ -1,8 +1,8 @@
-"""Extrakcia entít — najprv deterministicky (presné, zadarmo), potom LLM.
+"""Entity extraction — deterministic first (exact, free), then LLM.
 
-Deterministické: veličiny s jednotkami, citácie (DOI, arXiv, normy).
-Čísla NIKDY neprechádzajú cez LLM — regex z textu parsera.
-LLM (qwen3:1.7b, structured output): odborné pojmy/metódy/materiály.
+Deterministic: quantities with units, citations (DOI, arXiv, standards).
+Numbers NEVER go through the LLM — regex over the parser text.
+LLM (qwen3:1.7b, structured output): technical terms/methods/materials.
 """
 
 import logging
@@ -44,14 +44,14 @@ MAX_CHUNK_CHARS = 3000
 
 
 def normalize_key(name: str) -> str:
-    """Normalizovaný kľúč pre zdieľanie uzlov: casefold + bez diakritiky + bez interpunkcie."""
+    """Normalized key for node sharing: casefold + no diacritics + no punctuation."""
     nfkd = unicodedata.normalize("NFKD", name.casefold().strip())
     stripped = "".join(c for c in nfkd if not unicodedata.combining(c))
     return re.sub(r"[^a-z0-9]+", "-", stripped).strip("-")
 
 
 def extract_quantities(text: str) -> list[tuple[str, str, str]]:
-    """→ [(norm_key, label, unit)] — unikátne jednotkové výskyty s hodnotou."""
+    """→ [(norm_key, label, unit)] — unique unit occurrences with a value."""
     out: dict[str, tuple[str, str, str]] = {}
     for m in UNIT_PATTERN.finditer(text):
         value, unit = m.group(1), m.group(2).strip()

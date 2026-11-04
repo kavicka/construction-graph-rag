@@ -1,4 +1,4 @@
-"""Štruktúra denného výpisu a deterministické hľadanie chýbajúcich údajov."""
+"""Structure of the daily report and deterministic search for missing data."""
 
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -69,15 +69,16 @@ GapKind = Literal["absence", "arrival", "departure", "break", "task", "extra", "
 
 @dataclass(frozen=True)
 class Gap:
-    key: str  # stabilný kľúč otázky (rovnaký kým chýba ten istý údaj)
+    key: str  # stable question key (the same while the same data is missing)
     kind: GapKind
     task_id: str | None = None
-    detail: str = ""  # čo presne chýba: "status" | "hours" | "progress" | "hours,progress" …
+    # what exactly is missing: "status" | "hours" | "progress" | "hours,progress" …
+    detail: str = ""
     extra_index: int | None = None
 
 
 def find_gaps(data: ReportData, active_task_ids: list[str], *, tolerance: float) -> list[Gap]:
-    """Chýbajúce údaje v poradí, v akom sa na ne pýtame. Prázdny zoznam = dá sa odovzdať."""
+    """Missing data in the order we ask about it. Empty list = ready to submit."""
     if data.absent:
         return [] if data.absence_reason.strip() else [Gap("absence", "absence")]
 
@@ -113,7 +114,7 @@ def find_gaps(data: ReportData, active_task_ids: list[str], *, tolerance: float)
     if not data.problems_answered:
         gaps.append(Gap("problems", "problems"))
 
-    # súčet hodín má zmysel kontrolovať až keď je všetko ostatné vyplnené
+    # the hours sum is only worth checking once everything else is filled in
     if not gaps:
         worked = data.worked_hours
         if worked is not None and worked <= 0:

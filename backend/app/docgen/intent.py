@@ -1,7 +1,7 @@
-"""Rozpoznanie požiadavky „vytvor dokument…“ — deterministické heuristiky.
+"""Detection of a „vytvor dokument…“ request — deterministic heuristics.
 
-Generovanie je drahé (niekoľko LLM volaní + render), preto sa spúšťa len pri
-jasnom príkaze: sloveso tvorby + typ dokumentu, alebo výslovne „PDF“.
+Generation is expensive (several LLM calls + render), so it only runs on
+a clear command: a creation verb + document type, or an explicit „PDF“.
 """
 
 import re
@@ -13,7 +13,7 @@ from app.docgen.schema import DocType, Lang
 SK_VERBS = r"vytvor|vygeneruj|sprav|spravte|priprav|napis|zostav|vypracuj|vyhotov|exportuj"
 EN_VERBS = r"create|generate|draft|write|prepare|make|produce|export"
 
-# poradie = priorita pri viacerých zhodách
+# order = priority when several match
 DOC_NOUNS: list[tuple[DocType, str]] = [
     ("offer", r"ponuk\w*|cenov\w*|offer|proposal|quote|quotation"),
     ("memo", r"memo\w*|obeznik\w*"),

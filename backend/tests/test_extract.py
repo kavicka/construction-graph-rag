@@ -22,7 +22,7 @@ def test_extract_quantities() -> None:
     assert "12.4 l/min" in labels
     assert "101,3 kPa" in labels
     assert "21.5 °C" in labels
-    assert len(quantities) == 3  # duplicitný výskyt sa nezdvojí
+    assert len(quantities) == 3  # a duplicate occurrence is not counted twice
 
 
 def test_extract_references() -> None:
@@ -55,4 +55,4 @@ def test_llm_concepts_failure_returns_empty(monkeypatch: pytest.MonkeyPatch) -> 
 
     monkeypatch.setattr("app.graph.extract.generate_sync", boom)
     assert extract_concepts_llm("text") == []
-    assert calls["n"] == 2  # jeden retry
+    assert calls["n"] == 2  # one retry

@@ -4,7 +4,7 @@ import pytest
 
 from app.workforce.sk_dates import parse_term
 
-REF = date(2026, 10, 7)  # streda
+REF = date(2026, 10, 7)  # Wednesday
 
 
 @pytest.mark.parametrize(

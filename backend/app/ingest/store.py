@@ -1,4 +1,4 @@
-"""Uloženie a zmazanie dokumentu — spoločné pre upload API aj sledovaný inbox."""
+"""Storing and deleting a document — shared by the upload API and the watched inbox."""
 
 import hashlib
 import logging
@@ -21,7 +21,7 @@ def document_path(doc_id: str, fmt: str) -> Path:
 def store_document(
     filename: str, data: bytes, fmt: str, *, source_path: str | None = None
 ) -> tuple[dict[str, Any], bool]:
-    """→ (riadok dokumentu, vytvorený nový?). Rovnaký obsah = ten istý dokument (sha256)."""
+    """→ (document row, newly created?). Same content = the same document (sha256)."""
     sha = hashlib.sha256(data).hexdigest()
     existing = db.find_document_by_sha(sha)
     if existing:
@@ -44,7 +44,7 @@ def store_document(
 
 
 def delete_document(doc_id: str) -> bool:
-    """Zmaže dokument zo všetkých úložísk: súbor, chunky + FTS, graf, tabuľky, záznamy."""
+    """Delete the document from all stores: file, chunks + FTS, graph, tables, records."""
     doc = db.get_document(doc_id)
     if doc is None:
         return False

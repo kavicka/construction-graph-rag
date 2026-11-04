@@ -19,7 +19,7 @@ def get_chat(chat_id: str) -> dict[str, Any] | None:
 
 
 def list_chats(user_id: str | None = None) -> list[dict[str, Any]]:
-    """user_id=None → všetky (bez prihlasovania / admin); inak len chaty používateľa."""
+    """user_id=None → all chats (login off / admin); otherwise only the user's chats."""
     query, params = "SELECT * FROM chats", []
     if user_id is not None:
         query += " WHERE user_id = ?"
@@ -103,7 +103,7 @@ def delete_feedback(message_id: str) -> None:
 
 
 def list_feedback(rating: int | None = None) -> list[dict[str, Any]]:
-    """Feedback s otázkou (predchádzajúca user správa) a odpoveďou — export do golden setu."""
+    """Feedback with its question (the preceding user message) and answer — golden-set export."""
     query = """SELECT f.message_id, f.rating, f.comment, f.created_at, m.content AS answer,
                  m.sources_json, m.trace_id, m.chat_id,
                  (SELECT u.content FROM messages u WHERE u.chat_id = m.chat_id

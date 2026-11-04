@@ -1,11 +1,11 @@
-"""OpenTelemetry tracing s GenAI sémantickými konvenciami.
+"""OpenTelemetry tracing with GenAI semantic conventions.
 
-Každá otázka = jeden trace: rag.query → rag.route → rag.retrieve (dense / bm25 / graph /
-rerank) → LLM volania (`chat <model>` s gen_ai.* atribútmi a počtom tokenov).
+Every question = one trace: rag.query → rag.route → rag.retrieve (dense / bm25 / graph /
+rerank) → LLM calls (`chat <model>` with gen_ai.* attributes and token counts).
 
-Spany idú do vlastnej SQLite tabuľky (vstavaný prehliadač v UI, žiadna externá služba)
-a voliteľne cez OTLP do Langfuse / Phoenix / Jaeger (RAG_OTLP_ENDPOINT).
-Vlastný TracerProvider (nie globálny) — testy a eval si ho môžu znova inicializovať.
+Spans go to a dedicated SQLite table (built-in viewer in the UI, no external service)
+and optionally via OTLP to Langfuse / Phoenix / Jaeger (RAG_OTLP_ENDPOINT).
+Own TracerProvider (not the global one) — tests and eval can re-initialise it.
 """
 
 import json
@@ -45,7 +45,7 @@ MAX_ATTR_CHARS = 2000
 
 
 class SqliteSpanExporter(SpanExporter):
-    """Ukladá dokončené spany do `trace_spans` — data_dir sa číta pri každom zápise."""
+    """Stores finished spans in `trace_spans` — data_dir is read on every write."""
 
     def export(self, spans: Sequence[ReadableSpan]) -> SpanExportResult:
         rows = []
@@ -126,8 +126,8 @@ def set_attrs(span: Span, **attrs: Any) -> None:
 
 @contextmanager
 def span(name: str, *, parent: Context | None = None, **attrs: Any) -> Iterator[Span]:
-    """Child span (aktuálny alebo explicitný parent). Kľúče s `__` → bodka:
-    span("x", gen_ai__request__model="qwen") → atribút gen_ai.request.model."""
+    """Child span (current or explicit parent). Keys with `__` → dot:
+    span("x", gen_ai__request__model="qwen") → attribute gen_ai.request.model."""
     with get_tracer().start_as_current_span(name, context=parent) as s:
         set_attrs(s, **attrs)
         try:
@@ -139,8 +139,8 @@ def span(name: str, *, parent: Context | None = None, **attrs: Any) -> Iterator[
 
 
 def start_root(name: str, **attrs: Any) -> tuple[Span, Context]:
-    """Root span pre async generátor — nesmie byť „current“ cez yield, preto sa
-    rodičovský kontext podáva deťom explicitne."""
+    """Root span for an async generator — must not be "current" across yield, so the
+    parent context is passed to children explicitly."""
     root = get_tracer().start_span(name, context=Context())
     set_attrs(root, **attrs)
     return root, trace.set_span_in_context(root)
@@ -152,7 +152,7 @@ def trace_id_of(s: Span) -> str | None:
 
 
 def record_llm_usage(s: Span, data: dict[str, Any]) -> None:
-    """Ollama vracia prompt_eval_count / eval_count v poslednom (done) chunku."""
+    """Ollama returns prompt_eval_count / eval_count in the last (done) chunk."""
     set_attrs(
         s,
         **{

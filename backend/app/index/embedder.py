@@ -1,10 +1,10 @@
-"""Embeddingy podľa RAM profilu.
+"""Embeddings by RAM profile.
 
-low  → fastembed (ONNX, bez PyTorch v procese pri query) — multilingual-e5-small
-high → sentence-transformers na MPS — BAAI/bge-m3 (kvalitnejší, väčší)
+low  → fastembed (ONNX, without PyTorch in the process at query time) — multilingual-e5-small
+high → sentence-transformers on MPS — BAAI/bge-m3 (higher quality, larger)
 
-E5 modely vyžadujú prefixy "query: " / "passage: "; bge-m3 nie — rieši sa tu,
-aplikačný kód o prefixoch nevie.
+E5 models require the prefixes "query: " / "passage: "; bge-m3 does not — handled here,
+application code knows nothing about prefixes.
 """
 
 import logging

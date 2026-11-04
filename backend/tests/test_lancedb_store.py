@@ -36,7 +36,7 @@ def test_roundtrip_dense_fts_and_idempotency(isolated_data: object) -> None:
     fts = search_fts("kalibrácia", k=5)
     assert fts and fts[0]["chunk_id"] == "d1:t1"
 
-    # re-ingest toho istého dokumentu nesmie duplikovať
+    # re-ingesting the same document must not duplicate
     assert replace_document_chunks("d1", chunks, vectors) == 2
     assert count_chunks("d1") == 2
 

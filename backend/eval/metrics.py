@@ -1,7 +1,7 @@
-"""Čisté funkcie na metriky — testované v tests/test_eval_metrics.py.
+"""Pure functions for metrics — tested in tests/test_eval_metrics.py.
 
-Retrieval relevancia je na úrovni (dokument, strana): chunk je relevantný, ak je
-z gold dokumentu a jeho rozsah strán pokrýva gold stranu.
+Retrieval relevance is at the (document, page) level: a chunk is relevant if it is
+from the gold document and its page range covers the gold page.
 """
 
 import math
@@ -55,24 +55,24 @@ def _strip_accents(s: str) -> str:
 
 
 def normalize_answer(text: str) -> str:
-    """Zjednotí zápis čísel a dátumov: '4 860 000' → '4860000', '0,05' → '0.05',
-    '30. 11. 2027' → '30.11.2027'; bez diakritiky, malé písmená."""
+    """Normalises the notation of numbers and dates: '4 860 000' → '4860000', '0,05' → '0.05',
+    '30. 11. 2027' → '30.11.2027'; without diacritics, lowercase."""
     t = _strip_accents(text.replace(" ", " ").replace(" ", " ")).casefold()
-    t = re.sub(r"(?<=\d)[ ](?=\d{3}\b)", "", t)  # oddeľovač tisícov
-    t = re.sub(r"(?<=\d)[ ](?=\d{3}\b)", "", t)  # 2. prechod: 1 742 300
-    t = re.sub(r"(?<=\d),(?=\d{3}(?!\d))", "", t)  # anglický oddeľovač tisícov 386,500
+    t = re.sub(r"(?<=\d)[ ](?=\d{3}\b)", "", t)  # thousands separator
+    t = re.sub(r"(?<=\d)[ ](?=\d{3}\b)", "", t)  # 2. pass: 1 742 300
+    t = re.sub(r"(?<=\d),(?=\d{3}(?!\d))", "", t)  # English thousands separator 386,500
     t = re.sub(r"(?<=\d),(?=\d)", ".", t)
     t = re.sub(r"(?<=\d)\.\s+(?=\d)", ".", t)
     return re.sub(r"\s+", " ", t)
 
 
 def contains_expected(answer: str, expected: str) -> bool:
-    """`expected` môže mať alternatívy oddelené `|` („4 August 2026|4. augusta 2026“)."""
+    """`expected` may have alternatives separated by `|` („4 August 2026|4. augusta 2026“)."""
     if "|" in expected:
         return any(contains_expected(answer, alt) for alt in expected.split("|"))
     a, e = normalize_answer(answer), normalize_answer(expected)
     if len(e) <= 4 and re.fullmatch(r"[\w.]+", e):
-        # krátke tokeny ('5', 'E', 'A0') len ako samostatné slovo — inak '5' sedí všade
+        # short tokens ('5', 'E', 'A0') only as a standalone word — otherwise '5' matches everywhere
         return re.search(rf"(?<![\w.]){re.escape(e)}(?![\w]|\.\d)", a) is not None
     return e in a
 
@@ -81,8 +81,8 @@ REFUSAL_MAX_CHARS = 300
 
 
 def is_refusal(answer: str) -> bool:
-    """Krátka odpoveď, ktorá hovorí, že podklady informáciu nemajú. Dlhšia odpoveď s takou
-    vetou je čiastočná odpoveď (jedna časť chýba), nie odmietnutie."""
+    """A short answer saying the sources do not have the information. A longer answer with such
+    a sentence is a partial answer (one part is missing), not a refusal."""
     a = _strip_accents(answer).casefold()
     return any(h in a for h in REFUSAL_HINTS) and len(answer.strip()) <= REFUSAL_MAX_CHARS
 
@@ -96,7 +96,7 @@ def _relevant(chunk: RetrievedChunk, gold: Sequence[tuple[str, int]]) -> set[tup
 
 
 def recall_at_k(ranked: Sequence[RetrievedChunk], gold: Sequence[tuple[str, int]], k: int) -> float:
-    """Podiel gold (dokument, strana) pokrytých v top-k."""
+    """Share of gold (document, page) pairs covered in the top-k."""
     if not gold:
         return math.nan
     found: set[tuple[str, int]] = set()
@@ -115,7 +115,7 @@ def reciprocal_rank(ranked: Sequence[RetrievedChunk], gold: Sequence[tuple[str, 
 
 
 def ndcg_at_k(ranked: Sequence[RetrievedChunk], gold: Sequence[tuple[str, int]], k: int) -> float:
-    """Binárna relevancia; chunk, ktorý pokryje už započítanú gold stranu, nezvyšuje zisk."""
+    """Binary relevance; a chunk covering an already counted gold page adds no gain."""
     if not gold:
         return math.nan
     seen: set[tuple[str, int]] = set()
@@ -135,7 +135,7 @@ def mean(values: Sequence[float]) -> float:
 
 
 def citation_validity(answer: str, n_sources: int) -> bool | None:
-    """True ak všetky citácie odkazujú na existujúci zdroj; None ak odpoveď necituje."""
+    """True if all citations point to an existing source; None if the answer has no citations."""
     nums = [int(x) for m in CITATION.finditer(answer) for x in m.group(1).split(",")]
     if not nums:
         return None

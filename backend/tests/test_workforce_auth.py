@@ -1,4 +1,4 @@
-"""Fáza 1: pracovníci, PIN prihlásenie so zámkom, pracovník smie len dochádzku."""
+"""Phase 1: workers, PIN login with lockout, a worker may only do attendance."""
 
 import hashlib
 
@@ -33,7 +33,7 @@ def test_worker_crud_without_auth(client: TestClient) -> None:
     assert client.put(f"/api/workers/{wid}/pin", json={"pin": "9876"}).status_code == 204
     assert client.delete(f"/api/workers/{wid}").status_code == 204
     assert client.get("/api/workers").json() == []
-    # bez prihlasovania sa na prihlasovacej obrazovke mená neukazujú
+    # without login the names are not shown on the login screen
     assert client.get("/api/auth/workers").json() == []
 
 
@@ -57,7 +57,7 @@ def test_pin_login_and_worker_guard(secured: None, client: TestClient) -> None:
 
     me = client.get("/api/auth/me").json()
     assert me["user"]["id"] == wid and me["user"]["role"] == "member"
-    # dochádzka a vlastné úlohy áno, RAG a správa nie
+    # attendance and own tasks yes, RAG and administration no
     assert client.get("/api/me/tasks").status_code == 200
     assert client.get("/api/me/board").json() == {"tasks": [], "today_ids": []}
     assert client.get("/api/attendance/today").status_code == 200
@@ -75,11 +75,11 @@ def test_pin_lockout(secured: None, client: TestClient) -> None:
             client.post("/api/auth/pin", json={"worker_id": wid, "pin": "1111"}).status_code == 401
         )
     assert client.post("/api/auth/pin", json={"worker_id": wid, "pin": "1111"}).status_code == 423
-    # ani správny PIN počas zámku nepustí
+    # even the correct PIN does not get in during a lockout
     assert client.post("/api/auth/pin", json={"worker_id": wid, "pin": "1234"}).status_code == 423
     login_admin(client)
     assert client.get("/api/workers").json()[0]["locked"] is True
-    # nový PIN od majiteľa zámok zruší
+    # a new PIN from the owner clears the lockout
     client.put(f"/api/workers/{wid}/pin", json={"pin": "4321"})
     assert check_pin(wid, "4321").ok
 
@@ -107,11 +107,11 @@ def test_worker_session_compatible_with_auth(client: TestClient) -> None:
     assert scope is not None and scope.user_id == worker["id"]
     stored = store.get_worker(worker["id"])
     assert stored is not None and stored["pin_hash"].startswith("scrypt$")
-    assert hashlib.sha256(token.encode()).hexdigest()  # token sa ukladá len ako hash
+    assert hashlib.sha256(token.encode()).hexdigest()  # the token is stored only as a hash
 
 
 def test_bootstrap_admin_after_workers(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Prihlasovanie zapnuté až po pridaní pracovníkov — admin musí vzniknúť aj tak."""
+    """Login enabled only after workers are added — an admin must come into existence anyway."""
     from app.auth import ensure_bootstrap_admin
     from app.config import get_settings
     from app.db import init_db, list_users
@@ -125,5 +125,5 @@ def test_bootstrap_admin_after_workers(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("RAG_ADMIN_PASSWORD", "majitel-heslo-123")
     get_settings.cache_clear()
     ensure_bootstrap_admin()
-    ensure_bootstrap_admin()  # idempotentné
+    ensure_bootstrap_admin()  # idempotent
     assert [u["role"] for u in list_users()].count("admin") == 1

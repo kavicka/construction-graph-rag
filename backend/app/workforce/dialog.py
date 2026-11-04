@@ -1,11 +1,10 @@
-"""Stavový automat denného výpisu: vstup (hlas/text) → extrakcia → otázky → odovzdanie.
+"""State machine of the daily report: input (voice/text) → extraction → questions → submission.
 
 draft → processing → questioning ⇄ processing → ready → submitted
 
-Odovzdať sa dá len keď find_gaps nič nenájde — kontrola beží na serveri pri každom
-odovzdaní, UI ju len zrkadlí. Nejasná odpoveď: 1. pokus → konkrétnejšia otázka,
-2. pokus → režim výberu (tlačidlá), ktorý sa vyplní vždy.
-"""
+Submission is possible only when find_gaps finds nothing — the check runs on the server on every
+submission, the UI merely mirrors it. Unclear answer: 1st attempt → a more specific question, 2nd
+attempt → choice mode (buttons), which can always be filled in."""
 
 import logging
 from datetime import UTC, date, datetime
@@ -23,11 +22,11 @@ from app.workforce.tasks import active_tasks_for, apply_report_statuses
 
 logger = logging.getLogger(__name__)
 
-CHOICES_AFTER = 2  # po koľkých nejasných odpovediach prejsť na tlačidlá
+CHOICES_AFTER = 2  # after how many unclear answers to switch to buttons
 
 
 class ReportLocked(RuntimeError):
-    """Výpis sa práve spracúva alebo je odovzdaný."""
+    """The report is being processed or has been submitted."""
 
 
 class IncompleteReport(RuntimeError):
@@ -45,7 +44,7 @@ def save_data(report_id: str, data: ReportData) -> None:
 
 
 def report_tasks(report: dict[str, Any]) -> list[dict[str, Any]]:
-    """Úlohy, na ktoré sa výpis pýta: aktívne v ten deň + tie, ktoré už vo výpise sú."""
+    """Tasks the report asks about: active on that day + those already in the report."""
     day = date.fromisoformat(report["day"])
     tasks = active_tasks_for(report["user_id"], day)
     have = {t["id"] for t in tasks}
@@ -66,17 +65,18 @@ def _gap_of(question: dict[str, Any]) -> Gap:
 
 
 def sync_questions(report_id: str, *, finish: bool = True) -> list[Gap]:
-    """Otázky = presne chýbajúce údaje. Vyriešené sa zatvoria, nové pribudnú.
+    """Questions = exactly the missing data. Resolved ones are closed, new ones are added.
 
-    finish=False nechá výpis v stave processing — volajúci ešte zapisuje (počet pokusov)
-    a stav prepne sám; klient inak uvidí hotový výpis so starou otázkou."""
+    finish=False leaves the report in the processing state — the caller is still writing (attempt
+    count) and switches the state itself; otherwise the client would see a finished report with the
+    old question."""
     report = store.get_report(report_id)
     assert report is not None
     data = load_data(report)
     tasks = report_tasks(report)
     by_id = {t["id"]: t for t in tasks}
-    # pýtame sa len na otvorené úlohy — hotovú (napr. uzavretú majiteľom alebo kolegom)
-    # pracovník môže spomenúť, ale nemusí
+    # we ask only about open tasks — a finished one (e.g. closed by the owner or a colleague) the
+    # worker may mention but does not have to
     active_ids = [
         t["id"]
         for t in active_tasks_for(report["user_id"], date.fromisoformat(report["day"]))
@@ -86,7 +86,7 @@ def sync_questions(report_id: str, *, finish: bool = True) -> list[Gap]:
     gap_keys = {g.key for g in gaps}
     has_input = bool(report["transcript"].strip()) or bool(store.list_inputs(report_id))
     if not has_input and report["status"] != "submitted":
-        # pred prvým výpisom sa nepýtame — pracovník najprv povie, čo robil
+        # no questions before the first report — the worker first says what they did
         store.update_report(report_id, status="draft", step=None)
         return gaps
 
@@ -109,7 +109,7 @@ def sync_questions(report_id: str, *, finish: bool = True) -> list[Gap]:
                 position=pos,
             )
         elif q["detail"] != gap.detail or gap.kind == "hours":
-            # čiastočná odpoveď: otázka sa zúži na to, čo ešte chýba
+            # partial answer: the question narrows to what is still missing
             store.update_question(
                 q["id"],
                 detail=gap.detail,
@@ -155,14 +155,15 @@ def _stt_prompt(report: dict[str, Any], tasks: list[dict[str, Any]]) -> str:
 
 
 def begin_main_input(report_id: str, *, audio: bool = True) -> None:
-    """Synchrónne zamkne výpis (status processing) — spracovanie potom beží na pozadí."""
+    """Synchronously locks the report (status processing) — processing then runs in the
+    background."""
     _lock_for_processing(report_id, "prepis" if audio else "analýza")
 
 
 def process_main_input(
     report_id: str, *, text: str | None = None, audio_path: Path | None = None
 ) -> None:
-    """Hlavný výpis (hlas alebo text) → prepis → extrakcia → otázky. Volá sa po begin_*."""
+    """Main report (voice or text) → transcript → extraction → questions. Called after begin_*."""
     try:
         report = store.get_report(report_id)
         assert report is not None
@@ -181,15 +182,15 @@ def process_main_input(
         data = extract.extract_report(text, tasks, load_data(report), report["day"])
         save_data(report_id, data)
         sync_questions(report_id)
-    except Exception as exc:  # noqa: BLE001 — chyba sa zobrazí pracovníkovi, výpis žije ďalej
+    except Exception as exc:  # noqa: BLE001 — the error is shown to the worker, the report lives on
         _finish_with_error(report_id, exc)
 
 
-# --- odpovede ---------------------------------------------------------------------------
+# --- answers ----------------------------------------------------------------------------
 
 
 class ChoiceAnswer(BaseModel):
-    """Štruktúrovaná odpoveď z tlačidiel — bez LLM, len validácia."""
+    """Structured answer from the buttons — no LLM, validation only."""
 
     time: str | None = None
     minutes: int | None = Field(default=None, ge=0, le=300)
@@ -209,8 +210,9 @@ def _apply_choice(
     out = data.model_copy(deep=True)
     kind = q["kind"]
     if choice.absence_reason:
-        # „Dnes som nepracoval“ sa dá zvoliť pri hocijakej otázke — inak by pracovník
-        # uviazol v otázkach na časy, keď LLM neprítomnosť z výpisu nevyčítal
+        # „Dnes som nepracoval“ (I did not work today) can be chosen for any question — otherwise
+        # the worker would get stuck in time questions when the LLM did not read the absence from
+        # the report
         out.absent, out.absence_reason = True, choice.absence_reason.strip()
         return out
     if kind in ("arrival", "departure") and parse_hhmm(choice.time):
@@ -271,7 +273,7 @@ def _apply_text(
         if task is not None:
             changes = extract.parse_task_answer(task, q["text"], answer, q["detail"])
             existing = out.entry(task["id"])
-            # dobrá poznámka z hlavného výpisu sa neprepisuje, okrem pýtaného dôvodu
+            # a good note from the main report is not overwritten, except for the requested reason
             if existing and existing.note and "reason" not in q["detail"].split(","):
                 changes.pop("note", None)
             if changes:
@@ -369,7 +371,7 @@ def process_answer(
         _finish_with_error(report_id, exc)
 
 
-# --- odovzdanie a úpravy majiteľom ------------------------------------------------------
+# --- submission and edits by the owner --------------------------------------------------
 
 
 def submit(report_id: str) -> dict[str, Any]:
@@ -395,7 +397,7 @@ def submit(report_id: str) -> dict[str, Any]:
 
 
 def owner_update(report_id: str, data: ReportData) -> dict[str, Any]:
-    """Majiteľ opraví výpis (aj odovzdaný) — stav úloh a PDF sa prepočítajú."""
+    """Owner corrects the report (even a submitted one) — task states and the PDF are recomputed."""
     from app.workforce.reports_pdf import render_worker_report
 
     report = store.get_report(report_id)
@@ -416,7 +418,7 @@ def owner_update(report_id: str, data: ReportData) -> dict[str, Any]:
 
 
 def recover_stuck_reports() -> None:
-    """Po reštarte servera: výpisy zaseknuté v „processing“ sa vrátia do dialógu."""
+    """After a server restart: reports stuck in "processing" return to the dialog."""
     for report in store.list_reports():
         if report["status"] == "processing":
             sync_questions(report["id"])

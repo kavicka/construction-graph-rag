@@ -52,7 +52,7 @@ def test_research_trigger_and_routing() -> None:
     assert is_research_request("Preskúmaj všetko o subdodávateľoch")
     assert not is_research_request("Aká je cena diela?")
     assert route_query("Urob rešerš rizík na stavbe Agátová").mode == "research"
-    # explicitný dokument má prednosť
+    # an explicit document takes precedence
     assert route_query("Preskúmaj zmluvy a priprav report").mode == "generate"
 
 
@@ -121,7 +121,7 @@ def test_research_flow_and_pdf_export(client: TestClient) -> None:
         assert tools.count("subquestion") == 3
         assert tools[-1] == "synthesis"
         sources = next(e for e in events if e["type"] == "sources")["sources"]
-        assert len({s["chunk_id"] for s in sources}) == len(sources) == 4  # 3 vlastné + shared
+        assert len({s["chunk_id"] for s in sources}) == len(sources) == 4  # 3 own + shared
         done = next(e for e in events if e["type"] == "done")
 
         exported = client.post(f"/api/messages/{done['message_id']}/export")

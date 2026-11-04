@@ -1,13 +1,13 @@
-"""Vizuálny retrieval (experimentálny, RAG_VISUAL_RETRIEVAL) — ColPali rodina modelov.
+"""Visual retrieval (experimental, RAG_VISUAL_RETRIEVAL) — the ColPali family of models.
 
-Strana PDF sa vyrenderuje ako obrázok a model (ColQwen / ColSmol) z nej spraví
-multi-vektor (jeden vektor na „patch“). Otázka sa zakóduje rovnako a skóre strany je
-MaxSim: pre každý token otázky najlepší patch, súčet. Takto sa nájdu strany, kde je
-odpoveď vo výkrese, grafe alebo naskenovanej tabuľke, ktorú OCR prečítal zle.
+A PDF page is rendered as an image and the model (ColQwen / ColSmol) turns it into
+a multi-vector (one vector per "patch"). The question is encoded the same way and the page score is
+MaxSim: for each question token the best patch, summed. This finds pages where the
+answer is in a drawing, chart or scanned table that OCR read badly.
 
-Ukladanie: float16 .npy na stranu v data/visual/ — pre stovky strán je MaxSim
-v numpy rýchlejší a jednoduchší ako multivektorový index.
-Inštalácia: `uv sync --extra visual`; modely podľa RAM — ColSmol-256M (~0,5 GB) alebo
+Storage: float16 .npy per page in data/visual/ — for hundreds of pages MaxSim
+in numpy is faster and simpler than a multi-vector index.
+Installation: `uv sync --extra visual`; models by RAM — ColSmol-256M (~0,5 GB) or
 ColQwen2.5 (~7 GB).
 """
 
@@ -22,7 +22,9 @@ from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-RENDER_SCALE = 1.0  # ~600×850 px pre A4 — viac len spomalí, patche sa aj tak zmenšia
+RENDER_SCALE = (
+    1.0  # ~600×850 px for A4 — more only slows things down, patches get downscaled anyway
+)
 BATCH = 4
 
 
@@ -104,7 +106,7 @@ def render_pdf_pages(pdf_path: Path) -> list[Any]:
 
 
 def index_pages(doc_id: str, pdf_path: Path, embedder: VisualEmbedder | None = None) -> int:
-    """Zakóduje všetky strany dokumentu; staré embeddingy dokumentu nahradí."""
+    """Encode all pages of the document; replaces the document's old embeddings."""
     delete_pages(doc_id)
     images = render_pdf_pages(pdf_path)
     if not images:
@@ -121,7 +123,7 @@ def delete_pages(doc_id: str) -> None:
 
 
 def maxsim(query: np.ndarray, page: np.ndarray) -> float:
-    """Σ cez tokeny otázky max kosínus s patchmi strany (late interaction)."""
+    """Σ over question tokens of the max cosine with the page patches (late interaction)."""
     return float((query @ page.T).max(axis=1).sum())
 
 
@@ -132,7 +134,7 @@ def search_pages(
     doc_ids: set[str] | None = None,
     embedder: VisualEmbedder | None = None,
 ) -> list[tuple[str, int, float]]:
-    """→ [(doc_id, strana, skóre)] zoradené podľa MaxSim."""
+    """→ [(doc_id, page, score)] sorted by MaxSim."""
     files = sorted(visual_dir().glob("*.npy"))
     if not files:
         return []

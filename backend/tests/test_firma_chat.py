@@ -1,4 +1,4 @@
-"""Chat a mobil nad firemnými údajmi cez API: SSE režim firma, brána, redakcia, prístup."""
+"""Chat and mobile over company data via the API: SSE firma mode, gate, redaction, access."""
 
 from collections.abc import AsyncIterator
 from typing import Any
@@ -163,7 +163,7 @@ def test_worker_asks_on_mobile_only_about_self(
         answer = client.post("/api/attendance/ask", json={"question": question}).json()
         assert answer["answer"] == OTHERS_DENIED
         assert "6:30" not in answer["answer"]
-    # chat a MCP ostávajú pracovníkovi zakázané
+    # chat and MCP stay forbidden for the worker
     assert client.post("/api/chat", json={"message": "Čo mám dnes robiť?"}).status_code == 403
     assert client.post("/mcp", json={}).status_code == 403
 
@@ -191,7 +191,7 @@ def test_member_gets_no_company_data(secured: None, client: TestClient, no_llm: 
 def test_guard_checks_question_before_history_rewrite(
     client: TestClient, no_llm: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Prepis z histórie nesmie žiadosť o PIN preformulovať mimo dosahu brány."""
+    """A transcript from history must not rephrase a PIN request out of the gate's reach."""
     monkeypatch.setattr(
         "app.retrieve.memory.generate_sync",
         lambda *a, **kw: '{"refers_to": "Jozef Mikuš", "question": "Čo robí Jozef Mikuš?"}',
@@ -215,7 +215,7 @@ def test_mobile_voice_question_and_speech(
 
     def fake_transcribe(path: Any, prompt: str | None = None) -> str:
         prompts.append(prompt)
-        assert path.exists()  # nahrávka žije len počas prepisu
+        assert path.exists()  # the recording lives only during transcription
         return "čo robí dnes Jozef Mikuš"
 
     monkeypatch.setattr("app.workforce.speech.transcribe", fake_transcribe)
@@ -233,7 +233,7 @@ def test_mobile_voice_question_and_speech(
     )
     assert empty.status_code == 422
 
-    # bez extra `voice` (Linux, Docker) → 501 so slovenským vysvetlením, nie 500
+    # without the `voice` extra (Linux, Docker) → 501 with a Slovak explanation, not 500
     monkeypatch.setattr("app.workforce.speech.transcribe", real_transcribe)
     monkeypatch.setattr("app.workforce.speech.stt_available", lambda: False)
     missing = client.post(
@@ -254,4 +254,4 @@ def test_mobile_voice_question_and_speech(
         "/api/attendance/ask/speech", json={"text": "Heslo k bráne: Brana-7731. Murovanie."}
     )
     assert speech.status_code == 200 and speech.headers["content-type"] == "audio/wav"
-    assert "Brana-7731" not in spoken[0]  # ani nahlas sa tajomstvo neprečíta
+    assert "Brana-7731" not in spoken[0]  # the secret is not read aloud either

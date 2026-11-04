@@ -1,4 +1,4 @@
-"""Dostupnosť hlasu — frontend podľa nej skryje mikrofón a prehrávanie otázok."""
+"""Voice availability — the frontend uses it to hide the microphone and question playback."""
 
 from fastapi import APIRouter
 from fastapi.concurrency import run_in_threadpool
@@ -10,8 +10,8 @@ router = APIRouter()
 
 
 class VoiceStatus(BaseModel):
-    stt: bool  # prepis (mlx-whisper, Apple Silicon + extra voice)
-    tts: bool  # syntéza (Piper z extra voice + stiahnutý hlas)
+    stt: bool  # transcription (mlx-whisper, Apple Silicon + extra voice)
+    tts: bool  # synthesis (Piper from the voice extra + downloaded voice)
 
 
 @router.get("/voice")

@@ -1,13 +1,13 @@
-"""Self-check odpovede — každé podstatné číslo v odpovedi musí existovať
-v podkladoch (zdroje / výsledky nástrojov). Deterministická posledná obrana
-proti halucinovaným číslam malého modelu.
+"""Answer self-check — every significant number in the answer must exist
+in the evidence (sources / tool results). A deterministic last line of defence
+against numbers hallucinated by the small model.
 """
 
 import re
 
 NUM_RE = re.compile(r"\d+(?:[.,]\d+)?")
 CITATION_RE = re.compile(r"\[\d+\]")
-MIN_SIGNIFICANT = 13  # malé čísla (počty, poradia, citácie) nekontrolujeme
+MIN_SIGNIFICANT = 13  # small numbers (counts, ranks, citations) are not checked
 
 
 def _canon(token: str) -> float:
@@ -15,10 +15,10 @@ def _canon(token: str) -> float:
 
 
 def check_numbers(answer: str, evidence_texts: list[str]) -> list[str]:
-    """→ zoznam čísel z odpovede, ktoré sa nenachádzajú v podkladoch."""
+    """→ list of numbers from the answer that are not found in the evidence."""
     allowed = {_canon(n) for text in evidence_texts for n in NUM_RE.findall(text)}
-    # súčty legitímne vznikajú v pick_items — tie sú v evidence; iné súčty povolíme,
-    # len ak sú súčtom dvojice/trojice povolených čísel
+    # sums legitimately arise in pick_items — those are in the evidence; other sums are allowed
+    # only if they are the sum of a pair/triple of allowed numbers
     pair_sums = {a + b for a in allowed for b in allowed}
 
     stripped = CITATION_RE.sub(" ", answer)

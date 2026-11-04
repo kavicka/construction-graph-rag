@@ -1,8 +1,9 @@
-"""Exaktný výber kombinácie položiek do rozpočtu (kompozičné otázky).
+"""Exact selection of an item combination within a budget (composition questions).
 
-„Obed do 870 + raňajky, spolu do 1500 kcal, čo najviac bielkovín" je malý
-kombinatorický problém — rieši sa presne v kóde, nie odhadom v LLM.
-Prune: na slot max TOP_PER_SLOT kandidátov podľa cieľa → súčin slotov ostáva malý.
+„Obed do 870 + raňajky, spolu do 1500 kcal, čo najviac bielkovín" (lunch up to 870 + breakfast,
+1500 kcal total, as much protein as possible) is a small combinatorial problem —
+solved exactly in code, not estimated by the LLM.
+Prune: at most TOP_PER_SLOT candidates per slot by objective → the slot product stays small.
 """
 
 import itertools
@@ -22,7 +23,7 @@ class Slot:
 
 @dataclass
 class Combo:
-    picks: list[tuple[str, RecordHit]]  # (kategória, položka)
+    picks: list[tuple[str, RecordHit]]  # (category, item)
     total: dict[str, float]
     within_budget: bool = True
 
@@ -37,8 +38,8 @@ def pick_items(
     budget_max: float,
     maximize: str | None = None,
 ) -> Combo | None:
-    """Najlepšia kombinácia: jedna položka na slot, súčet budget_attr ≤ budget_max,
-    maximalizuje `maximize` (default: čo najplnšie využitie rozpočtu)."""
+    """Best combination: one item per slot, sum of budget_attr ≤ budget_max,
+    maximises `maximize` (default: use as much of the budget as possible)."""
     per_slot: list[list[RecordHit]] = []
     for slot in slots:
         candidates = [
@@ -66,7 +67,7 @@ def pick_items(
         items = list(combo)
         total_budget = _sum_attr(items, budget_attr)
         if total_budget > budget_max:
-            # limit nespĺňa — drž najmenší súčet ako „najbližšiu možnosť"
+            # does not meet the limit — keep the smallest sum as the "closest option"
             if total_budget < nearest_total:
                 nearest_total = total_budget
                 nearest = Combo(

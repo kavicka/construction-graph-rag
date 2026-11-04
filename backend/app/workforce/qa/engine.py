@@ -1,4 +1,4 @@
-"""Firemná otázka → odpoveď: entity → dátum → typ → prístup → read-only dáta → šablóna."""
+"""Company question → answer: entities → date → type → access → read-only data → template."""
 
 from dataclasses import dataclass, field
 from datetime import date
@@ -45,8 +45,8 @@ def _summary(query: FirmaQuery, today: date) -> str:
 def answer_firma(
     question: str, viewer: Viewer, *, today: date | None = None, worker_context: bool = False
 ) -> FirmaResult | None:
-    """None = otázka nie je na firemné údaje (chat pokračuje do dokumentov). Na mobile
-    (`worker_context`) sa vždy vráti odpoveď — aspoň nápoveda."""
+    """None = the question is not about company data (the chat continues to documents). On mobile
+    (`worker_context`) an answer is always returned — at least a hint."""
     today = today or date.today()
     snap = snapshot()
     query = detect(question, snap, today, worker_context=worker_context)
@@ -66,7 +66,8 @@ def answer_firma(
         _, candidates = query.ambiguous[0]
         options = " alebo ".join(w.name for w in candidates)
         return FirmaResult(f"Myslíš {options}? Napíš prosím celé meno.")
-    # „Koľko hodín odpracoval Ján Novák?“ — bez tejto kontroly by prišli hodiny celého tímu
+    # „Koľko hodín odpracoval Ján Novák?“ (How many hours did Ján Novák work?) —
+    # without this check the whole team's hours would come back
     if query.unknown_name and not query.workers and PERSON_INTENTS & set(query.intents):
         team = ", ".join(w.name for w in snap.workers if w.active)
         return FirmaResult(
@@ -80,5 +81,5 @@ def answer_firma(
     step = {"tool": "firma", "summary": _summary(query, today)}
     if query.via_llm:
         step["summary"] += " (typ určil model)"
-    # názvy úloh, poznámky a problémy píšu ľudia — aj tam sa môže objaviť heslo
+    # task names, notes and problems are written by people — a password can show up there too
     return FirmaResult(redact_secrets(text), steps=[step], intents=list(query.intents))

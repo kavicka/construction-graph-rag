@@ -91,7 +91,7 @@ def replace_record_attrs(doc_id: str, attrs: list[tuple[str, str, str | None]]) 
 
 
 def list_record_attrs() -> list[dict[str, Any]]:
-    """Register atribútov naprieč knižnicou (kľúč → štítok, jednotka, počet dokumentov)."""
+    """Attribute register across the library (key → label, unit, document count)."""
     with get_conn() as conn:
         rows = conn.execute(
             """SELECT key, MIN(label) AS label, MIN(unit) AS unit, COUNT(*) AS docs

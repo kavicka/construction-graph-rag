@@ -1,8 +1,7 @@
-"""Beh modulu Firma: inicializácia, úlohy na pozadí, plánovač denného súhrnu, ochrana API.
+"""Firma module runtime: initialisation, background tasks, daily summary scheduler, API guard.
 
-Pracovník (PIN) smie len dochádzku a svoje úlohy — WorkerGuard beží za AuthMiddleware
-(ten nastaví access scope) a všetko ostatné pod /api a /mcp mu zakáže.
-"""
+A worker (PIN) may only use attendance and their own tasks — WorkerGuard runs behind AuthMiddleware
+(which sets the access scope) and forbids everything else under /api and /mcp."""
 
 import asyncio
 import contextlib
@@ -46,19 +45,19 @@ def _import_job(source_id: str) -> None:
 
 
 def schedule(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> None:
-    """Spustí blokujúcu prácu (STT, LLM, PDF) vo vlákne a drží referenciu na task."""
+    """Runs blocking work (STT, LLM, PDF) in a thread and keeps a reference to the task."""
     task = asyncio.create_task(asyncio.to_thread(fn, *args, **kwargs))
     _jobs.add(task)
     task.add_done_callback(_jobs.discard)
 
 
 async def wait_for_jobs() -> None:
-    """Pre testy — počká, kým dobehnú všetky úlohy na pozadí."""
+    """For tests — waits until all background tasks finish."""
     while _jobs:
         await asyncio.gather(*list(_jobs), return_exceptions=True)
 
 
-# --- ochrana API pre pracovníkov --------------------------------------------------------
+# --- worker API guard -------------------------------------------------------------------
 
 WORKER_ALLOWED_PREFIXES = ("/api/attendance/", "/api/me/")
 # only the endpoints a worker's phone needs — no API tokens, users or anything else
@@ -111,7 +110,7 @@ class WorkerGuard:
         await self.app(scope, receive, send)
 
 
-# --- plánovač ---------------------------------------------------------------------------
+# --- scheduler --------------------------------------------------------------------------
 
 
 def _summary_time() -> dtime:
@@ -125,7 +124,7 @@ def _summary_time() -> dtime:
 
 
 def cleanup_audio(now: datetime | None = None) -> int:
-    """Nahrávky staršie ako RAG_AUDIO_RETENTION_DAYS sa zmažú; prepis ostáva."""
+    """Recordings older than RAG_AUDIO_RETENTION_DAYS are deleted; the transcript stays."""
     days = get_workforce_settings().audio_retention_days
     cutoff = (now or datetime.now(UTC)) - timedelta(days=days)
     removed = 0
@@ -137,7 +136,8 @@ def cleanup_audio(now: datetime | None = None) -> int:
 
 
 def daily_tick(now: datetime) -> bool:
-    """Po čase súhrnu: vygeneruj súhrn za dnešok (ak sú pracovníci a niečo sa zmenilo)."""
+    """After the summary time: generate today's summary (if there are workers and something
+    changed)."""
     from app.workforce.reports_pdf import render_daily_summary, summary_is_stale
 
     if not get_workforce_settings().daily_summary or now.time() < _summary_time():
@@ -163,7 +163,7 @@ async def scheduler_loop(stop: asyncio.Event, interval_s: float = 60.0) -> None:
             if last_cleanup != now.date():
                 await asyncio.to_thread(cleanup_audio)
                 last_cleanup = now.date()
-        except Exception:  # noqa: BLE001 — plánovač nesmie spadnúť
+        except Exception:  # noqa: BLE001 — the scheduler must not crash
             logger.exception("plánovač dochádzky zlyhal")
         with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(stop.wait(), timeout=interval_s)

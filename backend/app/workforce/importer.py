@@ -1,16 +1,16 @@
-"""Import úloh z dokumentu dodávateľa → návrhy na schválenie majiteľom.
+"""Import of tasks from a supplier document → proposals for owner approval.
 
-Dokument ide najprv bežným ingestom do RAG knižnice (Docling + OCR, je potom aj
-vyhľadateľný v chate). Keď je sparsovaný:
+The document first goes through the regular ingest into the RAG library (Docling + OCR, so it is
+also searchable in chat). Once it is parsed:
 
-1. text (chunky + tabuľky v markdowne) sa rozdelí na okná ~3500 znakov,
-2. LLM z každého okna vytiahne úlohy s DOSLOVNÝM citátom a doslovným textom termínu,
-3. citát sa overí voči oknu (fuzzy ≥ 90) — úloha bez dokladu v dokumente sa zahodí,
-4. duplicity naprieč oknami sa zlúčia, termíny prepočíta sk_dates, „po X“ sa spáruje
-   s inou úlohou ako závislosť, pracovníka navrhne assign (kód),
-5. pri novej verzii dokumentu sa návrhy porovnajú s úlohami z predošlej verzie:
-   nové / zmenené / zrušené / bez zmeny.
-"""
+1. the text (chunks + tables in markdown) is split into windows of ~3500 characters,
+2. from each window the LLM extracts tasks with a VERBATIM quote and the verbatim deadline text,
+3. the quote is verified against the window (fuzzy ≥ 90) — a task without evidence in the document
+is dropped,
+4. duplicates across windows are merged, deadlines recomputed by sk_dates, „po X“ (after X) is
+paired with another task as a dependency, the worker is suggested by assign (code),
+5. for a new document version the proposals are compared with tasks from the previous version: new /
+   changed / cancelled / unchanged."""
 
 import json
 import logging
@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 WINDOW_CHARS = 3500
 QUOTE_MIN_SCORE = 90
 DUPLICATE_SCORE = 0.9
-MATCH_SCORE = 0.8  # nová verzia: návrh ↔ existujúca úloha
+MATCH_SCORE = 0.8  # new version: proposal ↔ existing task
 DEPENDENCY_SCORE = 0.78
 PARSE_WAIT_S = 30 * 60
 PARSED_STATUSES = ("tables", "context", "embedding", "graph", "done")
@@ -101,7 +101,8 @@ class Window:
 
 
 def document_segments(doc_id: str) -> list[Segment]:
-    """Odseky (nie chunky) — citát úlohy sa v PDF zvýrazní presne na svojom odseku."""
+    """Paragraphs (not chunks) — the task quote is highlighted in the PDF exactly on its
+    paragraph."""
     from docling_core.types.doc import TableItem
 
     from app.index.chunker import item_boxes, load_document
@@ -110,7 +111,7 @@ def document_segments(doc_id: str) -> list[Segment]:
     segments: list[Segment] = []
     for item, _level in document.iterate_items():
         if isinstance(item, TableItem):
-            continue  # tabuľky nižšie ako celý markdown
+            continue  # tables below the full markdown
         text = (getattr(item, "text", "") or "").strip()
         if not text:
             continue
@@ -138,7 +139,7 @@ def make_windows(segments: list[Segment], limit: int = WINDOW_CHARS) -> list[Win
     current: list[Segment] = []
     size = 0
     for seg in segments:
-        # príliš dlhý segment (veľká tabuľka) sa rozdelí po riadkoch
+        # a segment that is too long (a big table) is split by rows
         pieces = [seg]
         if len(seg.text) > limit:
             pieces, buf = [], ""
@@ -161,7 +162,8 @@ def make_windows(segments: list[Segment], limit: int = WINDOW_CHARS) -> list[Win
 
 
 def verify_quote(quote: str, window: Window) -> Segment | None:
-    """Citát musí v okne naozaj byť (tolerancia na OCR/whitespace) → segment so stranou."""
+    """The quote must really be in the window (tolerant to OCR/whitespace) → segment with its
+    page."""
     q = normalize(quote)
     if len(q) < 10:
         return None
@@ -174,7 +176,7 @@ def verify_quote(quote: str, window: Window) -> Segment | None:
 
 
 def _document_date(raw: str | None, text: str) -> date | None:
-    """LLM dátum dokumentu len ak deň a mesiac v texte naozaj stoja."""
+    """LLM document date only if the day and month actually appear in the text."""
     if not raw:
         return None
     try:
@@ -198,13 +200,13 @@ STEM_LEN = 5
 
 
 def stem_text(text: str) -> str:
-    """Hrubý slovenský „stem“ — prvých 5 znakov slova (základov ↔ základovej)."""
+    """Rough Slovak "stem" — the first 5 characters of the word (základov ↔ základovej)."""
     return " ".join(t[:STEM_LEN] for t in normalize(text).split())
 
 
 class Similarity:
-    """Podobnosť názvov úloh: max(fuzzy na slovách, fuzzy na kmeňoch, kosínus bge-m3).
-    Bez embedderu len fuzzy."""
+    """Similarity of task titles: max(fuzzy on words, fuzzy on stems, cosine of bge-m3). Fuzzy only
+    without an embedder."""
 
     def __init__(self, texts: list[str]) -> None:
         self.texts = texts
@@ -215,7 +217,7 @@ class Similarity:
 
             if texts:
                 self.vectors = [list(v) for v in get_embedder().embed_passages(texts)]
-        except Exception:  # noqa: BLE001 — embedder je bonus, nie podmienka
+        except Exception:  # noqa: BLE001 — the embedder is a bonus, not a requirement
             logger.warning("embeddingy pre podobnosť úloh nedostupné — len fuzzy")
 
     def score(self, i: int, j: int) -> float:
@@ -255,7 +257,7 @@ def extract_drafts(
     professions: list[str],
     on_progress: Any = None,
 ) -> tuple[list[dict[str, Any]], date | None]:
-    """LLM po oknách → overené surové úlohy (citát, strana) + dátum dokumentu."""
+    """LLM per window → verified raw tasks (quote, page) + document date."""
     raw: list[dict[str, Any]] = []
     doc_date: date | None = None
     prof_line = ", ".join(professions)
@@ -291,7 +293,7 @@ def extract_drafts(
                     "after_text": (t.after or "").strip() or None,
                     "quote": t.quote.strip()[:600],
                     "page": seg.page,
-                    # riadky citátu v textovej vrstve PDF; inak blok z Doclingu
+                    # quote lines in the PDF text layer; otherwise the block from Docling
                     "boxes": (pdf_path and locate_quote(pdf_path, seg.page, t.quote))
                     or seg.boxes[:8],
                 }
@@ -326,7 +328,8 @@ def dedupe(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
             keep.append(i)
             continue
         kept = items[dup]
-        # doplň chýbajúce údaje z duplikátu (napr. termín z inej časti dokumentu)
+        # fill in missing data from the duplicate (e.g. a deadline from another part of the
+        # document)
         for key in ("date_text", "after_text", "person"):
             if not kept.get(key) and item.get(key):
                 kept[key] = item[key]
@@ -369,7 +372,7 @@ def build_drafts(
             "date_from": start.isoformat() if start else None,
             "date_to": end.isoformat() if end else None,
             "date_how": term.how,
-            # začiatok dopočítaný z dátumu dokumentu — nová verzia ho nesmie hlásiť ako zmenu
+            # start computed from the document date — a new version must not report it as a change
             "date_from_derived": derived_start,
             "depends_on": None,
             "assignees": [sug.user_id] if sug.user_id else [],
@@ -385,7 +388,8 @@ def build_drafts(
 
 
 def flag_existing(drafts: list[Draft], existing: list[dict[str, Any]]) -> None:
-    """Nová úloha z dokumentu, ktorá už na stavbe je (tá istá vada v zápise aj v protokole)."""
+    """A new task from the document that already exists on the site (the same defect in both the
+    record and the protocol)."""
     open_tasks = [t for t in existing if t["status"] in ("todo", "in_progress")]
     new = [d for d in drafts if d.kind == "new"]
     if not open_tasks or not new:
@@ -400,7 +404,8 @@ def flag_existing(drafts: list[Draft], existing: list[dict[str, Any]]) -> None:
 
 
 def _link_dependencies(drafts: list[Draft], site_tasks: list[dict[str, Any]]) -> None:
-    """„po dokončení základov“ → najpodobnejšia iná úloha z importu alebo zo stavby."""
+    """„po dokončení základov“ (after the foundations are finished) → the most similar other task
+    from the import or the site."""
     pending = [(i, d) for i, d in enumerate(drafts) if d.data.get("after_text")]
     if not pending:
         return
@@ -441,11 +446,11 @@ def score_draft(data: dict[str, Any]) -> None:
     if not data.get("assignees"):
         issues.append("nikto nenavrhnutý")
     if dup := data.get("duplicate_of"):
-        # mäkké upozornenie — neblokuje použitie, ale „Schváliť všetko“ ho preskočí
+        # soft warning — does not block use, but „Schváliť všetko“ (Approve all) skips it
         issues.append(f"podobná úloha už existuje: {dup['title']}")
     data["issues"] = issues
-    # vysoká = presný dátum z dokumentu a navrhnutý pracovník; relatívny termín / závislosť
-    # = stredná; čokoľvek chýba = nízka (majiteľ musí doplniť)
+    # high = exact date from the document and a suggested worker; relative deadline / dependency =
+    # medium; anything missing = low (the owner must fill it in)
     if issues:
         data["confidence"] = "low"
     elif data.get("date_how") == "absolute":
@@ -454,7 +459,8 @@ def score_draft(data: dict[str, Any]) -> None:
         data["confidence"] = "medium"
 
 
-# popis sa neporovnáva — LLM ho v každej verzii sformuluje inak a hlásil by falošné zmeny
+# the description is not compared — the LLM words it differently in every version and would report
+# false changes
 DIFF_FIELDS = ("title", "work_type", "date_from", "date_to")
 TERM_PREFIX_RE = re.compile(
     r"(?:^|\s)(do|od|najneskor(?:\s+do)?|az|termin(?:\s+dokoncenia)?)\s*[:\-]?\s*$"
@@ -465,26 +471,27 @@ TERM_START_RE = re.compile(r"(do|od|najneskor|az|termin|v|vo|o|za|pocas|behom)\b
 
 
 def expand_term(date_text: str | None, quote: str) -> str | None:
-    """LLM občas vynechá predložku („23. 10.“ namiesto „do 23. 10.“) — doplň ju z citátu."""
+    """The LLM sometimes drops the preposition („23. 10.“ instead of „do 23. 10.“) — add it from the
+    quote."""
     if not date_text:
         return date_text
     norm_quote, norm_term = normalize(quote), normalize(date_text)
     pos = norm_quote.find(norm_term)
     if pos <= 0 or TERM_START_RE.match(norm_term):
-        return date_text  # predložku už má, alebo nie je v citáte
+        return date_text  # the preposition is already there, or it is not in the quote
     m = TERM_PREFIX_RE.search(norm_quote[max(0, pos - 25) : pos])
     return f"{m.group(1)} {date_text}" if m else date_text
 
 
 def _same(field: str, old: Any, new: Any) -> bool:
     if field == "title":
-        # preklep modelu („Betónáž“) nie je zmena názvu
+        # a model typo („Betónáž“) is not a title change
         return fuzz.ratio(normalize(str(old or "")), normalize(str(new or ""))) >= 90
     return normalize(str(old or "")) == normalize(str(new or ""))
 
 
 def diff_with_previous(drafts: list[Draft], previous_tasks: list[dict[str, Any]]) -> list[Draft]:
-    """Nová verzia dokumentu: návrhy ↔ úlohy z predošlých verzií (greedy 1:1 podľa podobnosti)."""
+    """New document version: proposals ↔ tasks from earlier versions (greedy 1:1 by similarity)."""
     old = [t for t in previous_tasks if t["status"] != "cancelled"]
     if not old:
         return drafts
@@ -508,14 +515,14 @@ def diff_with_previous(drafts: list[Draft], previous_tasks: list[dict[str, Any]]
         changes = {
             f: [task.get(f) or None, draft.data.get(f) or None]
             for f in DIFF_FIELDS
-            # chýbajúci údaj v novej verzii nie je zmena — ostáva pôvodný
+            # a missing value in the new version is not a change — the original stays
             if f not in skip and draft.data.get(f) and not _same(f, task.get(f), draft.data.get(f))
         }
         draft.target_task_id = task["id"]
         draft.data["assignees"] = task["assignees"] or draft.data["assignees"]
         if task["assignees"]:
             draft.data["assign_reason"] = "ponechané z pôvodnej úlohy"
-        # čo sa nezmenilo, ostáva presne podľa pôvodnej úlohy (aj popis)
+        # whatever did not change stays exactly as in the original task (including the description)
         for f in (*DIFF_FIELDS, "description"):
             if f not in changes:
                 draft.data[f] = task.get(f)
@@ -556,7 +563,7 @@ def diff_with_previous(drafts: list[Draft], previous_tasks: list[dict[str, Any]]
 
 
 def suggest_previous(site_id: str, filename: str) -> dict[str, Any] | None:
-    """Rovnaký dokument v novej verzii? Podobný názov súboru na tej istej stavbe."""
+    """Same document in a new version? A similar file name on the same site."""
 
     def stem(name: str) -> str:
         base = normalize(Path(name).stem)
@@ -584,7 +591,7 @@ def _wait_for_parse(doc_id: str) -> None:
 
 
 def run_import(source_id: str) -> None:
-    """Beží vo vlákne: čaká na parsovanie dokumentu → návrhy úloh → status review."""
+    """Runs in a thread: waits for the document to be parsed → task proposals → status review."""
     source = store.get_source(source_id)
     if source is None:
         return
@@ -632,7 +639,7 @@ def run_import(source_id: str) -> None:
         store.set_source_status(
             source_id, "review", progress=1.0, doc_date=doc_date.isoformat() if doc_date else None
         )
-    except Exception as exc:  # noqa: BLE001 — chyba sa ukáže majiteľovi pri importe
+    except Exception as exc:  # noqa: BLE001 — the error is shown to the owner on import
         logger.exception("import úloh %s zlyhal", source_id)
         store.set_source_status(source_id, "error", error=str(exc)[:300])
 
@@ -644,7 +651,8 @@ class ApplyError(ValueError):
 
 
 def apply_import(source_id: str) -> dict[str, int]:
-    """Schválené návrhy → úlohy. Každý návrh musí byť rozhodnutý, schválený musí mať termín."""
+    """Approved proposals → tasks. Every proposal must be decided, an approved one must have a
+    deadline."""
     source = store.get_source(source_id)
     if source is None:
         raise KeyError(source_id)
@@ -704,7 +712,7 @@ def apply_import(source_id: str) -> dict[str, int]:
         elif d["kind"] == "cancelled" and d["target_task_id"]:
             store.update_task(d["target_task_id"], {"status": "cancelled"})
             counts["cancelled"] += 1
-    # závislosti medzi novými úlohami až keď všetky existujú
+    # dependencies between new tasks only once all of them exist
     for idx, d in enumerate(drafts):
         dep = d["data"].get("depends_on") or {}
         if idx in created_ids and "draft" in dep and dep["draft"] in created_ids:

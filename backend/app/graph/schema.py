@@ -1,15 +1,15 @@
-"""Schéma grafu — typy uzlov/hrán a Pydantic modely pre LLM extrakciu.
+"""Graph schema — node/edge types and Pydantic models for LLM extraction.
 
-Uzly viazané na dokument (doc/page/chunk/table) sa pri re-ingeste mažú;
-doménové uzly (concept/quantity/ref) sú zdieľané naprieč dokumentmi —
-presne cez ne vznikajú prepojenia medzi PDFkami.
+Document-bound nodes (doc/page/chunk/table) are deleted on re-ingest;
+domain nodes (concept/quantity/ref) are shared across documents —
+links between PDFs arise precisely through them.
 """
 
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
-# typy uzlov
+# node types
 DOCUMENT = "document"
 PAGE = "page"
 CHUNK = "chunk"
@@ -18,7 +18,7 @@ CONCEPT = "concept"
 QUANTITY = "quantity"
 REFERENCE = "reference"
 
-# typy hrán
+# edge types
 CONTAINS = "CONTAINS"
 HAS_TABLE = "HAS_TABLE"
 NEXT = "NEXT"
@@ -70,5 +70,5 @@ class ConceptExtraction(BaseModel):
     concepts: list[ExtractedConcept] = Field(default_factory=list, max_length=8)
 
 
-# JSON schema pre Ollama structured output (garantovane validný JSON)
+# JSON schema for Ollama structured output (guaranteed valid JSON)
 CONCEPT_JSON_SCHEMA = ConceptExtraction.model_json_schema()

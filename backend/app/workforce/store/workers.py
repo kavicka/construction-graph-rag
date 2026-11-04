@@ -45,7 +45,7 @@ def update_worker(user_id: str, *, name: str, professions: list[str], active: bo
             (json.dumps(professions, ensure_ascii=False), int(active), user_id),
         )
         if not active:
-            # deaktivovaný pracovník sa odhlási všade
+            # a deactivated worker is logged out everywhere
             revoke_credentials(user_id, conn)
 
 

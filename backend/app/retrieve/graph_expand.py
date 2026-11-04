@@ -1,10 +1,10 @@
-"""Grafová expanzia retrievalu.
+"""Graph expansion of retrieval.
 
-Seed chunky → ich entity (MENTIONS/DEFINES/MEASURES) → SAME_AS klaster
-→ chunky, ktoré tie entity dokladajú inde (typicky iný dokument/strana).
+Seed chunks → their entities (MENTIONS/DEFINES/MEASURES) → SAME_AS cluster
+→ chunks that support those entities elsewhere (typically another document/page).
 
-Skóre: rozpad podľa poradia seedu × váha hrán × hub penalizácia
-(koncept spomenutý všade nenesie informáciu o konkrétnom prepojení).
+Score: decay by seed rank × edge weight × hub penalty
+(a concept mentioned everywhere carries no information about a specific link).
 """
 
 import logging
@@ -33,7 +33,7 @@ def is_relational_query(query: str) -> bool:
 
 
 def _edges_index() -> tuple[dict[str, list[dict[str, Any]]], dict[str, int]]:
-    """→ (hrany podľa uzla, stupeň entitných uzlov)"""
+    """→ (edges by node, degree of entity nodes)"""
     by_node: dict[str, list[dict[str, Any]]] = {}
     degree: dict[str, int] = {}
     for e in db.list_graph_edges():
@@ -49,7 +49,7 @@ def _hub_penalty(degree: int) -> float:
 
 
 def expand_via_graph(seed_chunk_ids: list[str], *, cap: int = 10) -> list[dict[str, Any]]:
-    """Vráti lancedb riadky expandovaných chunkov, zoradené podľa grafového skóre."""
+    """Returns lancedb rows of expanded chunks, ordered by graph score."""
     if not seed_chunk_ids:
         return []
     by_node, degree = _edges_index()
@@ -59,7 +59,7 @@ def expand_via_graph(seed_chunk_ids: list[str], *, cap: int = 10) -> list[dict[s
     for rank, cid in enumerate(seed_chunk_ids):
         seed_node = f"chunk:{cid}"
         seed_decay = 1.0 / (1 + rank)
-        # entity seedu
+        # seed entities
         entities: dict[str, float] = {}
         for e in by_node.get(seed_node, []):
             if e["type"] in ENTITY_EDGE_TYPES and e["src"] == seed_node:
@@ -70,7 +70,7 @@ def expand_via_graph(seed_chunk_ids: list[str], *, cap: int = 10) -> list[dict[s
                 if e["type"] == SAME_AS:
                     other = e["dst"] if e["src"] == ent else e["src"]
                     entities[other] = max(entities.get(other, 0), w * e["weight"])
-        # chunky dokladajúce tieto entity
+        # chunks that support these entities
         for ent, ent_w in entities.items():
             penalty = _hub_penalty(degree.get(ent, 0))
             for e in by_node.get(ent, []):
@@ -88,7 +88,7 @@ def expand_via_graph(seed_chunk_ids: list[str], *, cap: int = 10) -> list[dict[s
 
 
 def match_query_concepts(query: str, *, threshold: float = 85.0) -> list[str]:
-    """Nájdi koncepty z grafu spomenuté priamo v otázke (graf-first režim)."""
+    """Find graph concepts mentioned directly in the question (graph-first mode)."""
     matched: list[str] = []
     for node in db.list_graph_nodes(types=[CONCEPT]):
         score = fuzz.partial_ratio(node["label"].casefold(), query.casefold())
@@ -98,7 +98,7 @@ def match_query_concepts(query: str, *, threshold: float = 85.0) -> list[str]:
 
 
 def concept_evidence_chunks(concept_ids: list[str], *, cap: int = 8) -> list[dict[str, Any]]:
-    """Chunky dokladajúce dané koncepty (vrátane SAME_AS klastra) — naprieč dokumentmi."""
+    """Chunks supporting the given concepts (including the SAME_AS cluster) — across documents."""
     if not concept_ids:
         return []
     by_node, degree = _edges_index()

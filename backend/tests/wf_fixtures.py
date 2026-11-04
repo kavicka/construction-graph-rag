@@ -1,4 +1,4 @@
-"""Spoločné fixtures pre testy modulu Firma (importujú sa do test_workforce_*)."""
+"""Shared fixtures for the Firma module tests (imported into test_workforce_*)."""
 
 from collections.abc import Callable, Iterator
 from typing import Any
@@ -18,7 +18,7 @@ ADMIN = ("majitel@firma.sk", "majitel-heslo-123")
 @pytest.fixture(autouse=True)
 def wf_isolated(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     monkeypatch.setenv("RAG_DAILY_SUMMARY", "false")
-    # lokálny backend/.env môže mať prihlasovanie zapnuté — testy ho zapínajú výslovne
+    # a local backend/.env may have login enabled — tests enable it explicitly
     monkeypatch.setenv("RAG_AUTH_ENABLED", "false")
     monkeypatch.delenv("RAG_ADMIN_EMAIL", raising=False)
     monkeypatch.setenv("RAG_ADMIN_PASSWORD", "")
@@ -79,7 +79,7 @@ LlmHandler = Callable[[str, str, type[BaseModel]], Any]
 
 
 class FakeLLM:
-    """Nahrádza _llm_json: podľa schémy vráti pripravenú odpoveď a zapíše prompt."""
+    """Replaces _llm_json: returns a canned answer per schema and records the prompt."""
 
     def __init__(self) -> None:
         self.responses: dict[str, list[Any]] = {}
