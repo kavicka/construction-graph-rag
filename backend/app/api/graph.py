@@ -139,21 +139,25 @@ def _node_detail(node_id: str) -> NodeDetail | None:
     if node is None or (node["doc_id"] and not can_access_document(node["doc_id"])):
         return None
     allowed_docs = allowed_doc_ids()
+    edges = db.node_edges(node_id)
+    neighbor_ids = {e["dst"] if e["src"] == node_id else e["src"] for e in edges}
+    evidence_ids = {f"chunk:{e['evidence_chunk_id']}" for e in edges if e["evidence_chunk_id"]}
+    # every node this view touches in one query instead of one query per edge
+    nodes = db.get_graph_nodes({e["src"] for e in edges} | neighbor_ids | evidence_ids)
+
     if allowed_docs is not None and node["doc_id"] is None:
         # zdieľaný pojem: existuje pre používateľa, len ak ho dokladá povolený úsek
         linked = {
-            (db.get_graph_node(e["src"]) or {}).get("doc_id")
-            for e in db.node_edges(node_id)
+            nodes.get(e["src"], {}).get("doc_id")
+            for e in edges
             if e["src"].startswith(("chunk:", "doc:", "table:"))
         }
         if not linked & allowed_docs:
             return None
 
-    edges = db.node_edges(node_id)
-    neighbor_ids = {e["dst"] if e["src"] == node_id else e["src"] for e in edges}
     neighbors = []
     for nid in sorted(neighbor_ids):
-        n = db.get_graph_node(nid)
+        n = nodes.get(nid)
         if n and (allowed_docs is None or n["doc_id"] is None or n["doc_id"] in allowed_docs):
             neighbors.append(
                 GraphNode(
@@ -161,17 +165,20 @@ def _node_detail(node_id: str) -> NodeDetail | None:
                 )
             )
 
+    documents = db.get_documents(
+        n["doc_id"] for nid in evidence_ids if (n := nodes.get(nid)) and n["doc_id"]
+    )
     evidence: list[EvidenceOut] = []
     for e in edges:
         if not e["evidence_chunk_id"]:
             continue
-        chunk_node = db.get_graph_node(f"chunk:{e['evidence_chunk_id']}")
+        chunk_node = nodes.get(f"chunk:{e['evidence_chunk_id']}")
         has_props = chunk_node is not None and chunk_node["props_json"]
         props = json.loads(chunk_node["props_json"]) if has_props else {}  # type: ignore[index]
         chunk_doc_id = chunk_node["doc_id"] if chunk_node else None
         if allowed_docs is not None and chunk_doc_id not in allowed_docs:
             continue
-        doc = db.get_document(chunk_doc_id) if chunk_doc_id else None
+        doc = documents.get(chunk_doc_id) if chunk_doc_id else None
         evidence.append(
             EvidenceOut(
                 edge_type=e["type"],

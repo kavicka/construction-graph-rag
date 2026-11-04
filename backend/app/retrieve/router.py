@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field, ValidationError
 from rapidfuzz import fuzz
 
 from app import db
+from app.auth import allowed_doc_ids
 from app.config import get_settings
 from app.docgen.intent import detect_generate_intent
 from app.docgen.schema import DocType, Lang
@@ -164,14 +165,16 @@ def _match_documents(qn: str) -> list[str]:
     return [doc_id for sc, doc_id in scored if sc == top]
 
 
-def _known_categories() -> list[str]:
-    return sorted({r["category"] for r in db.list_records() if r["category"]})
+def known_categories() -> list[str]:
+    """Record categories of the documents the current access scope may see. They end up
+    in LLM prompts, so categories of a document hidden from the user must not."""
+    return db.list_record_categories(allowed_doc_ids())
 
 
 def _match_categories(qn: str) -> list[str]:
     """Kategórie z DB spomenuté v otázke — data-driven, žiadne hardcoded slová."""
     matched = []
-    for cat in _known_categories():
+    for cat in known_categories():
         cat_n = _norm(cat)
         tokens = [t for t in cat_n.split() if len(t) >= 4]
         if any(fuzz.partial_ratio(t, qn) >= 85 for t in tokens):

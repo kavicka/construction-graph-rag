@@ -3,8 +3,12 @@ import json
 import pytest
 
 from app import db
+from app.auth import AccessScope, reset_scope, set_scope
 from app.config import get_settings
 from app.retrieve.compose import extract_compose_plan, run_compose
+from app.retrieve.orchestrator import answer_question
+from app.retrieve.router import QueryPlan, known_categories
+from app.workforce import store
 
 KNOWN = ["Oběd varianty", "Snídaně"]
 
@@ -138,3 +142,63 @@ def test_run_compose_impossible_shows_nearest(meals: None, monkeypatch: pytest.M
     assert "1276" in answer
     assert "276" in answer
     assert sources, "aj najbližšia kombinácia má citovateľné zdroje"
+
+
+HIDDEN_CATEGORY = "Tajný rozpočet"
+MEMBER = AccessScope(user_id="u1", email="m@x.sk", role="member", groups=frozenset({"stavba"}))
+
+
+@pytest.fixture
+def hidden_records(meals: None) -> None:
+    """d2 is visible only to the group "financie" — the member is not in it."""
+    store.init_workforce_db()  # the orchestrator asks the Firma module first
+    db.insert_document("d2", "financie.pdf", "sha-2")
+    db.set_document_access("d2", json.dumps(["financie"]))
+    db.replace_document_records(
+        "d2",
+        [
+            {
+                "id": "secret",
+                "table_id": "t-secret",
+                "page_no": 1,
+                "category": HIDDEN_CATEGORY,
+                "name": "Rezerva",
+                "attrs_json": json.dumps({"kcal": 1}),
+                "raw_text": "Rezerva",
+            }
+        ],
+    )
+
+
+def test_known_categories_follow_access_scope(hidden_records: None) -> None:
+    assert known_categories() == ["Oběd varianty", "Snídaně", HIDDEN_CATEGORY]  # admin
+    token = set_scope(MEMBER)
+    try:
+        assert known_categories() == ["Oběd varianty", "Snídaně"]
+    finally:
+        reset_scope(token)
+
+
+@pytest.mark.anyio
+async def test_compose_prompt_hides_categories_of_inaccessible_documents(
+    hidden_records: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    prompts: list[str] = []
+
+    def fake_generate(model: str, prompt: str, **kwargs: object) -> str:
+        prompts.append(prompt)
+        return VALID_PLAN
+
+    monkeypatch.setattr("app.retrieve.compose.generate_sync", fake_generate)
+    monkeypatch.setattr(
+        "app.retrieve.orchestrator.route_query", lambda q: QueryPlan(mode="compose")
+    )
+    token = set_scope(MEMBER)
+    try:
+        result = await answer_question(QUESTION)
+    finally:
+        reset_scope(token)
+    assert result.mode == "compose"
+    assert len(prompts) == 1
+    assert "Oběd varianty" in prompts[0]
+    assert HIDDEN_CATEGORY not in prompts[0]

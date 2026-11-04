@@ -16,7 +16,7 @@ from opentelemetry.trace import Status, StatusCode
 from app import db
 from app.auth import allowed_doc_ids
 from app.company import load_company
-from app.config import get_settings
+from app.config import Settings, get_settings
 from app.docgen.generate import (
     build_content,
     plan_outline,
@@ -48,7 +48,7 @@ from app.retrieve.research import (
     subquestion_event,
     synthesis_messages,
 )
-from app.retrieve.router import QueryPlan, mentions_library, route_query
+from app.retrieve.router import QueryPlan, known_categories, mentions_library, route_query
 from app.retrieve.scope_guard import (
     ScopeDecision,
     check_question,
@@ -218,6 +218,239 @@ async def run_query(
         root.end()
 
 
+@dataclass
+class _Turn:
+    """One routed question on its way through a mode handler.
+
+    A handler streams its events and fills in the answer fields; `_run` then applies the
+    shared post-processing (secret redaction, refusal cleanup, verification)."""
+
+    question: str
+    plan: QueryPlan
+    chat_id: str | None
+    ctx: Context
+    settings: Settings
+    sources: list[Source] = field(default_factory=list)
+    evidence: list[str] = field(default_factory=list)
+    answer_parts: list[str] = field(default_factory=list)
+    document: dict[str, Any] | None = None
+    verify_text: str | None = None  # None → overuje sa samotná odpoveď
+    finished: bool = False  # the handler already sent a complete fixed reply (refusal)
+
+
+ModeHandler = Callable[[_Turn], AsyncIterator[Event]]
+
+
+async def _stream_answer(turn: _Turn, stream: AsyncIterator[str]) -> AsyncIterator[Event]:
+    """LLM tokens → delta events, collected into the answer."""
+    async for token in strip_think(stream):
+        turn.answer_parts.append(token)
+        yield {"type": "delta", "text": token}
+
+
+async def _generate(turn: _Turn) -> AsyncIterator[Event]:
+    """Branded PDF document written section by section from the retrieved sources."""
+    question, ctx = turn.question, turn.ctx
+    doc_type, lang = turn.plan.doc_type, turn.plan.lang
+    assert doc_type is not None  # _handler_for routes generate without a type to lookup
+    yield {"type": "step", "tool": "retrieve", "summary": "hľadám podklady…"}
+    sources = await _traced("rag.retrieve", ctx, retrieve_sources, question, 10)
+    turn.sources = sources
+    yield _sources_event(sources)
+    outline = await _traced("docgen.outline", ctx, plan_outline, question, doc_type, lang, sources)
+    yield {"type": "step", "tool": "outline", "summary": outline.title}
+    company = await run_in_threadpool(load_company)
+    bodies: list[str] = []
+    for i, heading in enumerate(outline.headings, start=1):
+        yield {
+            "type": "step",
+            "tool": "section",
+            "summary": f"{i}/{len(outline.headings)} {heading}",
+        }
+        bodies.append(
+            redact_secrets(
+                await _traced(
+                    "docgen.section",
+                    ctx,
+                    write_section,
+                    question,
+                    heading,
+                    outline,
+                    doc_type,
+                    lang,
+                    sources,
+                    company,
+                    rag__heading=heading,
+                )
+            )
+        )
+    yield {"type": "step", "tool": "render", "summary": "renderujem PDF…"}
+    content = build_content(outline, doc_type, lang, bodies)
+    generated = await _traced(
+        "docgen.render", ctx, save_document, content, company, sources, turn.chat_id
+    )
+    turn.document = generated.to_json()
+    yield {"type": "document", "document": turn.document}
+
+    cited = {int(n) for b in bodies for m in CITE_RE.finditer(b) for n in m.group(1).split(",")}
+    answer_text = summary_message(generated, lang, len(cited & {s.n for s in sources}))
+    turn.answer_parts.append(answer_text)
+    yield {"type": "delta", "text": answer_text}
+    turn.evidence = [*(s.text for s in sources), question]
+    # overenie čísel beží nad textom dokumentu, nie nad krátkou správou v chate
+    turn.verify_text = "\n".join(bodies)
+
+
+async def _filter(turn: _Turn) -> AsyncIterator[Event]:
+    # plne deterministická cesta — filter aj odpoveď robí kód, LLM sa nevolá
+    plan = turn.plan
+    matched, nearest = await _traced("rag.filter", turn.ctx, run_filter, plan)
+    context, turn.sources = await run_in_threadpool(build_filter_context, plan, matched, nearest)
+    yield _sources_event(turn.sources)
+    answer_text = await run_in_threadpool(
+        format_filter_answer, plan, matched, nearest, turn.sources
+    )
+    turn.answer_parts.append(answer_text)
+    yield {"type": "delta", "text": answer_text}
+    turn.evidence = [context, turn.question]
+
+
+async def _compose(turn: _Turn) -> AsyncIterator[Event]:
+    """Exact selection of a combination of items under a budget; agent loop as fallback."""
+    question, ctx = turn.question, turn.ctx
+    yield {"type": "step", "tool": "plan", "summary": "extrahujem plán výberu…"}
+    categories = await run_in_threadpool(known_categories)
+    composed = await _traced("rag.compose", ctx, run_compose, question, categories)
+    if composed is not None:
+        answer_text, turn.sources, turn.evidence = composed
+        yield {"type": "step", "tool": "pick_items", "summary": "exaktný výber hotový"}
+        yield _sources_event(turn.sources)
+        turn.answer_parts.append(answer_text)
+        yield {"type": "delta", "text": answer_text}
+        return
+    # plán sa nedal spoľahlivo vytiahnuť → voľná agent slučka
+    yield {"type": "step", "tool": "agent", "summary": "plán neistý — agent slučka"}
+    with span("rag.agent", parent=ctx):
+        result = await run_agent(question)
+    for step in result.trace:
+        yield {"type": "step", "tool": step["tool"], "summary": step["args"]}
+    turn.sources = result.sources
+    yield _sources_event(turn.sources)
+    turn.answer_parts.append(result.answer)
+    yield {"type": "delta", "text": result.answer}
+    turn.evidence = [*result.evidence, question]
+
+
+async def _global(turn: _Turn) -> AsyncIterator[Event]:
+    """Question about the whole library: concept communities and their summaries."""
+    question, ctx = turn.question, turn.ctx
+    yield {"type": "step", "tool": "communities", "summary": "hľadám témy naprieč knižnicou…"}
+    communities = await _traced("global.communities", ctx, detect_communities)
+    top = await _traced("global.rank", ctx, rank_communities, question, communities, 6)
+    for theme in top:
+        if not theme.summary:
+            yield {
+                "type": "step",
+                "tool": "summarize",
+                "summary": ", ".join(theme.concepts[:4]),
+            }
+            await _traced("global.summarize", ctx, summarize_community, theme)
+    sources, messages = await _traced("global.context", ctx, global_context, question, top)
+    turn.sources = sources
+    yield {"type": "step", "tool": "themes", "summary": " · ".join(t.title or "" for t in top)}
+    yield _sources_event(sources)
+    stream = chat_stream(turn.settings.answer_model, messages, num_ctx=12288, parent=ctx)
+    async for event in _stream_answer(turn, stream):
+        yield event
+    turn.evidence = [*(s.text for s in sources), *(t.summary or "" for t in top), question]
+
+
+async def _research(turn: _Turn) -> AsyncIterator[Event]:
+    """Deep research: subquestions → retrieval → findings → structured report."""
+    question, ctx = turn.question, turn.ctx
+    yield {"type": "step", "tool": "plan", "summary": "plánujem podotázky…"}
+    subquestions = await _traced("research.plan", ctx, decompose, question, research=True)
+    yield {"type": "step", "tool": "plan", "summary": " · ".join(subquestions)}
+    per_query = await _traced("rag.retrieve", ctx, retrieve_for, subquestions, 6)
+    sources = merge_sources(per_query)
+    turn.sources = sources
+    yield _sources_event(sources)
+    findings: list[tuple[str, str]] = []
+    for i, sub in enumerate(subquestions, start=1):
+        yield subquestion_event(i, len(subquestions), sub)
+        finding = await _traced(
+            "research.finding", ctx, answer_subquestion, sub, sources, rag__subquestion=sub
+        )
+        findings.append((sub, finding))
+    yield {"type": "step", "tool": "synthesis", "summary": "píšem správu…"}
+    stream = chat_stream(
+        turn.settings.answer_model,
+        synthesis_messages(question, findings, sources),
+        num_ctx=12288,
+        parent=ctx,
+    )
+    async for event in _stream_answer(turn, stream):
+        yield event
+    turn.evidence = [*(s.text for s in sources), *(f for _, f in findings), question]
+
+
+async def _lookup(turn: _Turn) -> AsyncIterator[Event]:
+    """Classic RAG: retrieve → generate; also the fallback for every other mode."""
+    question, ctx, settings = turn.question, turn.ctx, turn.settings
+    if settings.scope_guard and not await _traced("rag.scope", ctx, _in_scope, question):
+        async for event in _fixed(
+            "refuse",
+            reply_for(ScopeDecision("offtopic"), question),
+            [{"tool": "guard", "summary": "mimo účelu"}],
+        ):
+            yield event
+        turn.finished = True
+        return
+    if is_compound(question):
+        # „Kto je stavbyvedúci a aká je pokuta?“ — jedno vyhľadávanie nájde len polovicu
+        subquestions = await _traced("rag.decompose", ctx, decompose, question)
+    else:
+        subquestions = [question]
+    if len(subquestions) > 1:
+        yield {"type": "step", "tool": "decompose", "summary": " · ".join(subquestions)}
+        per_query = await _traced("rag.retrieve", ctx, retrieve_for, subquestions, 5)
+        sources = merge_sources(per_query, cap=10)
+    else:
+        sources = await _traced("rag.retrieve", ctx, retrieve_sources, question)
+    turn.sources = sources
+    yield _sources_event(sources)
+    messages = build_messages(question, sources)
+    if flagged := [s.n for s in sources if s.flagged]:
+        yield {
+            "type": "step",
+            "tool": "guard",
+            "summary": f"zdroje {flagged} obsahujú pokyny pre AI — označené ako dáta",
+        }
+    stream = chat_stream(settings.answer_model, messages, parent=ctx)
+    async for event in _stream_answer(turn, stream):
+        yield event
+    turn.evidence = [*(s.text for s in sources), question]
+
+
+_MODE_HANDLERS: dict[str, ModeHandler] = {
+    "generate": _generate,
+    "filter": _filter,
+    "compose": _compose,
+    "global": _global,
+    "research": _research,
+    "lookup": _lookup,
+}
+
+
+def _handler_for(plan: QueryPlan, settings: Settings) -> ModeHandler:
+    # generate without a document type and compose without agent mode answer as lookup
+    if plan.mode == "generate" and plan.doc_type is None:
+        return _lookup
+    if plan.mode == "compose" and not settings.agent_mode:
+        return _lookup
+    return _MODE_HANDLERS.get(plan.mode, _lookup)
+
+
 async def _run(
     question: str, chat_id: str | None, ctx: Context, mode: str | None
 ) -> AsyncIterator[Event]:
@@ -245,177 +478,13 @@ async def _run(
         plan = await _traced("rag.route", ctx, route_query, question)
     yield {"type": "plan", "mode": plan.mode}
 
-    sources: list[Source] = []
-    evidence: list[str]
-    answer_parts: list[str] = []
-    document: dict[str, Any] | None = None
-    verify_text: str | None = None  # None → overuje sa samotná odpoveď
+    turn = _Turn(question=question, plan=plan, chat_id=chat_id, ctx=ctx, settings=settings)
+    async for event in _handler_for(plan, settings)(turn):
+        yield event
+    if turn.finished:
+        return
 
-    if plan.mode == "generate" and plan.doc_type is not None:
-        doc_type, lang = plan.doc_type, plan.lang
-        yield {"type": "step", "tool": "retrieve", "summary": "hľadám podklady…"}
-        sources = await _traced("rag.retrieve", ctx, retrieve_sources, question, 10)
-        yield _sources_event(sources)
-        outline = await _traced(
-            "docgen.outline", ctx, plan_outline, question, doc_type, lang, sources
-        )
-        yield {"type": "step", "tool": "outline", "summary": outline.title}
-        company = await run_in_threadpool(load_company)
-        bodies: list[str] = []
-        for i, heading in enumerate(outline.headings, start=1):
-            yield {
-                "type": "step",
-                "tool": "section",
-                "summary": f"{i}/{len(outline.headings)} {heading}",
-            }
-            bodies.append(
-                redact_secrets(
-                    await _traced(
-                        "docgen.section",
-                        ctx,
-                        write_section,
-                        question,
-                        heading,
-                        outline,
-                        doc_type,
-                        lang,
-                        sources,
-                        company,
-                        rag__heading=heading,
-                    )
-                )
-            )
-        yield {"type": "step", "tool": "render", "summary": "renderujem PDF…"}
-        content = build_content(outline, doc_type, lang, bodies)
-        generated = await _traced(
-            "docgen.render", ctx, save_document, content, company, sources, chat_id
-        )
-        document = generated.to_json()
-        yield {"type": "document", "document": document}
-
-        cited = {int(n) for b in bodies for m in CITE_RE.finditer(b) for n in m.group(1).split(",")}
-        answer_text = summary_message(generated, lang, len(cited & {s.n for s in sources}))
-        answer_parts.append(answer_text)
-        yield {"type": "delta", "text": answer_text}
-        evidence = [*(s.text for s in sources), question]
-        # overenie čísel beží nad textom dokumentu, nie nad krátkou správou v chate
-        verify_text = "\n".join(bodies)
-
-    elif plan.mode == "filter":
-        # plne deterministická cesta — filter aj odpoveď robí kód, LLM sa nevolá
-        matched, nearest = await _traced("rag.filter", ctx, run_filter, plan)
-        context, sources = build_filter_context(plan, matched, nearest)
-        yield _sources_event(sources)
-        answer_text = format_filter_answer(plan, matched, nearest, sources)
-        answer_parts.append(answer_text)
-        yield {"type": "delta", "text": answer_text}
-        evidence = [context, question]
-
-    elif plan.mode == "compose" and settings.agent_mode:
-        yield {"type": "step", "tool": "plan", "summary": "extrahujem plán výberu…"}
-        categories = sorted({r["category"] for r in db.list_records() if r["category"]})
-        composed = await _traced("rag.compose", ctx, run_compose, question, categories)
-        if composed is not None:
-            answer_text, sources, evidence = composed
-            yield {"type": "step", "tool": "pick_items", "summary": "exaktný výber hotový"}
-            yield _sources_event(sources)
-            answer_parts.append(answer_text)
-            yield {"type": "delta", "text": answer_text}
-        else:
-            # plán sa nedal spoľahlivo vytiahnuť → voľná agent slučka
-            yield {"type": "step", "tool": "agent", "summary": "plán neistý — agent slučka"}
-            with span("rag.agent", parent=ctx):
-                result = await run_agent(question)
-            for step in result.trace:
-                yield {"type": "step", "tool": step["tool"], "summary": step["args"]}
-            sources = result.sources
-            yield _sources_event(sources)
-            answer_parts.append(result.answer)
-            yield {"type": "delta", "text": result.answer}
-            evidence = [*result.evidence, question]
-
-    elif plan.mode == "global":
-        yield {"type": "step", "tool": "communities", "summary": "hľadám témy naprieč knižnicou…"}
-        communities = await _traced("global.communities", ctx, detect_communities)
-        top = await _traced("global.rank", ctx, rank_communities, question, communities, 6)
-        for theme in top:
-            if not theme.summary:
-                yield {
-                    "type": "step",
-                    "tool": "summarize",
-                    "summary": ", ".join(theme.concepts[:4]),
-                }
-                await _traced("global.summarize", ctx, summarize_community, theme)
-        sources, messages = await _traced("global.context", ctx, global_context, question, top)
-        yield {"type": "step", "tool": "themes", "summary": " · ".join(t.title or "" for t in top)}
-        yield _sources_event(sources)
-        stream = chat_stream(settings.answer_model, messages, num_ctx=12288, parent=ctx)
-        async for token in strip_think(stream):
-            answer_parts.append(token)
-            yield {"type": "delta", "text": token}
-        evidence = [*(s.text for s in sources), *(t.summary or "" for t in top), question]
-
-    elif plan.mode == "research":
-        yield {"type": "step", "tool": "plan", "summary": "plánujem podotázky…"}
-        subquestions = await _traced("research.plan", ctx, decompose, question, research=True)
-        yield {"type": "step", "tool": "plan", "summary": " · ".join(subquestions)}
-        per_query = await _traced("rag.retrieve", ctx, retrieve_for, subquestions, 6)
-        sources = merge_sources(per_query)
-        yield _sources_event(sources)
-        findings: list[tuple[str, str]] = []
-        for i, sub in enumerate(subquestions, start=1):
-            yield subquestion_event(i, len(subquestions), sub)
-            finding = await _traced(
-                "research.finding", ctx, answer_subquestion, sub, sources, rag__subquestion=sub
-            )
-            findings.append((sub, finding))
-        yield {"type": "step", "tool": "synthesis", "summary": "píšem správu…"}
-        stream = chat_stream(
-            settings.answer_model,
-            synthesis_messages(question, findings, sources),
-            num_ctx=12288,
-            parent=ctx,
-        )
-        async for token in strip_think(stream):
-            answer_parts.append(token)
-            yield {"type": "delta", "text": token}
-        evidence = [*(s.text for s in sources), *(f for _, f in findings), question]
-
-    else:
-        if settings.scope_guard and not await _traced("rag.scope", ctx, _in_scope, question):
-            async for event in _fixed(
-                "refuse",
-                reply_for(ScopeDecision("offtopic"), question),
-                [{"tool": "guard", "summary": "mimo účelu"}],
-            ):
-                yield event
-            return
-        if is_compound(question):
-            # „Kto je stavbyvedúci a aká je pokuta?“ — jedno vyhľadávanie nájde len polovicu
-            subquestions = await _traced("rag.decompose", ctx, decompose, question)
-        else:
-            subquestions = [question]
-        if len(subquestions) > 1:
-            yield {"type": "step", "tool": "decompose", "summary": " · ".join(subquestions)}
-            per_query = await _traced("rag.retrieve", ctx, retrieve_for, subquestions, 5)
-            sources = merge_sources(per_query, cap=10)
-        else:
-            sources = await _traced("rag.retrieve", ctx, retrieve_sources, question)
-        yield _sources_event(sources)
-        messages = build_messages(question, sources)
-        if flagged := [s.n for s in sources if s.flagged]:
-            yield {
-                "type": "step",
-                "tool": "guard",
-                "summary": f"zdroje {flagged} obsahujú pokyny pre AI — označené ako dáta",
-            }
-        stream = chat_stream(settings.answer_model, messages, parent=ctx)
-        async for token in strip_think(stream):
-            answer_parts.append(token)
-            yield {"type": "delta", "text": token}
-        evidence = [*(s.text for s in sources), question]
-
-    answer = redact_secrets("".join(answer_parts))
+    answer = redact_secrets("".join(turn.answer_parts))
     if settings.injection_guard:
         answer = sanitize_answer(answer)
     if plan.mode == "lookup" and is_refusal_answer(answer):
@@ -424,20 +493,21 @@ async def _run(
         if settings.scope_guard and len(split_sentences(answer)) <= 1:
             # samotné odmietnutie → pevná veta, nič dopísané z vlastných vedomostí modelu
             answer = not_found_reply(question)
-    issues = check_numbers(verify_text if verify_text is not None else answer, evidence)
+    verify_text = turn.verify_text if turn.verify_text is not None else answer
+    issues = check_numbers(verify_text, turn.evidence)
     sentences: list[dict[str, Any]] = []
     if plan.mode in ("lookup", "research") and answer.strip():
         # deterministické cesty (filter, compose) píše kód zo zdrojov a global cituje témy,
         # nie vety — tam sa overujú len čísla
-        checks = await _traced("rag.verify", ctx, verify_sentences, answer, sources)
+        checks = await _traced("rag.verify", ctx, verify_sentences, answer, turn.sources)
         sentences = [c.to_json() for c in checks]
     yield {"type": "verify", "ok": not issues, "issues": issues, "sentences": sentences}
     yield {
         "type": "final",
         "mode": plan.mode,
         "answer": answer,
-        "sources": sources,
-        "document": document,
+        "sources": turn.sources,
+        "document": turn.document,
         "trace_id": None,
         "verification": {"issues": issues, "sentences": sentences},
     }
