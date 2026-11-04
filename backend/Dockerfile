@@ -1,5 +1,7 @@
-# Backend: FastAPI + Docling + LanceDB. LLM beží v samostatnom kontajneri (Ollama)
-# alebo cez OpenAI-kompatibilné API (RAG_LLM_PROVIDER=openai).
+# Backend: FastAPI + Docling + LanceDB. The LLM runs in its own container (Ollama)
+# or behind an OpenAI-compatible API (RAG_LLM_PROVIDER=openai).
+# Voice (extra `voice`: Whisper on Apple Silicon, Piper TTS under GPL-3) is not installed —
+# in the container attendance and questions are text-only.
 FROM python:3.12-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -7,9 +9,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     HF_HOME=/models/huggingface \
+    FASTEMBED_CACHE_PATH=/models/fastembed \
     RAG_DATA_DIR=/data
 
-# pango → WeasyPrint (PDF), tesseract → OCR skenov (slk+eng), libgl/glib → Docling
+# pango → WeasyPrint (PDF), tesseract → OCR of scans (slk+eng), libgl/glib → Docling
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fonts-dejavu-core \
         tesseract-ocr tesseract-ocr-slk tesseract-ocr-eng \
@@ -18,11 +21,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY --from=ghcr.io/astral-sh/uv:0.9 /uv /usr/local/bin/uv
 
+# Non-root runtime user. UID 1000 matches the usual first host user, so the ./inbox bind
+# mount stays writable; /data and /models are created here so fresh named volumes
+# inherit the ownership.
+RUN groupadd --system --gid 1000 app \
+    && useradd --system --uid 1000 --gid app --home-dir /app --shell /usr/sbin/nologin app \
+    && mkdir -p /app /data /models \
+    && chown app:app /app /data /models
+
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 COPY app ./app
 COPY eval ./eval
+
+USER app
 
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s \
