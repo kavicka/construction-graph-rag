@@ -10,14 +10,14 @@ attendance, tasks and reports from the same data. Everything runs on one machine
 model; a hosted LLM is one environment variable away.
 
 <!-- EVAL_SUMMARY -->
-> Measured on a 128-question golden set over a synthetic corpus, with a local 4B model: **Retrieval MRR 72.9 → 95.5 %** and nDCG@10 76.2 → 96.1 % (plain hybrid → production pipeline); **95.8 %** of answers contain the exact expected facts, **80.0 %** abstain when the corpus has no answer; prompt-injection attack success **16.7 → 0.0 %** with the guard. See [Evaluation](#evaluation).
+> Measured on a 128-question golden set over a synthetic corpus, with a local 4B model: **Retrieval MRR 76.1 → 96.5 %** and nDCG@10 80.0 → 96.9 % (plain hybrid → production pipeline); **99.2 %** of answers contain the exact expected facts, **90.0 %** abstain when the corpus has no answer; prompt-injection attack success **16.7 → 0.0 %** with the guard. See [Evaluation](#evaluation).
 <!-- /EVAL_SUMMARY -->
 
 **Why this is interesting**
 
 - **Every design choice has a number behind it.** The eval harness ran each technique as an
-  ablation. Graph expansion on every query *hurt* (MRR 72.9 → 51.4), so it runs only for
-  relational questions. Contextual retrieval and a reranker took MRR from 72.9 to 95.5.
+  ablation. Graph expansion on every query *hurt* (MRR 76.1 → 54.8), so it runs only for
+  relational questions. Contextual retrieval and a reranker took MRR from 76.1 to 96.5.
 - **The LLM never owns a number, a time or a date.** Hours, deadlines, task states and totals are
   computed by code. Values the model extracts from speech or documents are checked against what
   the person said or the document states; in the eval, 2 numbers the model got wrong were
@@ -112,26 +112,26 @@ factual, table, cross-document, multi-hop and unanswerable.
 <!-- EVAL_TABLES -->
 | Retrieval configuration | Recall@10 | MRR | nDCG@10 | p50 latency |
 |---|---:|---:|---:|---:|
-| dense | 90.2 | 76.9 | 78.8 | 27 ms |
-| bm25 | 81.8 | 68.2 | 70.7 | 4 ms |
-| hybrid (dense+bm25, RRF) | 88.6 | 72.9 | 76.2 | 29 ms |
-| hybrid + graph on every query | 87.3 | 51.4 | 59.2 | 34 ms |
-| hybrid + graph on relational queries | 88.6 | 73.4 | 76.4 | 29 ms |
-| hybrid + graph + rerank | 91.1 | 81.3 | 82.9 | 913 ms |
-| contextual + hybrid + graph | 98.7 | 83.8 | 87.4 | 31 ms |
-| **contextual + hybrid + graph + rerank** | 99.2 | 95.5 | 96.1 | 852 ms |
-| … + visual pages (ColSmol, experimental) | 99.2 | 95.5 | 95.9 | 910 ms |
+| dense | 99.2 | 82.4 | 85.7 | 24 ms |
+| bm25 | 86.0 | 69.9 | 73.0 | 3 ms |
+| hybrid (dense+bm25, RRF) | 94.1 | 76.1 | 80.0 | 26 ms |
+| hybrid + graph on every query | 94.9 | 54.8 | 63.9 | 31 ms |
+| hybrid + graph on relational queries | 94.1 | 75.7 | 79.9 | 27 ms |
+| hybrid + graph + rerank | 100.0 | 85.8 | 89.0 | 823 ms |
+| contextual + hybrid + graph | 100.0 | 85.3 | 88.2 | 28 ms |
+| **contextual + hybrid + graph + rerank** | 100.0 | 96.5 | 96.9 | 837 ms |
+| … + visual pages (ColSmol, experimental) | 99.2 | 95.0 | 95.7 | 876 ms |
 
 Answer quality (`contextual + hybrid + graph + rerank`, `qwen3:4b-instruct`):
 
 | Metric | Value |
 |---|---:|
-| Exact expected facts in the answer | 95.8 % |
-| Faithfulness — claims supported by sources (LLM judge) | 90.2 % |
+| Exact expected facts in the answer | 99.2 % |
+| Faithfulness — claims supported by sources (LLM judge) | 90.1 % |
 | Valid citations | 100.0 % |
-| Abstains on unanswerable questions | 80.0 % |
+| Abstains on unanswerable questions | 90.0 % |
 | False refusals | 0.9 % |
-| Average end-to-end latency | 8.95 s |
+| Average end-to-end latency | 6.89 s |
 
 Prompt injection (6 attacks hidden in 3 poisoned documents):
 
@@ -150,12 +150,12 @@ import 7/8 tasks found). Both have an English summary at the top.
 
 ### What the numbers changed in the design
 
-- **Graph expansion on every query hurt** (MRR 72.9 → 51.4): graph candidates outvoted dense
+- **Graph expansion on every query hurt** (MRR 76.1 → 54.8): graph candidates outvoted dense
   and BM25 in the fusion. It only helps questions about links between documents, so it now
   runs only for relational queries, and the reranker decides the final order.
 - **Contextual retrieval was the cheapest big win**: one LLM sentence per chunk at ingest,
-  zero query-time cost. MRR 73 → 84, Recall@10 89 → 99.
-- **The reranker** takes MRR from 84 to 96 for ~0.9 s per question on Apple GPU (fp16,
+  zero query-time cost. MRR 76 → 85, Recall@10 94 → 100.
+- **The reranker** takes MRR from 85 to 96.5 for ~0.8 s per question on Apple GPU (fp16,
   20 candidates). It is on by default on machines with ≥ 32 GB RAM.
 - **Visual page retrieval did not help here.** Every document in this corpus is born-digital
   text, so ColSmol finds nothing the text index misses. It stays opt-in for scans and drawings.

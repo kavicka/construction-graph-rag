@@ -72,9 +72,9 @@ flowchart LR
 |---|---|
 | No LangChain / LlamaIndex | The stages are few and the ablation table needs to switch each one off. Plain functions with tracing are easier to measure and debug than a framework's chains. |
 | Numbers and times never come from the LLM | A 4B model invents plausible values. Filters run as SQL, composition questions go to an exact solver (the LLM only assigns numbers from the question to categories, and the plan is discarded if it contains a number that is not in the question), and company-module values are checked against what the person said. |
-| Graph expansion only for relational queries | Measured: on every query it dropped MRR from 72.9 to 51.4, because graph candidates outvoted dense and BM25 in the fusion. For relational questions it is neutral to slightly positive (73.4). |
-| Contextual retrieval at ingest | One LLM sentence per chunk costs ingest time only. Plain hybrid to contextual hybrid + graph: MRR 72.9 → 83.8, Recall@10 88.6 → 98.7, with no query-time cost. |
-| Cross-encoder rerank on by default for 32 GB or more | MRR 83.8 → 95.5 for about 0.9 s per question; the low profile uses a smaller reranker and leaves it off. |
+| Graph expansion only for relational queries | Measured: on every query it dropped MRR from 76.1 to 54.8, because graph candidates outvoted dense and BM25 in the fusion. Limited to relational questions it is neutral (75.7). |
+| Contextual retrieval at ingest | One LLM sentence per chunk costs ingest time only. Plain hybrid to contextual hybrid + graph: MRR 76.1 → 85.3, Recall@10 94.1 → 100, with no query-time cost. |
+| Cross-encoder rerank on by default for 32 GB or more | MRR 85.3 → 96.5 for about 0.8 s per question; the low profile uses a smaller reranker and leaves it off. |
 | Access control inside the retrieval query | Filtering after retrieval leaks through ranking and wastes top-k slots. Document ACLs are applied in the LanceDB vector and BM25 queries. |
 | Deterministic scope guard before the router | Secrets and system-internals requests never reach the LLM or the index. It also checks unmasked variants ("h-e-s-l-o"). |
 | Code decides, LLM structures (company module) | The report dialog is a state machine; "what is missing" is computed by code on every submission; the LLM only converts text to fields. |
