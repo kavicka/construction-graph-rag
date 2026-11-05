@@ -165,12 +165,7 @@ def test_generate_ollama_payload_and_strip(http: Callable[[Handler], Recorder]) 
         "think": True,
         "keep_alive": "5m",
         # num_ctx raised to RAG_OLLAMA_NUM_CTX; a structured call is capped by default
-        "options": {
-            "temperature": 0.0,
-            "num_ctx": 12288,
-            "repeat_penalty": 1.1,
-            "num_predict": 1024,
-        },
+        "options": {"temperature": 0.0, "num_ctx": 12288, "num_predict": 1024},
         "system": "buď stručný",
         "format": {"type": "object"},
     }
@@ -182,7 +177,14 @@ def test_generate_ollama_omits_optional_fields(http: Callable[[Handler], Recorde
     assert "system" not in rec.body
     assert "format" not in rec.body
     assert "num_predict" not in rec.body["options"]  # free text is not capped by default
+    assert "repeat_penalty" not in rec.body["options"]  # model default unless a caller asks
     assert rec.body["think"] is False  # reasoning off by default
+
+
+def test_generate_ollama_repeat_penalty_is_opt_in(http: Callable[[Handler], Recorder]) -> None:
+    rec = http(lambda r: httpx.Response(200, json={"response": "ok"}))
+    generate_sync("m", "p", repeat_penalty=1.1)
+    assert rec.body["options"]["repeat_penalty"] == 1.1
 
 
 def test_generate_ollama_explicit_max_tokens(http: Callable[[Handler], Recorder]) -> None:

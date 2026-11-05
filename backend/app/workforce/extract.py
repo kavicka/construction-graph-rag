@@ -34,6 +34,7 @@ Status = Literal["done", "in_progress", "not_started"]
 # maxItems in its grammar, which cuts off a model that keeps repeating one sentence) and are not
 # validated, so a longer reply from a provider without a grammar still parses.
 LLM_MAX_TOKENS = 1024
+REPEAT_PENALTY = 1.1  # only for these extraction calls; qwen3 Modelfiles ship 1.0
 
 
 def bounded(limit: int, default: Any = "") -> Any:
@@ -132,6 +133,8 @@ def _llm_json(
             num_ctx=8192,
             timeout=240,
             max_tokens=max_tokens,
+            # qwen3:4b at temperature 0 can repeat one sentence in a free-text field
+            repeat_penalty=REPEAT_PENALTY,
         )
         return schema.model_validate_json(raw)
     except (OllamaError, ValidationError, json.JSONDecodeError) as exc:

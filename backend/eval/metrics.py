@@ -11,6 +11,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 REFUSAL_HINTS = (
+    "found nothing",  # the app's fixed reply (scope_guard.NOT_FOUND_REPLY_EN)
+    "ziadne informacie",
     "nenachadza",
     "nenašiel",
     "nenasiel",

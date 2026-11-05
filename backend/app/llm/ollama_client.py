@@ -34,9 +34,9 @@ logger = logging.getLogger(__name__)
 
 # Greedy JSON decoding with a small model can loop on a free-text field (qwen3:4b-instruct
 # repeated one sentence until the 240 s timeout). A structured call therefore gets a token cap
-# by default, and Ollama a mild repeat penalty (the qwen3 Modelfiles ship repeat_penalty 1.0).
+# by default. A repeat penalty is opt-in per call: applied globally it changed answers and the
+# LLM judge (eval faithfulness 90 → 81 %, abstention 80 → 60 %).
 JSON_MAX_TOKENS = 1024
-REPEAT_PENALTY = 1.1
 
 
 class OllamaError(RuntimeError):
@@ -95,11 +95,13 @@ def generate_sync(
     timeout: float = 120.0,
     think: bool = False,
     max_tokens: int | None = None,
+    repeat_penalty: float | None = None,
 ) -> str:
     """One non-stream generate. Qwen3: think=False turns off reasoning mode (speed).
 
     max_tokens caps the reply; a structured call (json_schema) defaults to JSON_MAX_TOKENS and
-    a reply cut off by the cap raises OllamaError (the JSON would be incomplete anyway)."""
+    a reply cut off by the cap raises OllamaError (the JSON would be incomplete anyway).
+    repeat_penalty is sent to Ollama only when given (OpenAI-compatible APIs ignore it)."""
     limit = max_tokens if max_tokens is not None else (JSON_MAX_TOKENS if json_schema else None)
     with span(f"generate {model}") as s:
         set_attrs(
@@ -114,7 +116,16 @@ def generate_sync(
             )
         else:
             text, usage = _ollama_generate(
-                model, prompt, system, json_schema, temperature, num_ctx, timeout, think, limit
+                model,
+                prompt,
+                system,
+                json_schema,
+                temperature,
+                num_ctx,
+                timeout,
+                think,
+                limit,
+                repeat_penalty,
             )
         record_llm_usage(s, usage)
         if usage.get("done_reason") == "length":
@@ -135,12 +146,11 @@ def _ollama_generate(
     timeout: float,
     think: bool,
     max_tokens: int | None,
+    repeat_penalty: float | None = None,
 ) -> tuple[str, dict[str, Any]]:
-    options: dict[str, Any] = {
-        "temperature": temperature,
-        "num_ctx": _num_ctx(num_ctx),
-        "repeat_penalty": REPEAT_PENALTY,
-    }
+    options: dict[str, Any] = {"temperature": temperature, "num_ctx": _num_ctx(num_ctx)}
+    if repeat_penalty is not None:
+        options["repeat_penalty"] = repeat_penalty
     if max_tokens is not None:
         options["num_predict"] = max_tokens
     payload: dict[str, Any] = {

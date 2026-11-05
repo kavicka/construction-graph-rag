@@ -14,6 +14,7 @@ Output: eval/_runs/results-v2.json (not committed) and eval/REPORT.md (tables fo
 import argparse
 import asyncio
 import hashlib
+import importlib.util
 import json
 import logging
 import math
@@ -503,6 +504,12 @@ def _run() -> int:
     if args.configs:
         wanted = {c.strip() for c in args.configs.split(",")}
         ablations = [a for a in ABLATIONS if a.name in wanted]
+    if importlib.util.find_spec("colpali_engine") is None:
+        # visual page retrieval is an optional extra; without it the ablation can't run
+        skipped = [a.name for a in ablations if a.cfg.visual]
+        ablations = [a for a in ablations if not a.cfg.visual]
+        for name in skipped:
+            print(f"→ skipping {name}: install it with `uv sync --extra visual`")
     questions = QUESTIONS[: args.limit] if args.limit else QUESTIONS
 
     for variant in sorted({a.variant for a in ablations}):

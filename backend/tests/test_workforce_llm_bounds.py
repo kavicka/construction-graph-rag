@@ -73,6 +73,8 @@ def test_llm_json_passes_token_cap(monkeypatch: pytest.MonkeyPatch) -> None:
     extract._llm_json("p", "s", _XDocument, max_tokens=IMPORT_MAX_TOKENS)
     assert [kw["max_tokens"] for kw in seen] == [JSON_MAX_TOKENS, IMPORT_MAX_TOKENS]
     assert seen[0]["json_schema"]["properties"]["summary"]["maxLength"] == 500
+    # the repeat penalty is applied to these extraction calls only, not globally
+    assert {kw["repeat_penalty"] for kw in seen} == {extract.REPEAT_PENALTY}
 
 
 def test_cut_off_extraction_falls_back_to_questions(monkeypatch: pytest.MonkeyPatch) -> None:
