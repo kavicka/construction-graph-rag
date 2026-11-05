@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from app.config import get_settings
 from app.retrieve.scope_guard import NOT_FOUND_REPLY, OFFTOPIC_REPLY, SECRET_REPLY
 from app.workforce.qa.access import MEMBER_DENIED, OTHERS_DENIED
-from tests.test_chat_api import _fake_sources, _parse_sse
+from tests.test_chat_api import _fake_sources, _fake_stream, _parse_sse
 from tests.test_firma_qa import T, submit_report
 from tests.wf_fixtures import ADMIN, login_admin, make_site, make_task, make_worker
 
@@ -89,6 +89,23 @@ def test_offtopic_classifier_in_chat(
     )
     _, text = _chat(client, "Koľko gólov dal Messi minulú sezónu?")
     assert text == OFFTOPIC_REPLY
+
+
+def test_document_question_about_workers_goes_to_documents(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Eval da-pracovnici: „pracovníkov“ alone is no company question when a site diary has it."""
+    _seed(client)
+    monkeypatch.setattr("app.workforce.qa.intents.llm_intents", lambda q: ["site_overview"])
+    monkeypatch.setattr("app.retrieve.orchestrator.library_match", lambda q: True)
+    monkeypatch.setattr("app.retrieve.orchestrator.retrieve_sources", _fake_sources)
+    monkeypatch.setattr("app.retrieve.orchestrator.chat_stream", _fake_stream)
+    events, _ = _chat(client, "Koľko pracovníkov bolo na stavbe pri betonáži základovej dosky?")
+    assert events[0]["mode"] != "firma"
+    assert all(e.get("mode") != "firma" for e in events if e["type"] in ("plan", "final"))
+    # a named worker keeps the company answer even when documents match too
+    events, text = _chat(client, "čo robi dnes Jozef Mikus?")
+    assert events[0] == {"type": "plan", "mode": "firma"} and "Murovanie" in text
 
 
 def test_refusal_becomes_fixed_sentence(

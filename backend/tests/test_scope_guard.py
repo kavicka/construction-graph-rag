@@ -10,6 +10,7 @@ from app.retrieve.scope_guard import (
     SECRET_REPLY_EN,
     check_question,
     classify_scope,
+    library_match,
     reply_for,
 )
 
@@ -126,3 +127,78 @@ def test_classifier(monkeypatch: pytest.MonkeyPatch) -> None:
     get_settings.cache_clear()
     monkeypatch.setattr(scope_guard, "generate_sync", fake)
     assert classify_scope("Koľko gólov dal Messi?", []) == "ok"
+
+
+# --- library evidence before the classifier ----------------------------------------------
+
+# chunks of the eval corpus (eval/construction.py) the regression questions are answered from
+LIBRARY = [
+    "Zateplenie fasády minerálnou vlnou hrúbky 160 mm, zateplenie strechy hrúbkou 300 mm, "
+    "nové okná so súčiniteľom Uw = 0,9 W/m²K a dve tepelné čerpadlá vzduch-voda s výkonom "
+    "2 × 45 kW. Cieľom je energetická trieda A0 s potrebou tepla 38 kWh/m² za rok. "
+    "Technická správa — Rekonštrukcia ZŠ Hrnčiarska, budova školy.",
+    "Truck-mounted concrete pump CP-07 with a 36 m boom. Operators need a valid certificate, "
+    "which is valid for 5 years.",
+    "12. 5. 2026 Betonáž základovej dosky. Uložených 64 m³ betónu triedy C30/37. "
+    "Na stavbe 14 pracovníkov, počasie polooblačno, 18 °C.",
+]
+
+
+@pytest.fixture
+def library(monkeypatch: pytest.MonkeyPatch) -> list[set[str] | None]:
+    """BM25 returns the corpus chunks for any query; records the access filter it got."""
+    seen: list[set[str] | None] = []
+
+    def fake_fts(query: str, k: int = 24, doc_ids: set[str] | None = None) -> list[dict[str, str]]:
+        seen.append(doc_ids)
+        return [
+            {"chunk_id": f"d{i}:t0", "doc_id": f"d{i}", "text": t} for i, t in enumerate(LIBRARY)
+        ]
+
+    monkeypatch.setattr(scope_guard, "search_fts", fake_fts)
+    return seen
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "Aký výkon majú tepelné čerpadlá pre školu?",
+        "Aká má byť potreba tepla školy po rekonštrukcii?",
+        "How long is the boom of concrete pump CP-07?",
+        "Koľko pracovníkov bolo na stavbe pri betonáži základovej dosky?",
+    ],
+)
+def test_library_match_finds_document_questions(
+    library: list[set[str] | None], question: str
+) -> None:
+    assert library_match(question) is True
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "Odporuč mi nejaký dobrý film na večer.",
+        "Kto vyhral Tour de France v roku 2024?",
+        "Koľko gólov dal Messi minulú sezónu?",
+        "Aká je najvyššia budova na svete?",
+        "Ako funguje tepelné čerpadlo v chladničke?",  # 2 of 4 words — not enough
+        "Who won the World Cup in 2022?",
+        "Kto napísal Hamleta?",
+        "Čo je to fotosyntéza?",  # a single content word proves nothing
+    ],
+)
+def test_library_match_ignores_offtopic(library: list[set[str] | None], question: str) -> None:
+    assert library_match(question) is False
+
+
+def test_library_match_searches_only_visible_documents(
+    library: list[set[str] | None], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(scope_guard, "allowed_doc_ids", lambda: {"d7"})
+    library_match("Aký výkon majú tepelné čerpadlá pre školu?")
+    assert library == [{"d7"}]
+
+
+def test_library_match_identifier_must_match_whole(library: list[set[str] | None]) -> None:
+    assert library_match("How long is the boom of pump CP-07?") is True
+    assert library_match("How long is the boom of pump CP-08?") is False  # boom, pump: 2 of 3

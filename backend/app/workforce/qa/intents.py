@@ -188,6 +188,7 @@ class FirmaQuery:
     ambiguous: list[tuple[str, list[WorkerRef]]] = field(default_factory=list)
     unknown_name: str | None = None
     via_llm: bool = False
+    by_rule: bool = False  # a type pattern matched, not just a fallback from the entities found
 
 
 def _rule_intents(qn: str, *, has_worker: bool, has_tasks: bool, has_sites: bool) -> list[Intent]:
@@ -301,6 +302,7 @@ def detect(
         period=period,
         self_ref=self_ref,
         ambiguous=resolved.ambiguous,
+        by_rule=any(rx.search(qn) for _, rx in RULES),
     )
     if not intents:
         query.intents = llm_intents(question)

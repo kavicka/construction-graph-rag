@@ -31,6 +31,15 @@ class FirmaResult:
     steps: list[dict[str, str]] = field(default_factory=list)
     intents: list[str] = field(default_factory=list)
     denied: bool = False
+    # False = no site, worker, period or "me" and no type pattern (the type is only guessed) —
+    # the chat then prefers a matching document (orchestrator); the phone ignores it
+    anchored: bool = True
+
+
+def _anchored(query: FirmaQuery) -> bool:
+    """A task title matched by one word („betonáži“ ~ „Betonáž stropu“) is no anchor."""
+    named = query.workers or query.ambiguous or query.sites
+    return bool(named or query.period or query.self_ref or query.by_rule)
 
 
 def _summary(query: FirmaQuery, today: date) -> str:
@@ -53,12 +62,14 @@ def answer_firma(
     if query is None:
         return FirmaResult(HELP_WORKER) if worker_context else None
 
+    anchored = _anchored(query)
     decision = authorize(query, viewer, snap)
     if isinstance(decision, Denied):
         return FirmaResult(
             decision.message,
             denied=True,
             steps=[{"tool": "firma", "summary": "prístup zamietnutý"}],
+            anchored=anchored,
         )
     query = decision
 
@@ -72,14 +83,17 @@ def answer_firma(
         team = ", ".join(w.name for w in snap.workers if w.active)
         return FirmaResult(
             f"Pracovníka „{query.unknown_name}“ v tíme nemám."
-            + (f" V tíme sú: {team}." if team else "")
+            + (f" V tíme sú: {team}." if team else ""),
+            anchored=anchored,
         )
     if not query.intents:
-        return FirmaResult(HELP_WORKER if viewer.own_only else HELP_ADMIN)
+        return FirmaResult(HELP_WORKER if viewer.own_only else HELP_ADMIN, anchored=anchored)
 
     text = render(Ctx(query=query, snap=snap, viewer=viewer, today=today))
     step = {"tool": "firma", "summary": _summary(query, today)}
     if query.via_llm:
         step["summary"] += " (typ určil model)"
     # task names, notes and problems are written by people — a password can show up there too
-    return FirmaResult(redact_secrets(text), steps=[step], intents=list(query.intents))
+    return FirmaResult(
+        redact_secrets(text), steps=[step], intents=list(query.intents), anchored=anchored
+    )

@@ -269,6 +269,28 @@ def test_document_questions_stay_in_rag(firma: dict[str, Any], question: str) ->
     assert detect(question, qa_data.snapshot(), T) is None
 
 
+def test_llm_typed_question_without_entity_is_not_anchored(
+    firma: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The chat may hand an unanchored answer to the documents (eval da-pracovnici)."""
+    monkeypatch.setattr("app.workforce.qa.intents.llm_intents", lambda q: ["site_overview"])
+    for question in [
+        "Koľko pracovníkov bolo na stavbe pri betonáži základovej dosky?",
+        # „betonáži“ also fuzzily matches the task „Betonáž stropu nad 1. NP“ — not an anchor
+        "Koľko pracovníkov bolo na stavbe pri betonáži stropu?",
+    ]:
+        weak = answer_firma(question, ADMIN, today=T)
+        assert weak is not None and not weak.anchored, question
+    for question in [
+        "Koľko pracovníkov bolo dnes na stavbe?",  # period
+        "Koľko pracovníkov má Rovinka?",  # site
+        "Ktoré úlohy meškajú?",  # type from the rules
+        "Aká je dnes dochádzka?",
+    ]:
+        result = answer_firma(question, ADMIN, today=T)
+        assert result is not None and result.anchored, question
+
+
 # --- answers (admin) --------------------------------------------------------------------
 
 

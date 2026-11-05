@@ -53,6 +53,7 @@ from app.retrieve.scope_guard import (
     ScopeDecision,
     check_question,
     classify_scope,
+    library_match,
     not_found_reply,
     reply_for,
 )
@@ -141,6 +142,11 @@ def _in_scope(question: str) -> bool:
         return True
     snap = qa_data.snapshot()  # a site or worker in the question = definitely a company topic
     if match_sites(question, snap.sites) or match_workers(question, snap.workers).workers:
+        return True
+    # A false "off-topic" refuses a legitimate question, a false "in scope" only ends in a sourced
+    # answer or the fixed "nothing found" reply — so evidence in the library beats the classifier,
+    # which sees nothing but file titles.
+    if library_match(question):
         return True
     allowed = allowed_doc_ids()
     titles = [
@@ -467,7 +473,11 @@ async def _run(
             return
     if mode != "research":
         firma = await _traced("rag.firma", ctx, lambda: answer_firma(question, viewer_from_scope()))
-        if firma is not None:
+        # „Koľko pracovníkov bolo na stavbe pri betonáži?“ — no site, worker or period and no type
+        # pattern (FirmaResult.anchored): a matching document answers better
+        if firma is not None and (
+            firma.anchored or not await _traced("rag.library", ctx, library_match, question)
+        ):
             async for event in _fixed("firma", firma.answer, firma.steps):
                 yield event
             return

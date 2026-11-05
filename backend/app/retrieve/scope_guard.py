@@ -9,7 +9,8 @@ Deterministic (no LLM), for chat, MCP `ask` and the worker mobile app:
 The question is also checked in an unmasked form („h-e-s-l-o“, „h e s l o“, „h3sl0“) — that is how
 simple filters get bypassed. For a lookup question without a library signal, a small LLM classifier
 (`classify_scope`) decides the scope; on error it lets the question through —
-RAG answers only from sources anyway.
+RAG answers only from sources anyway. Before the classifier, `library_match` looks for lexical
+evidence in the documents the user may see: a real match keeps the question in scope.
 """
 
 import logging
@@ -20,7 +21,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ValidationError
 
+from app.auth import allowed_doc_ids
 from app.config import get_settings
+from app.index.lancedb_store import search_fts
 from app.llm.ollama_client import OllamaError, generate_sync
 from app.retrieve.injection import looks_like_injection
 
@@ -273,3 +276,61 @@ def classify_scope(question: str, documents: list[str]) -> Verdict:
         logger.warning("klasifikátor rozsahu zlyhal: %s", exc)
         return "ok"
     return "offtopic" if parsed.scope == "mimo" else "ok"
+
+
+# --- library evidence (lexical, no model) -----------------------------------------------
+
+# question words, auxiliaries and fillers — they occur in any text and prove nothing
+_FILLER = frozenset(
+    re.findall(
+        r"\w+",
+        """
+    kolko kedy kde preco ktory ktora ktore ktori ktoreho ktorej ktorom ktorych ktorymi ktorou
+    akej akeho akom akou akych akymi akemu koho komu comu cim bola bolo boli bude budu budem
+    maju mame mate mala malo mali moze mozu mozem treba podla este tento tato toto tieto
+    tejto tomto tymto tych nieco niekto vsetky vsetko vsetci prosim chcem potrebujem mozes
+    povedz napis vypis zisti roku rokoch dnes teraz velmi trochu tiez alebo lebo
+    what which when where whom whose does have that with this there many much long about
+    from your please tell know should would could they their them were been into after
+    before shall will also only
+    """,
+    )
+)
+# identifiers like „CP-07“, „TC-03“, „K-06“, „C30“ — matched whole, not by prefix
+_CODE = re.compile(r"\b([a-z]{1,4})-?(\d{1,4})\b")
+_WORD = re.compile(r"[a-z0-9]+")
+
+
+def _stem(word: str) -> str:
+    """Prefix that survives Slovak inflection: „školu“/„školy“ → „skol“, „čerpadlá“ → „cerpad“."""
+    return word[: max(4, min(len(word) - 2, 6))]
+
+
+def _terms(text: str) -> tuple[set[str], set[str]]:
+    """Content words (≥ 4 letters, no filler, no bare numbers) and identifiers of a text."""
+    base = _norm(text)
+    codes = {a + b for a, b in _CODE.findall(base)}
+    words = {w for w in _WORD.findall(base) if len(w) >= 4 and not w.isdigit()}
+    return words - _FILLER, codes
+
+
+def library_match(question: str, *, k: int = 8) -> bool:
+    """Does a document the user may see share the question's content words?
+
+    BM25 over the access-filtered index, then at least min(3, n) of the question's n content
+    words (stems) or identifiers in ONE chunk, never fewer than 2. Calibrated on the eval corpus
+    (eval/construction.py): document questions hit 3–5 words, off-topic questions 0–2.
+    Cross-lingual questions with no shared words are left to the classifier."""
+    words, codes = _terms(question)
+    needed = min(3, len(words) + len(codes))
+    if needed < 2:
+        return False
+    stems = {_stem(w) for w in words}
+    for row in search_fts(question, k=k, doc_ids=allowed_doc_ids()):
+        text_words, text_codes = _terms(row["text"])
+        hits = len(codes & text_codes) + sum(
+            any(w.startswith(stem) for w in text_words) for stem in stems
+        )
+        if hits >= needed:
+            return True
+    return False

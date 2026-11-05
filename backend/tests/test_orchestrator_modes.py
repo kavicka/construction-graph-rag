@@ -12,7 +12,7 @@ import pytest
 
 from app import db
 from app.config import get_settings
-from app.retrieve import orchestrator
+from app.retrieve import orchestrator, scope_guard
 from app.retrieve.agent import AgentResult
 from app.retrieve.orchestrator import answer_question, run_query, strip_think
 from app.retrieve.pipeline import Source
@@ -350,8 +350,13 @@ async def test_firma_answer_is_a_fixed_reply_without_sources(
         orchestrator,
         "answer_firma",
         lambda question, viewer: SimpleNamespace(
-            answer="Jozef odpracoval 8 h.", steps=[{"tool": "firma", "summary": "hodiny"}]
+            answer="Jozef odpracoval 8 h.",
+            steps=[{"tool": "firma", "summary": "hodiny"}],
+            anchored=True,
         ),
+    )
+    monkeypatch.setattr(
+        orchestrator, "library_match", lambda q: pytest.fail("an anchored answer needs no search")
     )
     monkeypatch.setattr(
         orchestrator, "route_query", lambda q: pytest.fail("firma answers skip the router")
@@ -361,6 +366,38 @@ async def test_firma_answer_is_a_fixed_reply_without_sources(
     assert events[0] == {"type": "plan", "mode": "firma"}
     assert of_type(events, "sources")[0]["sources"] == []
     assert final_of(events)["answer"] == "Jozef odpracoval 8 h."
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(("in_library", "mode"), [(True, "lookup"), (False, "firma")])
+async def test_unanchored_firma_answer_yields_to_a_matching_document(
+    monkeypatch: pytest.MonkeyPatch, in_library: bool, mode: str
+) -> None:
+    # eval da-pracovnici: the answer is in a site diary, not in company records
+    question = "Koľko pracovníkov bolo na stavbe pri betonáži základovej dosky?"
+    monkeypatch.setattr(
+        orchestrator,
+        "answer_firma",
+        lambda q, v: SimpleNamespace(
+            answer="Žiadna stavba nemá otvorené úlohy.", steps=[], anchored=False
+        ),
+    )
+    monkeypatch.setattr(orchestrator, "library_match", lambda q: in_library)
+    plan_as(monkeypatch, QueryPlan(mode="lookup"))
+    monkeypatch.setattr(
+        orchestrator,
+        "retrieve_sources",
+        lambda q, *a, **k: [_source(1, "Na stavbe 14 pracovníkov.")],
+    )
+    monkeypatch.setattr(
+        orchestrator, "chat_stream", fake_stream("Na stavbe bolo 14 pracovníkov [1].")
+    )
+    events = await events_of(question)
+    assert events[0] == {"type": "plan", "mode": mode}
+    if in_library:
+        assert "14 pracovníkov" in final_of(events)["answer"]
+    else:
+        assert final_of(events)["answer"] == "Žiadna stavba nemá otvorené úlohy."
 
 
 @pytest.mark.anyio
@@ -556,6 +593,35 @@ def test_in_scope_falls_back_to_classifier_with_visible_titles(
     monkeypatch.setattr(orchestrator, "classify_scope", classify)
     assert orchestrator._in_scope("Koľko gólov dal Messi?") is False
     assert seen == [["Zmluva o dielo"]]  # extension stripped, hidden documents not disclosed
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "Aký výkon majú tepelné čerpadlá pre školu?",
+        "Aká má byť potreba tepla školy po rekonštrukcii?",
+        "How long is the boom of concrete pump CP-07?",
+    ],
+)
+def test_library_evidence_overrules_an_offtopic_classifier(
+    monkeypatch: pytest.MonkeyPatch, question: str
+) -> None:
+    """Eval regressions ts-cerpadla, ts-potreba-ciel, eq-pump-boom: the classifier saw only
+    file titles and said "mimo", although the answer is in the documents."""
+    from tests.test_scope_guard import LIBRARY
+
+    monkeypatch.setenv("RAG_SCOPE_CLASSIFIER", "true")
+    get_settings.cache_clear()
+    monkeypatch.setattr(orchestrator, "mentions_library", lambda q: False)
+    monkeypatch.setattr(orchestrator.qa_data, "snapshot", _snapshot_with)
+    monkeypatch.setattr(scope_guard, "generate_sync", lambda *a, **kw: '{"scope": "mimo"}')
+    monkeypatch.setattr(
+        scope_guard,
+        "search_fts",
+        lambda q, k=24, doc_ids=None: [{"doc_id": "d1", "text": t} for t in LIBRARY],
+    )
+    assert orchestrator._in_scope(question) is True
+    assert orchestrator._in_scope("Odporuč mi nejaký dobrý film na večer.") is False
 
 
 @pytest.mark.anyio
