@@ -2,8 +2,8 @@
 
 1. Exact norm_key match → the same node (handled already when building the ID).
 2. rapidfuzz over norm_key ≥ FUZZY_THRESHOLD → SAME_AS (typos, declension).
-3. Embedding cosine of labels ≥ EMB_THRESHOLD → cross-lingual SAME_AS (SK ↔ EN
-   works thanks to the multilingual space).
+3. Embedding cosine of labels ≥ the model's floor (EMB_THRESHOLDS) → cross-lingual SAME_AS
+   (SK ↔ EN works thanks to the multilingual space).
 
 Key rule (empirically verified on a sample corpus): SAME_AS is created ONLY
 between concepts from DISJOINT sets of documents. Within a single document
@@ -25,8 +25,20 @@ from app.index.embedder import get_embedder
 logger = logging.getLogger(__name__)
 
 FUZZY_THRESHOLD = 90.0
-EMB_THRESHOLD = 0.70
+# Cosine floor per embedding model. 0.70 is calibrated for bge-m3 (see the module docstring).
+# multilingual-e5-small is anisotropic: any two short labels land at ~0.77–0.89, so no floor
+# separates true pairs from unrelated ones and the embedding step would link every concept to
+# every other. For it only the fuzzy step runs. Unknown models keep the default.
+EMB_THRESHOLDS: dict[str, float | None] = {
+    "BAAI/bge-m3": 0.70,
+    "intfloat/multilingual-e5-small": None,
+}
+DEFAULT_EMB_THRESHOLD = 0.70
 MAX_EMB_CANDIDATES = 400  # guard for a large graph
+
+
+def emb_threshold(model_name: str) -> float | None:
+    return EMB_THRESHOLDS.get(model_name, DEFAULT_EMB_THRESHOLD)
 
 
 def _cosine(a: list[float], b: list[float]) -> float:
@@ -82,8 +94,11 @@ def resolve_same_as(new_node_ids: list[str]) -> int:
                 )
                 created += 1
 
-    if len(all_concepts) <= MAX_EMB_CANDIDATES:
-        embedder = get_embedder()
+    embedder = get_embedder()
+    threshold = emb_threshold(embedder.model_name)
+    if threshold is None:
+        logger.info("resolve: %s has no usable label cosine — fuzzy only", embedder.model_name)
+    elif len(all_concepts) <= MAX_EMB_CANDIDATES:
         new_vecs = embedder.embed_passages([n["label"] for n in new_nodes])
         old_vecs = embedder.embed_passages([n["label"] for n in old_nodes])
         for nn, nv in zip(new_nodes, new_vecs, strict=True):
@@ -94,7 +109,7 @@ def resolve_same_as(new_node_ids: list[str]) -> int:
                 if pair in matched:
                     continue
                 sim = _cosine(nv, ov)
-                if sim >= EMB_THRESHOLD:
+                if sim >= threshold:
                     matched.add(pair)
                     db.upsert_graph_edge(
                         pair[0],
@@ -106,6 +121,6 @@ def resolve_same_as(new_node_ids: list[str]) -> int:
                     created += 1
     else:
         logger.info(
-            "resolve: %s konceptov nad limitom — embedding krok preskočený", len(all_concepts)
+            "resolve: %s concepts over the limit — embedding step skipped", len(all_concepts)
         )
     return created
