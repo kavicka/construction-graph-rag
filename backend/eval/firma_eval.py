@@ -417,7 +417,15 @@ def _judge(case: Case, out: dict[str, Any], canaries: list[str]) -> dict[str, An
 def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         _setup_env(Path(tmp) / "data")
-        run(Path(tmp))
+        from app.auth import LOCAL_ADMIN, reset_scope, set_scope
+
+        # API calls get their scope from the login (TestClient → middleware); in-process
+        # calls (scope classifier over document titles) would otherwise fail closed
+        token = set_scope(LOCAL_ADMIN)
+        try:
+            run(Path(tmp))
+        finally:
+            reset_scope(token)
 
 
 def run(tmp: Path) -> None:  # noqa: PLR0915 — the eval is a linear scenario

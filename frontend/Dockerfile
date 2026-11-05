@@ -1,4 +1,4 @@
-# Frontend: Vite build → nginx, ktorý proxuje /api a /mcp na backend.
+# Frontend: Vite build → nginx, which proxies /api and /mcp to the backend.
 FROM node:22-alpine AS build
 RUN corepack enable
 WORKDIR /app

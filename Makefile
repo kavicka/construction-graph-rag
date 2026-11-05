@@ -1,12 +1,15 @@
-.PHONY: install dev backend frontend models test lint eval eval-full eval-gate eval-baseline mcp docker \
-	demo demo-seed demo-up demo-reset
-
-# Voice (Whisper STT + Piper TTS, GPL-3) is an optional extra — installed on macOS only
-UV_EXTRAS := $(if $(filter Darwin,$(shell uname -s)),--extra voice,)
+.PHONY: install install-voice dev backend frontend models test lint eval eval-full eval-gate \
+	eval-baseline mcp docker demo demo-seed demo-up demo-reset
 
 install:
-	cd backend && uv sync $(UV_EXTRAS)
+	cd backend && uv sync
 	cd frontend && pnpm install
+
+# opt-in voice extra (speech-to-text + spoken questions); never installed by default
+install-voice:
+	@echo "→ voice extra: Piper TTS is GPL-3.0 (the running app then links GPL code, see THIRD_PARTY.md);"
+	@echo "  Whisper (mlx-whisper) runs on Apple Silicon only"
+	cd backend && uv sync --inexact --extra voice
 
 # retrieval ablations over the construction corpus (eval/construction.py) → backend/eval/REPORT.md
 eval:

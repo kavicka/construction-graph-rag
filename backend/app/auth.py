@@ -17,7 +17,7 @@ import json
 import secrets
 import uuid
 from contextvars import ContextVar
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -36,6 +36,7 @@ class AccessScope:
     email: str | None
     role: str  # admin | member
     groups: frozenset[str] = field(default_factory=frozenset)
+    via_token: bool = False  # authenticated with an API token (Bearer), not a session cookie
 
     @property
     def unrestricted(self) -> bool:
@@ -145,7 +146,7 @@ def scope_for_user(user: dict[str, Any]) -> AccessScope:
 def resolve_token(session_token: str | None, bearer: str | None) -> AccessScope | None:
     if bearer:
         user = db.user_for_api_token(_token_hash(bearer), datetime.now(UTC).isoformat())
-        return scope_for_user(user) if user else None
+        return replace(scope_for_user(user), via_token=True) if user else None
     if session_token:
         user = db.user_for_session(_token_hash(session_token), datetime.now(UTC).isoformat())
         return scope_for_user(user) if user else None

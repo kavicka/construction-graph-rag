@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from app import db
+from app.auth import LOCAL_ADMIN, reset_scope, set_scope
 from app.config import get_settings
 from app.graph.build import build_document_graph
 from app.index import lancedb_store
@@ -468,6 +469,16 @@ def _merge_previous(results: dict[str, Any]) -> dict[str, Any]:
 
 
 def main() -> int:
+    # retrieval and the orchestrator run in-process, outside any request: without an explicit
+    # scope they fail closed (see no documents) whenever RAG_AUTH_ENABLED=true is in the env
+    token = set_scope(LOCAL_ADMIN)
+    try:
+        return _run()
+    finally:
+        reset_scope(token)
+
+
+def _run() -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )

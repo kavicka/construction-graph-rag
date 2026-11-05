@@ -2,11 +2,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# voice (Whisper STT + Piper TTS) is an optional extra — on macOS install it;
-# --inexact keeps other extras (e.g. visual) that were installed by hand
-if [ "$(uname -s)" = "Darwin" ]; then
-  (cd backend && uv sync --inexact --extra voice)
-fi
+# sync the core dependencies; --inexact keeps opt-in extras (voice from `make install-voice`,
+# visual) that are already installed — this script never adds one
+(cd backend && uv sync --inexact)
 
 if ! curl -sf http://localhost:11434/api/version >/dev/null 2>&1; then
   echo "→ starting ollama serve"

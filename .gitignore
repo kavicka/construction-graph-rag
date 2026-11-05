@@ -16,3 +16,4 @@ dist/
 /inbox/*
 !/inbox/.gitkeep
 /demo-data/
+.coverage

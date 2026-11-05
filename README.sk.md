@@ -35,7 +35,8 @@ make demo
 
 Príkaz vytvorí ukážku z vymyslenej firmy a spustí aplikáciu; vypíše adresu a prihlasovacie
 údaje. Potrebujete [Ollama](https://ollama.com), asi 4 GB na stiahnutie modelov, macOS alebo
-Linux. Hlasové funkcie vyžadujú Mac s čipom Apple Silicon a `uv sync --extra voice`;
+Linux. Hlasové funkcie vyžadujú Mac s čipom Apple Silicon a voliteľnú inštaláciu
+`make install-voice` (Piper je pod licenciou GPL-3, preto sa neinštaluje automaticky);
 bez nich funguje všetko ostatné písomne. Rozhranie aplikácie je po slovensky.
 
 Alternatívne `docker compose up -d --build` (http://localhost:8080), podrobnosti v

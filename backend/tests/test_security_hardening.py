@@ -275,6 +275,18 @@ def test_token_list_and_revoke_endpoints(auth_on: None) -> None:
         assert script.get("/api/documents", headers=bearer).status_code == 401
 
 
+def test_api_token_cannot_mint_new_tokens(auth_on: None) -> None:
+    with TestClient(app) as browser:
+        _login(browser, *ADMIN)
+        token = browser.post("/api/auth/tokens", json={"name": "mcp"}).json()["token"]
+    bearer = {"Authorization": f"Bearer {token}"}
+    with TestClient(app) as script:
+        assert script.get("/api/auth/tokens", headers=bearer).status_code == 200
+        renewed = script.post("/api/auth/tokens", json={"name": "next"}, headers=bearer)
+        assert renewed.status_code == 403 and "prihlásení" in renewed.json()["detail"]
+    assert resolve_token(None, token).via_token  # type: ignore[union-attr]
+
+
 def test_worker_cannot_mint_or_list_api_tokens(auth_on: None) -> None:
     with TestClient(app) as client:
         _login(client, *ADMIN)
@@ -331,30 +343,92 @@ def test_expired_pin_lock_starts_fresh_round(ready_db: None) -> None:
     assert check_pin(worker["id"], "1234").ok
 
 
-def test_failed_logins_are_rate_limited_per_ip(
+def test_failed_logins_are_rate_limited_per_account(
     auth_on: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("RAG_LOGIN_MAX_FAILURES", "3")
     with TestClient(app) as client:
+        _login(client, *ADMIN)
+        body = {"email": "jan@firma.sk", "name": "Ján", "password": MEMBER_PASSWORD}
+        assert client.post("/api/users", json=body).status_code == 201
+        client.post("/api/auth/logout")
         for _ in range(3):
-            bad = client.post("/api/auth/login", json={"email": ADMIN[0], "password": "zle-heslo"})
+            bad = client.post("/api/auth/login", json={"email": "JAN@firma.sk ", "password": "x"})
             assert bad.status_code == 401
-        blocked = client.post("/api/auth/login", json={"email": ADMIN[0], "password": ADMIN[1]})
+        blocked = client.post("/api/auth/login", json={"email": "jan@firma.sk", "password": "x"})
         assert blocked.status_code == 429
         assert "neúspešných" in blocked.json()["detail"] and blocked.headers["retry-after"]
-        # the same budget covers worker PIN login
+        right = client.post(
+            "/api/auth/login", json={"email": "jan@firma.sk", "password": MEMBER_PASSWORD}
+        )
+        assert right.status_code == 429  # the right password does not get through either
+        # same client IP (e.g. everyone behind one proxy), other accounts are not locked out
+        _login(client, *ADMIN)
         pin = client.post("/api/auth/pin", json={"worker_id": "x", "pin": "1234"})
-        assert pin.status_code == 429
+        assert pin.status_code == 401
+
+
+def test_per_ip_cap_slows_password_spraying(auth_on: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("RAG_LOGIN_IP_MAX_FAILURES", "4")
+    with TestClient(app) as client:
+        for i in range(4):
+            resp = client.post(
+                "/api/auth/login", json={"email": f"u{i}@firma.sk", "password": "zle-heslo"}
+            )
+            assert resp.status_code == 401
+        sprayed = client.post("/api/auth/login", json={"email": ADMIN[0], "password": ADMIN[1]})
+        assert sprayed.status_code == 429
+
+
+def test_successful_login_resets_the_account_budget(
+    auth_on: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("RAG_LOGIN_MAX_FAILURES", "3")
+    with TestClient(app) as client:
+        for _ in range(2):
+            bad = client.post("/api/auth/login", json={"email": ADMIN[0], "password": "zle"})
+            assert bad.status_code == 401
+        _login(client, *ADMIN)
+        for _ in range(2):
+            bad = client.post("/api/auth/login", json={"email": ADMIN[0], "password": "zle"})
+            assert bad.status_code == 401
+        _login(client, *ADMIN)
+
+
+def test_parallel_password_guesses_cannot_exceed_limit(
+    auth_on: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("RAG_LOGIN_MAX_FAILURES", "3")
+    verified = 0
+    lock = threading.Lock()
+
+    def slow_verify(password: str, stored: str) -> bool:
+        nonlocal verified
+        with lock:
+            verified += 1
+        time.sleep(0.05)  # widen the window between "check limit" and "record failure"
+        return False
+
+    monkeypatch.setattr("app.api.auth.verify_password", slow_verify)
+    body = {"email": ADMIN[0], "password": "hadam"}
+    with TestClient(app) as client, ThreadPoolExecutor(max_workers=20) as pool:
+        codes = list(
+            pool.map(lambda _: client.post("/api/auth/login", json=body).status_code, range(20))
+        )
+    assert verified == 3
+    assert sorted(codes) == [401] * 3 + [429] * 17
 
 
 def test_rate_limiter_window_and_forwarded_for() -> None:
     now = [0.0]
-    limiter = LoginRateLimiter(2, 60.0, clock=lambda: now[0])
-    limiter.record_failure("1.2.3.4")
-    limiter.record_failure("1.2.3.4")
-    assert limiter.blocked("1.2.3.4") and not limiter.blocked("5.6.7.8")
+    limiter = LoginRateLimiter(2, 60.0, ip_max_failures=3, clock=lambda: now[0])
+    assert limiter.claim("1.2.3.4", "a") and limiter.claim("1.2.3.4", "a")
+    assert limiter.claim("1.2.3.4", "a") is None  # account budget from this IP spent
+    assert limiter.claim("5.6.7.8", "a")  # another IP is not affected
+    assert limiter.claim("1.2.3.4", "b")  # nor another account (IP bucket: 3 of 3)
+    assert limiter.claim("1.2.3.4", "c") is None  # coarse per-IP cap
     now[0] = 61.0
-    assert not limiter.blocked("1.2.3.4")
+    assert limiter.claim("1.2.3.4", "a")
 
     scope = {
         "type": "http",
@@ -365,6 +439,18 @@ def test_rate_limiter_window_and_forwarded_for() -> None:
     assert limiter.client_key(request) == "10.0.0.2"  # proxy header ignored by default
     trusted = LoginRateLimiter(2, 60.0, trusted_proxy=True)
     assert trusted.client_key(request) == "9.9.9.9"  # right-most = seen by our proxy
+
+
+def test_rate_limiter_evicts_oldest_keys_at_cap() -> None:
+    now = [0.0]
+    limiter = LoginRateLimiter(5, 60.0, clock=lambda: now[0])
+    limiter.MAX_KEYS = 3
+    for i, account in enumerate("abcd"):
+        now[0] = float(i)  # none of them expires within the window
+        assert limiter.claim("1.1.1.1", account)
+    keys = list(limiter._failures)
+    assert len(keys) == 3 and not any(k.endswith("\x00a") for k in keys)  # oldest evicted
+    assert any(k.endswith("\x00d") for k in keys)
 
 
 # --- 4: CSRF / cross-origin writes ---------------------------------------------------------

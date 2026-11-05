@@ -1,8 +1,8 @@
 # docker compose up -d   →  http://localhost:8080
 #
-# Prvý štart stiahne modely do volume (Ollama ~3,6 GB, embedding + reranker z Hugging Face).
-# Hostovaný LLM namiesto Ollamy: RAG_LLM_PROVIDER=openai RAG_OPENAI_API_KEY=… RAG_ANSWER_MODEL=…
-# (a služby ollama/ollama-pull môžeš vypnúť cez --scale ollama=0 --scale ollama-pull=0).
+# The first start downloads the models into volumes (Ollama ~3.6 GB, embedding + reranker from
+# Hugging Face). Hosted LLM instead of Ollama: RAG_LLM_PROVIDER=openai RAG_OPENAI_API_KEY=…
+# RAG_ANSWER_MODEL=… (and turn off ollama/ollama-pull with --scale ollama=0 --scale ollama-pull=0).
 services:
   ollama:
     image: ollama/ollama:latest
@@ -46,12 +46,13 @@ services:
       RAG_ADMIN_EMAIL: ${RAG_ADMIN_EMAIL:-}
       RAG_ADMIN_PASSWORD: ${RAG_ADMIN_PASSWORD:-}
       RAG_COOKIE_SECURE: ${RAG_COOKIE_SECURE:-false}
-      RAG_MCP_ALLOWED_HOSTS: "localhost:*,backend:*"
+      # hostnames accepted in the Host header of /api and /mcp and as browser Origin for writes
+      RAG_MCP_ALLOWED_HOSTS: ${RAG_MCP_ALLOWED_HOSTS:-localhost:*,backend:*}
       RAG_OTLP_ENDPOINT: ${RAG_OTLP_ENDPOINT:-}
     volumes:
       - data:/data
       - models:/models
-      - ./inbox:/data/inbox  # súbory sem nakopírované sa automaticky zaindexujú
+      - ./inbox:/data/inbox  # files copied here are indexed automatically
 
   frontend:
     build: ./frontend
@@ -61,7 +62,8 @@ services:
       # Localhost only: with RAG_AUTH_ENABLED=false (the default) anyone who can reach this
       # port can read and change the whole library. To expose it on your LAN or the
       # internet, first set RAG_AUTH_ENABLED=true with RAG_ADMIN_EMAIL / RAG_ADMIN_PASSWORD,
-      # add your hostname to RAG_MCP_ALLOWED_HOSTS, put it behind HTTPS (RAG_COOKIE_SECURE=true),
+      # set RAG_MCP_ALLOWED_HOSTS=localhost:*,backend:*,<your-hostname>:* (e.g. in .env next to
+      # this file), put it behind HTTPS (RAG_COOKIE_SECURE=true),
       # then change this to "8080:80".
       - "127.0.0.1:8080:80"
 

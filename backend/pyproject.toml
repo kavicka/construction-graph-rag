@@ -1,7 +1,7 @@
 [project]
 name = "rag-backend"
 version = "0.1.0"
-description = "Lokálny Graph-RAG backend — Docling + LanceDB + NetworkX + Ollama"
+description = "Local Graph-RAG backend — Docling + LanceDB + NetworkX + Ollama"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "docling>=2.123.0",
@@ -32,8 +32,9 @@ dependencies = [
 visual = [
     "colpali-engine>=0.3.10",
 ]
-# Hlas (prepis + syntéza): `uv sync --extra voice`. Piper je GPL-3.0 — preto nie je povinný;
-# mlx-whisper beží len na Apple Silicon. Bez extra ostáva všetko textové.
+# Voice (transcription + speech): opt-in via `make install-voice` (uv sync --extra voice).
+# Piper is GPL-3.0, so it is not a core dependency; mlx-whisper runs on Apple Silicon only.
+# Without the extra everything stays text-only.
 voice = [
     "mlx-whisper>=0.4.3; sys_platform == 'darwin' and platform_machine == 'arm64'",
     "piper-tts>=1.8.0",
@@ -75,7 +76,7 @@ dev = [
     "ruff>=0.16.4",
 ]
 
-# Linux (Docker, CI): CPU build torchu — CUDA wheel by pridal ~3 GB, ktoré tu netreba
+# Linux (Docker, CI): CPU build of torch — the CUDA wheel would add ~3 GB that is not needed here
 [tool.uv.sources]
 torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
 torchvision = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]

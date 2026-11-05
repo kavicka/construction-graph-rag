@@ -8,7 +8,7 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field, field_validator
 
 from app.api.access import require_admin
-from app.api.auth import ensure_login_allowed, record_login_failure
+from app.api.auth import claim_login_attempt, login_succeeded
 from app.auth import SESSION_COOKIE, current_scope
 from app.config import get_settings
 from app.workforce import store
@@ -56,10 +56,10 @@ def _attempts_left(n: int) -> str:
 
 @router.post("/auth/pin")
 async def pin_login(body: PinLoginIn, request: Request, response: Response) -> WorkerPublic:
-    client = ensure_login_allowed(request)
+    attempt = claim_login_attempt(request, "worker:" + body.worker_id)
     result = await run_in_threadpool(check_pin, body.worker_id, body.pin)
-    if not result.ok:
-        record_login_failure(client)
+    if result.ok:
+        login_succeeded(attempt)
     if result.locked:
         raise HTTPException(status_code=423, detail="príliš veľa pokusov — skús o chvíľu")
     if not result.ok:

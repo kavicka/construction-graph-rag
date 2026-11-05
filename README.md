@@ -51,7 +51,7 @@ and prints the URL and the demo logins.
 
 Prerequisites: [Ollama](https://ollama.com), about 4 GB of model downloads (`make models`),
 macOS or Linux, Python 3.12 with [uv](https://docs.astral.sh/uv/), Node with pnpm. Voice
-features (speech-to-text, spoken questions) need Apple Silicon and `uv sync --extra voice`;
+features (speech-to-text, spoken questions) need Apple Silicon and the opt-in `make install-voice`;
 without them everything else works with text only.
 
 ## What it does
@@ -202,18 +202,25 @@ The first start pulls `qwen3:4b-instruct` + `qwen3:1.7b` (~3.6 GB) into a volume
 hosted model instead, set `RAG_LLM_PROVIDER=openai`, `RAG_OPENAI_API_KEY` and
 `RAG_ANSWER_MODEL` (any OpenAI-compatible API: OpenAI, Groq, Together, vLLM, LM Studio).
 
+Upgrading from an older image: the backend now runs as UID 1000, and volumes created by the
+old root image stay owned by root. Fix them once with
+`docker compose run --rm --user root backend chown -R 1000:1000 /data /models`.
+
 ### macOS (native, fastest)
 
 ```bash
 brew install ollama tesseract tesseract-lang pango
 make models                              # pulls the Ollama models
-make install                             # uv sync --extra voice + pnpm install
+make install                             # uv sync + pnpm install (no optional extras)
+make install-voice                       # optional: voice extra (GPL-3 Piper, Apple Silicon)
 make dev                                 # backend :8000, frontend :5173
 ```
 
-Voice (Whisper speech-to-text, Piper text-to-speech) is the optional `voice` extra: Whisper
-runs on Apple Silicon only and Piper is GPL-3.0, so neither is a core dependency. Without it
-(Linux, Docker) reports and questions are text-only. See [THIRD_PARTY.md](THIRD_PARTY.md).
+Voice (Whisper speech-to-text, Piper text-to-speech) is the optional `voice` extra and is never
+installed automatically: Whisper runs on Apple Silicon only and Piper is GPL-3.0, so neither is
+a core dependency. `make install-voice` (= `uv sync --inexact --extra voice`) adds it; `make dev`
+keeps it once installed. Without it (Linux, Docker) reports and questions are text-only. See
+[THIRD_PARTY.md](THIRD_PARTY.md).
 
 Upload documents in *Dokumenty* (or copy them into `data/inbox/`), ask in *Chat*, explore
 links and themes in *Graf*, watch every step in *Traces*, fill in company details for generated
@@ -270,12 +277,13 @@ Environment variables with the `RAG_` prefix, or a `backend/.env` file. Copy
 | `RAG_SESSION_TTL_HOURS` | `168` | session lifetime |
 | `RAG_COOKIE_SECURE` | `false` | set `true` behind an HTTPS proxy |
 | `RAG_API_TOKEN_TTL_DAYS` | `90` | lifetime of API (Bearer) tokens |
-| `RAG_LOGIN_MAX_FAILURES` / `RAG_LOGIN_WINDOW_MINUTES` | `10` / `15` | failed password/PIN logins per client IP before `429` |
-| `RAG_TRUSTED_PROXY` | `false` | take the client IP from `X-Forwarded-For` (only behind your own proxy) |
+| `RAG_LOGIN_MAX_FAILURES` / `RAG_LOGIN_WINDOW_MINUTES` | `10` / `15` | failed logins per client IP and account (e-mail or worker) before `429` |
+| `RAG_LOGIN_IP_MAX_FAILURES` | `100` | failed logins per client IP over all accounts before `429` (slows password spraying) |
+| `RAG_TRUSTED_PROXY` | `false` | take the client IP from the right-most `X-Forwarded-For` entry; `true` only when every request comes through your own proxy that sets it (see Security) |
 | `RAG_INJECTION_GUARD` | `true` | prompt-injection defences for retrieved content |
 | `RAG_SCOPE_GUARD` | `true` | secrets, internals and off-purpose questions get a fixed answer |
 | `RAG_SCOPE_CLASSIFIER` | `true` | small LLM decides the scope when the library gives no signal |
-| `RAG_MCP_ALLOWED_HOSTS` | empty | extra `Host` headers accepted by `/mcp` |
+| `RAG_MCP_ALLOWED_HOSTS` | empty | extra hostnames besides localhost (`name` or `name:*` for any port): accepted in the `Host` header of every `/api` and `/mcp` request, and as browser `Origin` for writes (CSRF check). Add the name you open the app under, e.g. `rag.lan:*` |
 
 **Company module**
 
@@ -308,7 +316,17 @@ Environment variables with the `RAG_` prefix, or a `backend/.env` file. Copy
   renderer is sandboxed (LLM output cannot pull in URLs or local files).
 - **Secret redaction**: passwords, PINs, keys and tokens are masked in source text before the
   prompt, in the live stream and in the final answer. A scope guard refuses requests for them.
-- **Login limits**: per-worker PIN lockout plus a per-IP limiter on failed logins (`429`).
+- **Login limits**: per-worker PIN lockout plus an in-memory limiter (`429`) on failed logins
+  per client IP and account, with a much higher per-IP cap over all accounts. Attempts are
+  counted before the password or PIN is checked, so parallel guesses cannot exceed the limit.
+- **Client IP behind a proxy**: set `RAG_TRUSTED_PROXY=true` only when *every* request reaches
+  the backend through a reverse proxy you control that sets `X-Forwarded-For` (the Docker
+  setup does this: nginx in front of the backend). Leave it `false` when the backend is
+  reachable directly, otherwise clients can spoof their IP. Behind a proxy that does not set
+  the header (e.g. `tailscale serve` → Vite dev server) every client looks like `127.0.0.1`:
+  per-account limits still work, but the per-IP cap is shared by all clients.
+- **API tokens cannot mint tokens**: `POST /api/auth/tokens` needs a browser session, so a
+  leaked Bearer token cannot renew itself past its expiry.
 - **Docker publishes the UI on `127.0.0.1:8080` only.** Read the comment in
   [docker-compose.yml](docker-compose.yml) before changing it.
 

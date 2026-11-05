@@ -11,7 +11,7 @@ Licences were checked on 2026-11-04 against the linked model cards and package m
 |---|---|---|---|
 | JetBrains Mono (font) | SIL Open Font License 1.1 | `backend/app/docgen/fonts/` (full text in `OFL.txt`) | https://github.com/JetBrains/JetBrainsMono |
 
-## Optional voice extra (`uv sync --extra voice`, not installed by default)
+## Optional voice extra (opt-in: `make install-voice`; `make install`, `make dev` and Docker never add it)
 
 | Component | Licence | Notes | Source |
 |---|---|---|---|

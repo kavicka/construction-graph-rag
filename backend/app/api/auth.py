@@ -21,7 +21,7 @@ from app.auth import (
     verify_password,
 )
 from app.config import get_settings
-from app.security import LOGIN_RATE_LIMITED, get_login_limiter
+from app.security import LOGIN_RATE_LIMITED, LoginAttempt, get_login_limiter
 from app.workforce.runtime import is_worker
 
 router = APIRouter()
@@ -55,34 +55,35 @@ class LoginIn(BaseModel):
     password: str = Field(min_length=1, max_length=200)
 
 
-def ensure_login_allowed(request: Request) -> str:
-    """429 while this client has too many recent failed logins → client key for
-    `record_login_failure`. Shared by password and worker PIN login."""
+def claim_login_attempt(request: Request, account: str) -> LoginAttempt:
+    """Count one login attempt for `account` from this client BEFORE the credentials are
+    verified → 429 while the account (from this IP) or the IP itself has too many recent
+    failures. Shared by password and worker PIN login; call `login_succeeded` on success."""
     limiter = get_login_limiter()
-    key = limiter.client_key(request)
-    if limiter.blocked(key):
+    attempt = limiter.claim(limiter.client_key(request), account)
+    if attempt is None:
         raise HTTPException(
             status_code=429,
             detail=LOGIN_RATE_LIMITED,
             headers={"Retry-After": str(int(limiter.window_s))},
         )
-    return key
+    return attempt
 
 
-def record_login_failure(key: str) -> None:
-    get_login_limiter().record_failure(key)
+def login_succeeded(attempt: LoginAttempt) -> None:
+    get_login_limiter().succeeded(attempt)
 
 
 @router.post("/auth/login")
 async def login(body: LoginIn, request: Request, response: Response) -> UserOut:
-    client = ensure_login_allowed(request)
+    attempt = claim_login_attempt(request, "email:" + body.email.strip().casefold())
     user = await run_in_threadpool(db.get_user_by_email, body.email)
     # same error and same timing for a non-existent account and a wrong password
     stored = user["password_hash"] if user else DUMMY_HASH
     valid = await run_in_threadpool(verify_password, body.password, stored)
     if user is None or not valid:
-        record_login_failure(client)
         raise HTTPException(status_code=401, detail="nesprávny e-mail alebo heslo")
+    login_succeeded(attempt)
     token = await run_in_threadpool(create_session, user["id"])
     settings = get_settings()
     response.set_cookie(
@@ -199,6 +200,11 @@ async def new_token(body: TokenIn) -> TokenOut:
     scope = current_scope()
     if not scope.user_id:
         raise HTTPException(status_code=400, detail="bez prihlasovania token netreba")
+    # a leaked token must not renew itself — new tokens only from a logged-in browser session
+    if scope.via_token:
+        raise HTTPException(
+            status_code=403, detail="nový API token vytvoríš len po prihlásení, nie cez API token"
+        )
     # defence in depth — WorkerGuard already blocks this path for workers
     if await run_in_threadpool(is_worker, scope.user_id):
         raise HTTPException(status_code=403, detail="pracovník si API token vytvoriť nemôže")
