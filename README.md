@@ -29,13 +29,17 @@ model; a hosted LLM is one environment variable away.
 All numbers come from small synthetic sets (128 questions, 6 injection attacks, 21 red-team
 cases) and one local run each, so read them as engineering evidence, not benchmarks.
 
-![Chat: a citation opens the PDF at the cited passage](docs/img/chat.png)
+![A Slovak question answered from an English inspection register and a Slovak site record; the citation opens the PDF at the highlighted passage](docs/img/chat.png)
+
+*A Slovak question about a crane and a site manager, answered from two documents (one of them
+English). Both claims are checked against their sources; citation 1 opens the PDF at the
+highlighted passage.*
 
 | | |
 |---|---|
-| ![Worker phone: voice daily report](docs/img/worker-mobile.png)<br>Worker phone: voice daily report with follow-up questions | ![Task board](docs/img/tasks-board.png)<br>Task board with one column per worker |
+| ![Worker phone: today's report](docs/img/worker-mobile.png)<br>Worker phone: times, task progress and problems extracted from what the worker said | ![Task board](docs/img/tasks-board.png)<br>Task board with one column per worker |
 | ![Traces](docs/img/traces.png)<br>Traces: every pipeline step with tokens and latency | ![Knowledge graph](docs/img/graph.png)<br>Knowledge graph across documents |
-| ![Generated report](docs/img/report-pdf.png)<br>Generated branded PDF report | |
+| ![Daily summary PDF](docs/img/report-pdf.png)<br>Daily summary PDF generated for the owner | |
 
 The UI is in Slovak. Names are glossed in English where they first appear below.
 All companies and people in the repository, the demo and the eval corpus are fictional.
@@ -46,8 +50,18 @@ All companies and people in the repository, the demo and the eval corpus are fic
 make demo
 ```
 
-The command builds a demo from the synthetic corpus and a fictional company, starts the app
-and prints the URL and the demo logins.
+The command builds a demo from the synthetic corpus and a fictional company in a separate
+`demo-data/` folder, then starts the app at <http://localhost:5180> (API on :8010). It ingests
+the 12 PDFs, creates 7 workers, 3 sites and their tasks (via the real task import), files
+today's reports and two chats — about 6 minutes on an M4 Pro the first time, seconds afterwards.
+
+- Owner: `demo@example.com` / `demo-demo-demo`
+- Workers on a phone: pick a name and enter the PIN, e.g. Marek Hudák `1111`, Tomáš Baláž
+  `2222` (the command prints them)
+
+`make demo-up` starts an already built demo again, `make demo-reset` deletes it. It uses
+`qwen3:4b-instruct` and `qwen3:1.7b`; to use only one model:
+`RAG_EXTRACT_MODEL=qwen3:4b-instruct make demo`.
 
 Prerequisites: [Ollama](https://ollama.com), about 4 GB of model downloads (`make models`),
 macOS or Linux, Python 3.12 with [uv](https://docs.astral.sh/uv/), Node with pnpm. Voice
