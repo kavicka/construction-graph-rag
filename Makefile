@@ -1,4 +1,5 @@
-.PHONY: install dev backend frontend models test lint eval eval-full eval-gate eval-baseline mcp docker
+.PHONY: install dev backend frontend models test lint eval eval-full eval-gate eval-baseline mcp docker \
+	demo demo-seed demo-up demo-reset
 
 # Voice (Whisper STT + Piper TTS, GPL-3) is an optional extra — installed on macOS only
 UV_EXTRAS := $(if $(filter Darwin,$(shell uname -s)),--extra voice,)
@@ -31,6 +32,19 @@ docker:
 
 dev:
 	./scripts/dev.sh
+
+# synthetic demo in demo-data/ (backend :8010, frontend :5180) — seeds on the first run
+demo:
+	./scripts/demo.sh
+
+demo-seed:
+	./scripts/demo.sh seed
+
+demo-up:
+	./scripts/demo.sh up
+
+demo-reset:
+	rm -rf demo-data
 
 backend:
 	cd backend && uv run uvicorn app.main:app --reload --port 8000
