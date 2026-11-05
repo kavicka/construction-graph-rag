@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     data_dir: Path = Path(__file__).resolve().parent.parent.parent / "data"
     llm_provider: Literal["ollama", "openai"] = "ollama"
     ollama_base_url: str = "http://localhost:11434"
+    # minimum num_ctx for every Ollama call — a model reloads whenever num_ctx changes, so one
+    # size (the largest any caller needs, 12288 for answers) keeps it loaded; lower it on a
+    # tight machine at the cost of occasional reloads
+    ollama_num_ctx: int = 12288
     # OpenAI-compatible API (OpenAI, Groq, Together, vLLM, LM Studio…)
     openai_base_url: str = "https://api.openai.com/v1"
     openai_api_key: str | None = None

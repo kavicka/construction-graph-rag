@@ -164,7 +164,13 @@ def test_generate_ollama_payload_and_strip(http: Callable[[Handler], Recorder]) 
         "stream": False,
         "think": True,
         "keep_alive": "5m",
-        "options": {"temperature": 0.0, "num_ctx": 2048},
+        # num_ctx raised to RAG_OLLAMA_NUM_CTX; a structured call is capped by default
+        "options": {
+            "temperature": 0.0,
+            "num_ctx": 12288,
+            "repeat_penalty": 1.1,
+            "num_predict": 1024,
+        },
         "system": "buď stručný",
         "format": {"type": "object"},
     }
@@ -175,7 +181,59 @@ def test_generate_ollama_omits_optional_fields(http: Callable[[Handler], Recorde
     generate_sync("m", "p")
     assert "system" not in rec.body
     assert "format" not in rec.body
+    assert "num_predict" not in rec.body["options"]  # free text is not capped by default
     assert rec.body["think"] is False  # reasoning off by default
+
+
+def test_generate_ollama_explicit_max_tokens(http: Callable[[Handler], Recorder]) -> None:
+    rec = http(lambda r: httpx.Response(200, json={"response": "ok"}))
+    generate_sync("m", "p", max_tokens=200)
+    assert rec.body["options"]["num_predict"] == 200
+    generate_sync("m", "p", json_schema={"type": "object"}, max_tokens=3000)
+    assert rec.body["options"]["num_predict"] == 3000
+
+
+def test_generate_ollama_json_cut_off_by_cap_is_error(
+    http: Callable[[Handler], Recorder],
+) -> None:
+    """A runaway structured reply ends at the cap → OllamaError, so callers fall back."""
+    http(
+        lambda r: httpx.Response(
+            200, json={"response": '{"summary": "a a a', "done_reason": "length"}
+        )
+    )
+    with pytest.raises(OllamaError, match="limit 1024 tokenov"):
+        generate_sync("m", "p", json_schema={"type": "object"})
+
+
+def test_generate_ollama_free_text_cut_off_is_returned(
+    http: Callable[[Handler], Recorder],
+) -> None:
+    http(
+        lambda r: httpx.Response(
+            200, json={"response": "Prvá veta. Druhá", "done_reason": "length"}
+        )
+    )
+    assert generate_sync("m", "p", max_tokens=5) == "Prvá veta. Druhá"
+
+
+def test_generate_ollama_num_ctx_is_one_size_per_model(
+    http: Callable[[Handler], Recorder], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every caller gets at least RAG_OLLAMA_NUM_CTX — a changing num_ctx reloads the model."""
+    rec = http(lambda r: httpx.Response(200, json={"response": "ok"}))
+    sizes = []
+    for requested in (2048, 4096, 8192):
+        generate_sync("m", "p", num_ctx=requested)
+        sizes.append(rec.body["options"]["num_ctx"])
+    assert sizes == [12288, 12288, 12288]
+
+    monkeypatch.setenv("RAG_OLLAMA_NUM_CTX", "4096")
+    get_settings.cache_clear()
+    generate_sync("m", "p", num_ctx=2048)
+    assert rec.body["options"]["num_ctx"] == 4096
+    generate_sync("m", "p", num_ctx=8192)  # never less than the caller needs
+    assert rec.body["options"]["num_ctx"] == 8192
 
 
 def test_generate_ollama_uses_configured_base_url(
@@ -256,7 +314,21 @@ def test_generate_openai_without_system_or_schema(
     assert rec.body["messages"] == [{"role": "user", "content": "ahoj"}]
     assert "response_format" not in rec.body
     assert rec.body["temperature"] == 0.2
+    assert "max_tokens" not in rec.body
     assert rec.last.headers["authorization"] == "Bearer sk-test"
+
+
+def test_generate_openai_max_tokens_and_cut_off_json(
+    http: Callable[[Handler], Recorder], openai: None
+) -> None:
+    rec = http(
+        lambda r: httpx.Response(
+            200, json={"choices": [{"message": {"content": "{"}, "finish_reason": "length"}]}
+        )
+    )
+    with pytest.raises(OllamaError, match="limit 1024"):
+        generate_sync("gpt-x", "ahoj", json_schema={"type": "object"})
+    assert rec.body["max_tokens"] == 1024
 
 
 def test_generate_openai_without_api_key_sends_no_auth_header(
@@ -313,7 +385,7 @@ async def test_chat_stream_ollama_yields_text_and_skips_usage(
     chunks = await _collect(chat_stream("m", [{"role": "user", "content": "hi"}]))
     assert chunks == ["Ahoj", " svet"]  # usage dict is consumed internally, never yielded
     assert rec.body["stream"] is True
-    assert rec.body["options"] == {"temperature": 0.3, "num_ctx": 8192}
+    assert rec.body["options"] == {"temperature": 0.3, "num_ctx": 12288}
     assert str(rec.last.url).endswith("/api/chat")
 
 
@@ -433,7 +505,7 @@ async def test_chat_with_tools_ollama_tool_calls(http: Callable[[Handler], Recor
     assert turn.message == message  # native message is kept for the next round
     assert rec.body["tools"] == TOOLS
     assert rec.body["stream"] is False
-    assert rec.body["options"] == {"temperature": 0.1, "num_ctx": 8192}
+    assert rec.body["options"] == {"temperature": 0.1, "num_ctx": 12288}
 
 
 @pytest.mark.anyio

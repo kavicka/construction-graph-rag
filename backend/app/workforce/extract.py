@@ -7,7 +7,7 @@ status (done / in progress / not worked on) is a category, which we take from th
 import json
 import logging
 import re
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, ValidationError
 
@@ -30,52 +30,70 @@ from app.workforce.sk_numbers import (
 logger = logging.getLogger(__name__)
 
 Status = Literal["done", "in_progress", "not_started"]
+# Bounds for what the LLM writes. They go into the JSON schema only (Ollama enforces maxLength /
+# maxItems in its grammar, which cuts off a model that keeps repeating one sentence) and are not
+# validated, so a longer reply from a provider without a grammar still parses.
+LLM_MAX_TOKENS = 1024
+
+
+def bounded(limit: int, default: Any = "") -> Any:
+    """Field with maxLength (strings) in the LLM schema."""
+    return Field(default=default, json_schema_extra={"maxLength": limit})
+
+
+def bounded_list(limit: int) -> Any:
+    """Field with maxItems in the LLM schema."""
+    return Field(default_factory=list, json_schema_extra={"maxItems": limit})
+
+
+Text = Annotated[str, Field(json_schema_extra={"maxLength": 300})]
+Short = Annotated[str, Field(json_schema_extra={"maxLength": 20})]
 
 
 class _XTask(BaseModel):
-    ref: str
+    ref: Short
     status: Status | None = None
     progress: int | None = None
     hours: float | None = None
-    note: str = ""
+    note: str = bounded(300)
 
 
 class _XExtra(BaseModel):
-    description: str
+    description: Text
     hours: float | None = None
 
 
 class _Extracted(BaseModel):
     absent: bool = False
-    absence_reason: str = ""
-    arrival: str | None = None
-    departure: str | None = None
+    absence_reason: str = bounded(300)
+    arrival: Short | None = None
+    departure: Short | None = None
     break_minutes: int | None = None
-    tasks: list[_XTask] = Field(default_factory=list)
-    extra_work: list[_XExtra] = Field(default_factory=list)
+    tasks: list[_XTask] = bounded_list(30)
+    extra_work: list[_XExtra] = bounded_list(10)
     problems_mentioned: bool = False
-    problems: list[str] = Field(default_factory=list)
-    summary: str = ""
+    problems: list[Text] = bounded_list(10)
+    summary: str = bounded(500)
 
 
 class _XTaskAnswer(BaseModel):
     status: Status | None = None
     progress: int | None = None
     hours: float | None = None
-    note: str = ""
+    note: str = bounded(300)
 
 
 class _XHoursFix(BaseModel):
-    arrival: str | None = None
-    departure: str | None = None
+    arrival: Short | None = None
+    departure: Short | None = None
     break_minutes: int | None = None
-    tasks: list[_XTask] = Field(default_factory=list)
-    extra_work: list[_XExtra] = Field(default_factory=list)
+    tasks: list[_XTask] = bounded_list(30)
+    extra_work: list[_XExtra] = bounded_list(10)
 
 
 class _XProblems(BaseModel):
     has_problems: bool
-    problems: list[str] = Field(default_factory=list)
+    problems: list[Text] = bounded_list(10)
 
 
 EXTRACT_SYSTEM = """Spracúvaš denný hlasový výpis pracovníka stavebnej firmy. Text je prepis reči —
@@ -101,7 +119,9 @@ Pravidlá:
 Nikdy si nevymýšľaj časy ani čísla, ktoré v texte nie sú — čo nepovedal, daj null."""
 
 
-def _llm_json(prompt: str, system: str, schema: type[BaseModel]) -> Any:
+def _llm_json(
+    prompt: str, system: str, schema: type[BaseModel], *, max_tokens: int = LLM_MAX_TOKENS
+) -> Any:
     try:
         raw = generate_sync(
             get_workforce_settings().effective_llm,
@@ -111,6 +131,7 @@ def _llm_json(prompt: str, system: str, schema: type[BaseModel]) -> Any:
             temperature=0.0,
             num_ctx=8192,
             timeout=240,
+            max_tokens=max_tokens,
         )
         return schema.model_validate_json(raw)
     except (OllamaError, ValidationError, json.JSONDecodeError) as exc:

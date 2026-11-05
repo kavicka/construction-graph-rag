@@ -26,9 +26,10 @@ from pydantic import BaseModel, Field
 from rapidfuzz import fuzz
 
 from app import db
+from app.config import get_settings
 from app.workforce import store
 from app.workforce.assign import suggest_worker
-from app.workforce.extract import _llm_json
+from app.workforce.extract import Short, Text, _llm_json, bounded, bounded_list
 from app.workforce.pdf_locate import locate_quote
 from app.workforce.sk_dates import DATE_RE, parse_term
 from app.workforce.sk_numbers import normalize
@@ -46,17 +47,20 @@ PARSED_STATUSES = ("tables", "context", "embedding", "graph", "done")
 
 class _XTask(BaseModel):
     title: str = Field(max_length=200)
-    description: str = ""
-    work_type: str = "iné"
-    person: str | None = None
-    date_text: str | None = None
-    after: str | None = None
-    quote: str = ""
+    description: str = bounded(500)
+    work_type: str = bounded(60, "iné")
+    person: Text | None = None
+    date_text: Text | None = None
+    after: Text | None = None
+    quote: str = bounded(500)
 
 
 class _XDocument(BaseModel):
-    document_date: str | None = None
-    tasks: list[_XTask] = Field(default_factory=list)
+    document_date: Short | None = None
+    tasks: list[_XTask] = bounded_list(40)
+
+
+IMPORT_MAX_TOKENS = 3072  # a window may list many tasks, each with a quote
 
 
 IMPORT_SYSTEM = """Z dokumentu (zadanie prác od dodávateľa, investora alebo stavbyvedúceho) vytiahni
@@ -204,14 +208,38 @@ def stem_text(text: str) -> str:
     return " ".join(t[:STEM_LEN] for t in normalize(text).split())
 
 
+# Whether the embedding model's cosine may count toward task-title similarity (the thresholds
+# below were set on bge-m3). multilingual-e5-small is anisotropic: unrelated Slovak task titles
+# score 0.90–0.94 („Betonáž stropu nad 4. NP“ ↔ „Skúška pevnosti betónu…“), so with it every new
+# task looked like a duplicate → fuzzy only. Same idea as compose.CATEGORY_SIM_FLOOR.
+TASK_COSINE: dict[str, bool] = {
+    "BAAI/bge-m3": True,
+    "intfloat/multilingual-e5-small": False,
+}
+
+
+# Titles naming different numbers are different work however similar the words are:
+# token_set fuzzy rates „Betonáž stropu nad 4. NP“ ↔ „Skúška pevnosti betónu stropu nad 2. NP“
+# at 0.95 (one stem set is almost a subset of the other).
+NUMBER_RE = re.compile(r"\d+")
+NUMBER_MISMATCH_CAP = 0.5
+
+
+def _cosine_usable(model_name: str) -> bool:
+    return TASK_COSINE.get(model_name, True)
+
+
 class Similarity:
-    """Similarity of task titles: max(fuzzy on words, fuzzy on stems, cosine of bge-m3). Fuzzy only
-    without an embedder."""
+    """Similarity of task titles: max(fuzzy on words, fuzzy on stems, embedding cosine). Fuzzy
+    only without an embedder or with a model whose cosine does not separate titles."""
 
     def __init__(self, texts: list[str]) -> None:
         self.texts = texts
         self.stems = [stem_text(t) for t in texts]
+        self.numbers = [set(NUMBER_RE.findall(t)) for t in texts]
         self.vectors: list[list[float]] | None = None
+        if not _cosine_usable(get_settings().effective_embedding_model):
+            return
         try:
             from app.index.embedder import get_embedder
 
@@ -228,9 +256,13 @@ class Similarity:
             )
             / 100
         )
-        if self.vectors is None:
-            return fuzzy
-        return max(fuzzy, _cosine(self.vectors[i], self.vectors[j]))
+        score = (
+            fuzzy if self.vectors is None else max(fuzzy, _cosine(self.vectors[i], self.vectors[j]))
+        )
+        a, b = self.numbers[i], self.numbers[j]
+        if a and b and not a & b:
+            return min(score, NUMBER_MISMATCH_CAP)
+        return score
 
 
 STOP_AFTER = re.compile(
@@ -267,7 +299,7 @@ def extract_drafts(
             f"Profesie: {prof_line}\n\nDokument „{source['filename']}“ "
             f'(časť {i + 1}/{len(windows)}):\n"""\n{window.prompt_text()}\n"""'
         )
-        x = _llm_json(prompt, IMPORT_SYSTEM, _XDocument)
+        x = _llm_json(prompt, IMPORT_SYSTEM, _XDocument, max_tokens=IMPORT_MAX_TOKENS)
         if on_progress:
             on_progress((i + 1) / len(windows))
         if x is None:

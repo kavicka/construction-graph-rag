@@ -141,6 +141,7 @@ def answer_subquestion(question: str, sources: list[Source]) -> str:
             temperature=0.2,
             num_ctx=8192,
             timeout=180,
+            max_tokens=1024,
         ).strip()
     except OllamaError as exc:
         logger.warning("zistenie k podotázke zlyhalo: %s", exc)

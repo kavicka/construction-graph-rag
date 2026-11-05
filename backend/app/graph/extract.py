@@ -87,6 +87,7 @@ def extract_concepts_llm(text: str) -> list[ExtractedConcept]:
                 system=EXTRACT_SYSTEM,
                 json_schema=CONCEPT_JSON_SCHEMA,
                 num_ctx=4096,
+                max_tokens=2048,
             )
             parsed = ConceptExtraction.model_validate_json(raw)
             return [c for c in parsed.concepts if len(c.name.strip()) >= 2]

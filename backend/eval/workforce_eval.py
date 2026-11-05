@@ -229,10 +229,12 @@ def eval_extraction(models: list[str]) -> list[dict[str, Any]]:
             prompt: str,
             system: str,
             schema: Any,
+            *,
+            max_tokens: int = extract.LLM_MAX_TOKENS,
             _orig: Any = original,
             _holder: dict[str, Any] = raw_holder,
         ) -> Any:
-            out = _orig(prompt, system, schema)
+            out = _orig(prompt, system, schema, max_tokens=max_tokens)
             _holder["raw"] = out
             return out
 

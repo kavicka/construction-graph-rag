@@ -88,7 +88,7 @@ class FakeLLM:
     def push(self, schema_name: str, payload: dict[str, Any] | None) -> None:
         self.responses.setdefault(schema_name, []).append(payload)
 
-    def __call__(self, prompt: str, system: str, schema: type[BaseModel]) -> Any:
+    def __call__(self, prompt: str, system: str, schema: type[BaseModel], **_: Any) -> Any:
         self.prompts.append((schema.__name__, prompt))
         queue = self.responses.get(schema.__name__) or []
         if not queue:

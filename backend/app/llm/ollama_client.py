@@ -9,6 +9,7 @@ Sync `generate_sync` for indexing threads, async `chat_stream` for answers,
 """
 
 import json
+import logging
 import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
@@ -28,6 +29,14 @@ from app.obs.tracing import (
     set_attrs,
     span,
 )
+
+logger = logging.getLogger(__name__)
+
+# Greedy JSON decoding with a small model can loop on a free-text field (qwen3:4b-instruct
+# repeated one sentence until the 240 s timeout). A structured call therefore gets a token cap
+# by default, and Ollama a mild repeat penalty (the qwen3 Modelfiles ship repeat_penalty 1.0).
+JSON_MAX_TOKENS = 1024
+REPEAT_PENALTY = 1.1
 
 
 class OllamaError(RuntimeError):
@@ -60,6 +69,12 @@ def _openai_usage(data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _num_ctx(requested: int) -> int:
+    """One context size per model: Ollama reloads a model whenever num_ctx changes, so every
+    call gets at least RAG_OLLAMA_NUM_CTX (by default the largest size any caller asks for)."""
+    return max(requested, get_settings().ollama_num_ctx)
+
+
 def _llm_span_attrs(operation: str, model: str, temperature: float) -> dict[str, Any]:
     return {
         GEN_AI_OPERATION: operation,
@@ -79,8 +94,13 @@ def generate_sync(
     num_ctx: int = 4096,
     timeout: float = 120.0,
     think: bool = False,
+    max_tokens: int | None = None,
 ) -> str:
-    """One non-stream generate. Qwen3: think=False turns off reasoning mode (speed)."""
+    """One non-stream generate. Qwen3: think=False turns off reasoning mode (speed).
+
+    max_tokens caps the reply; a structured call (json_schema) defaults to JSON_MAX_TOKENS and
+    a reply cut off by the cap raises OllamaError (the JSON would be incomplete anyway)."""
+    limit = max_tokens if max_tokens is not None else (JSON_MAX_TOKENS if json_schema else None)
     with span(f"generate {model}") as s:
         set_attrs(
             s,
@@ -89,12 +109,18 @@ def generate_sync(
             rag__prompt_chars=len(prompt),
         )
         if _provider() == "openai":
-            text, usage = _openai_generate(model, prompt, system, json_schema, temperature, timeout)
+            text, usage = _openai_generate(
+                model, prompt, system, json_schema, temperature, timeout, limit
+            )
         else:
             text, usage = _ollama_generate(
-                model, prompt, system, json_schema, temperature, num_ctx, timeout, think
+                model, prompt, system, json_schema, temperature, num_ctx, timeout, think, limit
             )
         record_llm_usage(s, usage)
+        if usage.get("done_reason") == "length":
+            if json_schema is not None:
+                raise OllamaError(f"odpoveď ({model}) narazila na limit {limit} tokenov")
+            logger.warning("odpoveď (%s) skrátená na %s tokenov", model, limit)
         set_attrs(s, rag__output_chars=len(text))
         return text
 
@@ -108,14 +134,22 @@ def _ollama_generate(
     num_ctx: int,
     timeout: float,
     think: bool,
+    max_tokens: int | None,
 ) -> tuple[str, dict[str, Any]]:
+    options: dict[str, Any] = {
+        "temperature": temperature,
+        "num_ctx": _num_ctx(num_ctx),
+        "repeat_penalty": REPEAT_PENALTY,
+    }
+    if max_tokens is not None:
+        options["num_predict"] = max_tokens
     payload: dict[str, Any] = {
         "model": model,
         "prompt": prompt,
         "stream": False,
         "think": think,
         "keep_alive": "5m",
-        "options": {"temperature": temperature, "num_ctx": num_ctx},
+        "options": options,
     }
     if system is not None:
         payload["system"] = system
@@ -145,11 +179,14 @@ def _openai_generate(
     json_schema: dict[str, Any] | None,
     temperature: float,
     timeout: float,
+    max_tokens: int | None,
 ) -> tuple[str, dict[str, Any]]:
     messages = ([{"role": "system", "content": system}] if system else []) + [
         {"role": "user", "content": prompt}
     ]
     payload: dict[str, Any] = {"model": model, "messages": messages, "temperature": temperature}
+    if max_tokens is not None:
+        payload["max_tokens"] = max_tokens
     if json_schema is not None:
         payload["response_format"] = {
             "type": "json_schema",
@@ -217,7 +254,7 @@ async def _ollama_chat_stream(
         "stream": True,
         "think": think,
         "keep_alive": "10m",
-        "options": {"temperature": temperature, "num_ctx": num_ctx},
+        "options": {"temperature": temperature, "num_ctx": _num_ctx(num_ctx)},
     }
     timeout = httpx.Timeout(300.0, connect=5.0)
     try:
@@ -346,7 +383,7 @@ async def chat_with_tools(
                             "stream": False,
                             "think": False,
                             "keep_alive": "10m",
-                            "options": {"temperature": temperature, "num_ctx": 8192},
+                            "options": {"temperature": temperature, "num_ctx": _num_ctx(8192)},
                         },
                     )
                 resp.raise_for_status()

@@ -1,4 +1,4 @@
-"""Generovanie dokumentu: osnova (JSON) → sekcie po jednej (markdown) → PDF.
+"""Document generation: outline (JSON) → sections one at a time (markdown) → PDF.
 
 A small local model (qwen3:4b) cannot reliably write a whole document as one JSON,
 so it works in steps: a short structured output for the outline, then free
@@ -199,6 +199,7 @@ def write_section(
             temperature=0.3,
             num_ctx=8192,
             timeout=300,
+            max_tokens=2048,
         )
     except OllamaError as exc:
         logger.warning("sekcia %r zlyhala: %s", heading, exc)

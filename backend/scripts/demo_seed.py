@@ -135,36 +135,17 @@ def _owner_assignee(title: str, workers: dict[str, str]) -> str | None:
     return None
 
 
-def _false_duplicate(data: dict[str, Any]) -> bool:
-    """A "possible duplicate" flag the owner would dismiss: the titles are clearly different
-    (on the low RAM profile the small embedding model rates most task titles as similar)."""
-    from rapidfuzz import fuzz
-
-    dup = data.get("duplicate_of")
-    if not dup:
-        return False
-    return fuzz.ratio(data["title"].lower(), str(dup["title"]).lower()) < 85
-
-
 def approve_and_apply(client: httpx.Client, source_id: str) -> dict[str, int]:
-    """What the owner does on the review page: fill in missing assignees, dismiss false duplicate
-    flags, „Schváliť všetko“ (approve all), reject what would need a manual decision (no deadline,
-    real duplicate, depends on a rejected proposal), then apply."""
+    """What the owner does on the review page: fill in missing assignees, „Schváliť všetko“
+    (approve all), reject what would need a manual decision (no deadline, possible duplicate,
+    depends on a rejected proposal), then apply."""
     workers = {w["name"]: w["id"] for w in client.get("/workers").json()}
     for draft in client.get(f"/task-imports/{source_id}").json()["drafts"]:
         data = draft["data"]
-        if draft["kind"] != "new" or draft["decision"] != "pending":
+        if draft["kind"] != "new" or draft["decision"] != "pending" or data.get("assignees"):
             continue
-        who = None if data.get("assignees") else _owner_assignee(data["title"], workers)
-        dismiss = _false_duplicate(data) and data.get("date_to")
-        if who or dismiss:
-            _put_draft(
-                client,
-                source_id,
-                draft,
-                "approved" if dismiss else "pending",
-                [who] if who else None,
-            )
+        if who := _owner_assignee(data["title"], workers):
+            _put_draft(client, source_id, draft, "pending", [who])
     client.post(f"/task-imports/{source_id}/decide-all", json={"decision": "approved"})
     client.post(f"/task-imports/{source_id}/decide-all", json={"decision": "rejected"})
     for _ in range(5):
