@@ -1,6 +1,6 @@
-# rag: private document intelligence with a knowledge graph
+# construction-graph-rag: private document intelligence with a knowledge graph
 
-[![CI](https://github.com/kavicka/rag/actions/workflows/ci.yml/badge.svg)](https://github.com/kavicka/rag/actions/workflows/ci.yml)
+[![CI](https://github.com/kavicka/construction-graph-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/kavicka/construction-graph-rag/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 A local RAG system for a small construction company, evaluated on a **synthetic corpus** with a
